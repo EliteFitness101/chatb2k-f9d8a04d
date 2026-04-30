@@ -14,7 +14,139 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      hubs: {
+        Row: {
+          address: string
+          city: string
+          country_code: string
+          created_at: string
+          id: string
+          lat: number | null
+          lng: number | null
+          name: string
+          sort_order: number | null
+          tier: string
+        }
+        Insert: {
+          address: string
+          city: string
+          country_code: string
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name: string
+          sort_order?: number | null
+          tier: string
+        }
+        Update: {
+          address?: string
+          city?: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name?: string
+          sort_order?: number | null
+          tier?: string
+        }
+        Relationships: []
+      }
+      order_items: {
+        Row: {
+          category: string | null
+          id: string
+          order_id: string
+          quantity: number
+          sku: string
+          title: string
+          unit_amount_minor: number
+        }
+        Insert: {
+          category?: string | null
+          id?: string
+          order_id: string
+          quantity?: number
+          sku: string
+          title: string
+          unit_amount_minor: number
+        }
+        Update: {
+          category?: string | null
+          id?: string
+          order_id?: string
+          quantity?: number
+          sku?: string
+          title?: string
+          unit_amount_minor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          amount_minor: number
+          assigned_hub_id: string | null
+          created_at: string
+          currency: string
+          customer_country: string | null
+          customer_email: string | null
+          customer_name: string | null
+          id: string
+          metadata: Json | null
+          rail: string
+          reference: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_minor: number
+          assigned_hub_id?: string | null
+          created_at?: string
+          currency: string
+          customer_country?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          id?: string
+          metadata?: Json | null
+          rail: string
+          reference: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_minor?: number
+          assigned_hub_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_country?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          id?: string
+          metadata?: Json | null
+          rail?: string
+          reference?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_assigned_hub_id_fkey"
+            columns: ["assigned_hub_id"]
+            isOneToOne: false
+            referencedRelation: "hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
