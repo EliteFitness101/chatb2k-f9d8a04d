@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SuccessRouteImport } from './routes/success'
+import { Route as ShopifyRouteImport } from './routes/shopify'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
 import { Route as HubsRouteImport } from './routes/hubs'
@@ -22,6 +23,11 @@ import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
 const SuccessRoute = SuccessRouteImport.update({
   id: '/success',
   path: '/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShopifyRoute = ShopifyRouteImport.update({
+  id: '/shopify',
+  path: '/shopify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/shopify'
     | '/success'
     | '/products/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/shopify'
     | '/success'
     | '/products/$slug'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/shopify'
     | '/success'
     | '/products/$slug'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   HubsRoute: typeof HubsRoute
   PaystackRoute: typeof PaystackRoute
   ProductsRoute: typeof ProductsRouteWithChildren
+  ShopifyRoute: typeof ShopifyRoute
   SuccessRoute: typeof SuccessRoute
 }
 
@@ -153,6 +166,13 @@ declare module '@tanstack/react-router' {
       path: '/success'
       fullPath: '/success'
       preLoaderRoute: typeof SuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shopify': {
+      id: '/shopify'
+      path: '/shopify'
+      fullPath: '/shopify'
+      preLoaderRoute: typeof ShopifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -234,6 +254,7 @@ const rootRouteChildren: RootRouteChildren = {
   HubsRoute: HubsRoute,
   PaystackRoute: PaystackRoute,
   ProductsRoute: ProductsRouteWithChildren,
+  ShopifyRoute: ShopifyRoute,
   SuccessRoute: SuccessRoute,
 }
 export const routeTree = rootRouteImport
