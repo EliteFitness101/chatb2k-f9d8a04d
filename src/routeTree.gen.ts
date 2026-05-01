@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SuccessRouteImport } from './routes/success'
 import { Route as ShopifyRouteImport } from './routes/shopify'
+import { Route as SelarRouteImport } from './routes/selar'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
 import { Route as HubsRouteImport } from './routes/hubs'
@@ -29,6 +30,11 @@ const SuccessRoute = SuccessRouteImport.update({
 const ShopifyRoute = ShopifyRouteImport.update({
   id: '/shopify',
   path: '/shopify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SelarRoute = SelarRouteImport.update({
+  id: '/selar',
+  path: '/selar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/selar'
     | '/shopify'
     | '/success'
     | '/products/$slug'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/selar'
     | '/shopify'
     | '/success'
     | '/products/$slug'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/selar'
     | '/shopify'
     | '/success'
     | '/products/$slug'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   HubsRoute: typeof HubsRoute
   PaystackRoute: typeof PaystackRoute
   ProductsRoute: typeof ProductsRouteWithChildren
+  SelarRoute: typeof SelarRoute
   ShopifyRoute: typeof ShopifyRoute
   SuccessRoute: typeof SuccessRoute
 }
@@ -186,6 +199,13 @@ declare module '@tanstack/react-router' {
       path: '/shopify'
       fullPath: '/shopify'
       preLoaderRoute: typeof ShopifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/selar': {
+      id: '/selar'
+      path: '/selar'
+      fullPath: '/selar'
+      preLoaderRoute: typeof SelarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -275,6 +295,7 @@ const rootRouteChildren: RootRouteChildren = {
   HubsRoute: HubsRoute,
   PaystackRoute: PaystackRoute,
   ProductsRoute: ProductsRouteWithChildren,
+  SelarRoute: SelarRoute,
   ShopifyRoute: ShopifyRoute,
   SuccessRoute: SuccessRoute,
 }
