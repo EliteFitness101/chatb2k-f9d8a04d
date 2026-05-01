@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SuccessRouteImport } from './routes/success'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
 import { Route as HubsRouteImport } from './routes/hubs'
@@ -18,6 +19,11 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
 
+const SuccessRoute = SuccessRouteImport.update({
+  id: '/success',
+  path: '/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductsRoute = ProductsRouteImport.update({
   id: '/products',
   path: '/products',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/success': typeof SuccessRoute
   '/products/$slug': typeof ProductsSlugRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/success'
     | '/products/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/success'
     | '/products/$slug'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/hubs'
     | '/paystack'
     | '/products'
+    | '/success'
     | '/products/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -131,10 +143,18 @@ export interface RootRouteChildren {
   HubsRoute: typeof HubsRoute
   PaystackRoute: typeof PaystackRoute
   ProductsRoute: typeof ProductsRouteWithChildren
+  SuccessRoute: typeof SuccessRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/success': {
+      id: '/success'
+      path: '/success'
+      fullPath: '/success'
+      preLoaderRoute: typeof SuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/products': {
       id: '/products'
       path: '/products'
@@ -214,6 +234,7 @@ const rootRouteChildren: RootRouteChildren = {
   HubsRoute: HubsRoute,
   PaystackRoute: PaystackRoute,
   ProductsRoute: ProductsRouteWithChildren,
+  SuccessRoute: SuccessRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
