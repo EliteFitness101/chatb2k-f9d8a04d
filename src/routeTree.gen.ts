@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
+import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
 
@@ -22,6 +23,11 @@ const ProductsRoute = ProductsRouteImport.update({
 const PaystackRoute = PaystackRouteImport.update({
   id: '/paystack',
   path: '/paystack',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BundlesRoute = BundlesRouteImport.update({
+  id: '/bundles',
+  path: '/bundles',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,12 +43,14 @@ const ProductsSlugRoute = ProductsSlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/bundles': typeof BundlesRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/bundles': typeof BundlesRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
@@ -50,20 +58,28 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/bundles': typeof BundlesRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
   '/products/$slug': typeof ProductsSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/paystack' | '/products' | '/products/$slug'
+  fullPaths: '/' | '/bundles' | '/paystack' | '/products' | '/products/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/paystack' | '/products' | '/products/$slug'
-  id: '__root__' | '/' | '/paystack' | '/products' | '/products/$slug'
+  to: '/' | '/bundles' | '/paystack' | '/products' | '/products/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/bundles'
+    | '/paystack'
+    | '/products'
+    | '/products/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BundlesRoute: typeof BundlesRoute
   PaystackRoute: typeof PaystackRoute
   ProductsRoute: typeof ProductsRouteWithChildren
 }
@@ -82,6 +98,13 @@ declare module '@tanstack/react-router' {
       path: '/paystack'
       fullPath: '/paystack'
       preLoaderRoute: typeof PaystackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bundles': {
+      id: '/bundles'
+      path: '/bundles'
+      fullPath: '/bundles'
+      preLoaderRoute: typeof BundlesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -115,6 +138,7 @@ const ProductsRouteWithChildren = ProductsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BundlesRoute: BundlesRoute,
   PaystackRoute: PaystackRoute,
   ProductsRoute: ProductsRouteWithChildren,
 }
