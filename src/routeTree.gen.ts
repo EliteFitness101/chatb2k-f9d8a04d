@@ -9,10 +9,35 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SuccessRouteImport } from './routes/success'
+import { Route as ShopifyRouteImport } from './routes/shopify'
+import { Route as SelarRouteImport } from './routes/selar'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
+import { Route as HubsRouteImport } from './routes/hubs'
+import { Route as CryptoRouteImport } from './routes/crypto'
+import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as BundlesRouteImport } from './routes/bundles'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
+import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 
+const SuccessRoute = SuccessRouteImport.update({
+  id: '/success',
+  path: '/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShopifyRoute = ShopifyRouteImport.update({
+  id: '/shopify',
+  path: '/shopify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SelarRoute = SelarRouteImport.update({
+  id: '/selar',
+  path: '/selar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductsRoute = ProductsRouteImport.update({
   id: '/products',
   path: '/products',
@@ -23,44 +48,180 @@ const PaystackRoute = PaystackRouteImport.update({
   path: '/paystack',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HubsRoute = HubsRouteImport.update({
+  id: '/hubs',
+  path: '/hubs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CryptoRoute = CryptoRouteImport.update({
+  id: '/crypto',
+  path: '/crypto',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutRoute = CheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BundlesRoute = BundlesRouteImport.update({
+  id: '/bundles',
+  path: '/bundles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProductsSlugRoute = ProductsSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => ProductsRoute,
+} as any)
+const ApiPublicPaystackWebhookRoute =
+  ApiPublicPaystackWebhookRouteImport.update({
+    id: '/api/public/paystack-webhook',
+    path: '/api/public/paystack-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/bundles': typeof BundlesRoute
+  '/checkout': typeof CheckoutRoute
+  '/crypto': typeof CryptoRoute
+  '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
-  '/products': typeof ProductsRoute
+  '/products': typeof ProductsRouteWithChildren
+  '/selar': typeof SelarRoute
+  '/shopify': typeof ShopifyRoute
+  '/success': typeof SuccessRoute
+  '/products/$slug': typeof ProductsSlugRoute
+  '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/bundles': typeof BundlesRoute
+  '/checkout': typeof CheckoutRoute
+  '/crypto': typeof CryptoRoute
+  '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
-  '/products': typeof ProductsRoute
+  '/products': typeof ProductsRouteWithChildren
+  '/selar': typeof SelarRoute
+  '/shopify': typeof ShopifyRoute
+  '/success': typeof SuccessRoute
+  '/products/$slug': typeof ProductsSlugRoute
+  '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/bundles': typeof BundlesRoute
+  '/checkout': typeof CheckoutRoute
+  '/crypto': typeof CryptoRoute
+  '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
-  '/products': typeof ProductsRoute
+  '/products': typeof ProductsRouteWithChildren
+  '/selar': typeof SelarRoute
+  '/shopify': typeof ShopifyRoute
+  '/success': typeof SuccessRoute
+  '/products/$slug': typeof ProductsSlugRoute
+  '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/paystack' | '/products'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/bundles'
+    | '/checkout'
+    | '/crypto'
+    | '/hubs'
+    | '/paystack'
+    | '/products'
+    | '/selar'
+    | '/shopify'
+    | '/success'
+    | '/products/$slug'
+    | '/api/public/paystack-webhook'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/paystack' | '/products'
-  id: '__root__' | '/' | '/paystack' | '/products'
+  to:
+    | '/'
+    | '/about'
+    | '/bundles'
+    | '/checkout'
+    | '/crypto'
+    | '/hubs'
+    | '/paystack'
+    | '/products'
+    | '/selar'
+    | '/shopify'
+    | '/success'
+    | '/products/$slug'
+    | '/api/public/paystack-webhook'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/bundles'
+    | '/checkout'
+    | '/crypto'
+    | '/hubs'
+    | '/paystack'
+    | '/products'
+    | '/selar'
+    | '/shopify'
+    | '/success'
+    | '/products/$slug'
+    | '/api/public/paystack-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
+  BundlesRoute: typeof BundlesRoute
+  CheckoutRoute: typeof CheckoutRoute
+  CryptoRoute: typeof CryptoRoute
+  HubsRoute: typeof HubsRoute
   PaystackRoute: typeof PaystackRoute
-  ProductsRoute: typeof ProductsRoute
+  ProductsRoute: typeof ProductsRouteWithChildren
+  SelarRoute: typeof SelarRoute
+  ShopifyRoute: typeof ShopifyRoute
+  SuccessRoute: typeof SuccessRoute
+  ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/success': {
+      id: '/success'
+      path: '/success'
+      fullPath: '/success'
+      preLoaderRoute: typeof SuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shopify': {
+      id: '/shopify'
+      path: '/shopify'
+      fullPath: '/shopify'
+      preLoaderRoute: typeof ShopifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/selar': {
+      id: '/selar'
+      path: '/selar'
+      fullPath: '/selar'
+      preLoaderRoute: typeof SelarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/products': {
       id: '/products'
       path: '/products'
@@ -75,6 +236,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PaystackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/hubs': {
+      id: '/hubs'
+      path: '/hubs'
+      fullPath: '/hubs'
+      preLoaderRoute: typeof HubsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crypto': {
+      id: '/crypto'
+      path: '/crypto'
+      fullPath: '/crypto'
+      preLoaderRoute: typeof CryptoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout': {
+      id: '/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bundles': {
+      id: '/bundles'
+      path: '/bundles'
+      fullPath: '/bundles'
+      preLoaderRoute: typeof BundlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -82,14 +278,58 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/products/$slug': {
+      id: '/products/$slug'
+      path: '/$slug'
+      fullPath: '/products/$slug'
+      preLoaderRoute: typeof ProductsSlugRouteImport
+      parentRoute: typeof ProductsRoute
+    }
+    '/api/public/paystack-webhook': {
+      id: '/api/public/paystack-webhook'
+      path: '/api/public/paystack-webhook'
+      fullPath: '/api/public/paystack-webhook'
+      preLoaderRoute: typeof ApiPublicPaystackWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface ProductsRouteChildren {
+  ProductsSlugRoute: typeof ProductsSlugRoute
+}
+
+const ProductsRouteChildren: ProductsRouteChildren = {
+  ProductsSlugRoute: ProductsSlugRoute,
+}
+
+const ProductsRouteWithChildren = ProductsRoute._addFileChildren(
+  ProductsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
+  BundlesRoute: BundlesRoute,
+  CheckoutRoute: CheckoutRoute,
+  CryptoRoute: CryptoRoute,
+  HubsRoute: HubsRoute,
   PaystackRoute: PaystackRoute,
-  ProductsRoute: ProductsRoute,
+  ProductsRoute: ProductsRouteWithChildren,
+  SelarRoute: SelarRoute,
+  ShopifyRoute: ShopifyRoute,
+  SuccessRoute: SuccessRoute,
+  ApiPublicPaystackWebhookRoute: ApiPublicPaystackWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
