@@ -14,6 +14,7 @@ import { Route as ShopifyRouteImport } from './routes/shopify'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
 import { Route as HubsRouteImport } from './routes/hubs'
+import { Route as CryptoRouteImport } from './routes/crypto'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as AboutRouteImport } from './routes/about'
@@ -43,6 +44,11 @@ const PaystackRoute = PaystackRouteImport.update({
 const HubsRoute = HubsRouteImport.update({
   id: '/hubs',
   path: '/hubs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CryptoRoute = CryptoRouteImport.update({
+  id: '/crypto',
+  path: '/crypto',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CheckoutRoute = CheckoutRouteImport.update({
@@ -76,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
   '/checkout': typeof CheckoutRoute
+  '/crypto': typeof CryptoRoute
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
   '/checkout': typeof CheckoutRoute
+  '/crypto': typeof CryptoRoute
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
   '/checkout': typeof CheckoutRoute
+  '/crypto': typeof CryptoRoute
   '/hubs': typeof HubsRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/bundles'
     | '/checkout'
+    | '/crypto'
     | '/hubs'
     | '/paystack'
     | '/products'
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/bundles'
     | '/checkout'
+    | '/crypto'
     | '/hubs'
     | '/paystack'
     | '/products'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/bundles'
     | '/checkout'
+    | '/crypto'
     | '/hubs'
     | '/paystack'
     | '/products'
@@ -152,6 +164,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   BundlesRoute: typeof BundlesRoute
   CheckoutRoute: typeof CheckoutRoute
+  CryptoRoute: typeof CryptoRoute
   HubsRoute: typeof HubsRoute
   PaystackRoute: typeof PaystackRoute
   ProductsRoute: typeof ProductsRouteWithChildren
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/hubs'
       fullPath: '/hubs'
       preLoaderRoute: typeof HubsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crypto': {
+      id: '/crypto'
+      path: '/crypto'
+      fullPath: '/crypto'
+      preLoaderRoute: typeof CryptoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout': {
@@ -251,6 +271,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   BundlesRoute: BundlesRoute,
   CheckoutRoute: CheckoutRoute,
+  CryptoRoute: CryptoRoute,
   HubsRoute: HubsRoute,
   PaystackRoute: PaystackRoute,
   ProductsRoute: ProductsRouteWithChildren,
