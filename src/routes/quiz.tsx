@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SiteShell } from "@/components/site/SiteShell";
 import { pageMeta } from "@/lib/site-meta";
@@ -349,11 +349,12 @@ function ResultCard({
 function SlideToAuthorize({ onComplete, done }: { onComplete: () => void; done: boolean }) {
   const [x, setX] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
   const TRACK_PAD = 8;
   const KNOB = 56;
 
   return (
-    <div className="relative h-16 w-full glass rounded-full overflow-hidden select-none">
+    <div ref={trackRef} className="relative h-16 w-full glass rounded-full overflow-hidden select-none">
       {/* Fill */}
       <motion.div
         className="absolute inset-y-0 left-0 bg-gold-gradient opacity-30"
@@ -370,24 +371,21 @@ function SlideToAuthorize({ onComplete, done }: { onComplete: () => void; done: 
       {!done && (
         <motion.button
           drag="x"
-          dragConstraints={{ left: 0, right: 1000 }}
+          dragConstraints={trackRef}
           dragElastic={0}
           dragMomentum={false}
           onDragStart={() => setDragging(true)}
           onDrag={(_, info) => setX(Math.max(0, info.offset.x))}
           onDragEnd={(_, info) => {
             setDragging(false);
-            const trackEl = (info.point.x ? document : null);
-            // Use the parent width via offsetParent
-            const parent = (info as unknown as { target?: HTMLElement }).target?.parentElement;
-            const parentWidth = parent?.clientWidth ?? 600;
-            if (info.offset.x > parentWidth - KNOB - TRACK_PAD * 2 - 20) {
+            const parentWidth = trackRef.current?.clientWidth ?? 600;
+            const threshold = parentWidth - KNOB - TRACK_PAD * 2 - 20;
+            if (info.offset.x > threshold) {
               onComplete();
               setX(parentWidth - KNOB - TRACK_PAD * 2);
             } else {
               setX(0);
             }
-            void trackEl;
           }}
           className="absolute top-1 left-1 h-14 w-14 rounded-full bg-gold-gradient text-[var(--ink)] flex items-center justify-center font-bold text-xl shadow-gold cursor-grab active:cursor-grabbing z-10"
           style={{ touchAction: "none" }}
