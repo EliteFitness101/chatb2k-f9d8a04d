@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SiteShell } from "@/components/site/SiteShell";
 import { pageMeta } from "@/lib/site-meta";
@@ -47,6 +47,34 @@ const focusOptions: { id: Focus; title: string; sub: string }[] = [
 function QuizPage() {
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
   const [answers, setAnswers] = useState<Answers>({});
+
+  // Hydrate from localStorage on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("resoflex.quiz.v1");
+      if (raw) {
+        const saved = JSON.parse(raw) as { answers?: Answers; step?: 0 | 1 | 2 | 3 };
+        if (saved.answers) setAnswers(saved.answers);
+        if (typeof saved.step === "number") setStep(saved.step);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Persist on every change
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "resoflex.quiz.v1",
+        JSON.stringify({ answers, step }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [answers, step]);
 
   const total = 3;
   const progress = step === 3 ? 100 : (step / total) * 100;
@@ -135,6 +163,9 @@ function QuizPage() {
                 onRestart={() => {
                   setAnswers({});
                   setStep(0);
+                  if (typeof window !== "undefined") {
+                    window.localStorage.removeItem("resoflex.quiz.v1");
+                  }
                 }}
               />
             )}
@@ -250,6 +281,27 @@ function ResultCard({
   const r = buildReport(answers);
   const [authorized, setAuthorized] = useState(false);
 
+  // Build share payload
+  const checkoutUrl =
+    (typeof window !== "undefined" ? window.location.origin : "") +
+    `/paystack?sku=${encodeURIComponent(r.recommended.sku)}`;
+
+  const overseerName = r.overseer === "buchi" ? "Coach Buchi" : "Coach Mavia";
+  const priceNgn = `₦${(r.recommended.ngnMinor / 100).toLocaleString("en-NG")}`;
+  const reportText =
+    `ResoFlex™ Bionic Readiness Report\n` +
+    `Tier: ${r.tier}\n` +
+    `Overseer: ${overseerName}\n` +
+    `Bundle: ${r.recommended.title} — ${priceNgn}\n\n` +
+    `${r.goalCopy} ${r.focusCopy}\n\n` +
+    `Authorize & checkout: ${checkoutUrl}`;
+
+  const waUrl = `https://wa.me/?text=${encodeURIComponent(reportText)}`;
+  const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(checkoutUrl)}&text=${encodeURIComponent(reportText)}`;
+  const mailUrl = `mailto:?subject=${encodeURIComponent(
+    `ResoFlex™ Bionic Readiness Report — Tier ${r.tier}`,
+  )}&body=${encodeURIComponent(reportText)}`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -323,21 +375,53 @@ function ResultCard({
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-5 flex flex-wrap gap-3 justify-center"
+              className="mt-6 space-y-5"
             >
-              <Link
-                to="/checkout"
-                search={{ sku: r.recommended.sku }}
-                className="px-6 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
-              >
-                Proceed to Smart Checkout →
-              </Link>
-              <button
-                onClick={onRestart}
-                className="px-6 py-3 rounded-sm glass text-foreground hover:border-[var(--gold)] transition"
-              >
-                Re-run quiz
-              </button>
+              <div className="flex flex-wrap gap-3 justify-center">
+                <Link
+                  to="/paystack"
+                  search={{ sku: r.recommended.sku }}
+                  className="px-6 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
+                >
+                  Proceed to Paystack Checkout →
+                </Link>
+                <button
+                  onClick={onRestart}
+                  className="px-6 py-3 rounded-sm glass text-foreground hover:border-[var(--gold)] transition"
+                >
+                  Re-run quiz
+                </button>
+              </div>
+
+              <div>
+                <div className="text-center text-[10px] tracking-[0.3em] uppercase text-gold mb-3">
+                  Send report to yourself
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-sm glass text-sm hover:border-[var(--gold)] transition"
+                  >
+                    WhatsApp
+                  </a>
+                  <a
+                    href={tgUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-sm glass text-sm hover:border-[var(--gold)] transition"
+                  >
+                    Telegram
+                  </a>
+                  <a
+                    href={mailUrl}
+                    className="px-4 py-2 rounded-sm glass text-sm hover:border-[var(--gold)] transition"
+                  >
+                    Email
+                  </a>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
