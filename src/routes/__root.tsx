@@ -38,10 +38,15 @@ export const Route = createRootRoute({
       { name: "author", content: "ResoFlex" },
       { name: "theme-color", content: "#0A0A0A" },
       { property: "og:title", content: "ResoFlex™ — The Global Mechanical Authority" },
-      { property: "og:description", content: "Cast iron. Ancestral doctrine. White-glove fulfilment." },
+      { property: "og:description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "ResoFlex™ — The Global Mechanical Authority" },
+      { name: "description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
+      { name: "twitter:description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/hQQDiX5DKnSMb28ltdDE1ElIVX62/social-images/social-1777724930901-resofit-hero-banner-neural-architekt.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/hQQDiX5DKnSMb28ltdDE1ElIVX62/social-images/social-1777724930901-resofit-hero-banner-neural-architekt.webp" },
     ],
     links: [
       {
