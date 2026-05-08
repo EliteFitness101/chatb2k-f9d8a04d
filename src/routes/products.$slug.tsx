@@ -58,7 +58,7 @@ function ProductPage() {
           <p className="mt-3 text-muted-foreground">{product.tagline}</p>
           <p className="mt-6 leading-relaxed">{product.description}</p>
           <ul className="mt-6 space-y-2">
-            {product.highlights.map((h) => (
+            {product.highlights.map((h: string) => (
               <li key={h} className="flex items-start gap-2 text-sm">
                 <span className="text-gold mt-1">◆</span>
                 <span>{h}</span>
