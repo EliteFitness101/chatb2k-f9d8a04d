@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Logo } from "./Logo";
+import { useAuth } from "@/hooks/use-auth";
 
 const NAV = [
   { to: "/products", label: "Arsenal" },
@@ -14,6 +15,7 @@ const NAV = [
 export function Header() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -43,6 +45,11 @@ export function Header() {
           ))}
         </nav>
         <div className="hidden md:flex items-center gap-3">
+          {user ? (
+            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">Dashboard</Link>
+          ) : (
+            <Link to="/login" className="text-sm text-foreground/80 hover:text-gold">Sign in</Link>
+          )}
           <Link
             to="/checkout"
             className="px-5 py-2 rounded-sm bg-gold-gradient text-[var(--ink)] text-sm font-semibold tracking-wide hover:shadow-gold transition-shadow"

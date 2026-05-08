@@ -15,13 +15,16 @@ import { Route as SelarRouteImport } from './routes/selar'
 import { Route as QuizRouteImport } from './routes/quiz'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as HubsRouteImport } from './routes/hubs'
 import { Route as CryptoRouteImport } from './routes/crypto'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -54,6 +57,11 @@ const PaystackRoute = PaystackRouteImport.update({
   path: '/paystack',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HubsRoute = HubsRouteImport.update({
   id: '/hubs',
   path: '/hubs',
@@ -79,6 +87,10 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -88,6 +100,11 @@ const ProductsSlugRoute = ProductsSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => ProductsRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const ApiPublicPaystackWebhookRoute =
   ApiPublicPaystackWebhookRouteImport.update({
@@ -103,12 +120,14 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
   '/hubs': typeof HubsRoute
+  '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
   '/quiz': typeof QuizRoute
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -119,29 +138,34 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
   '/hubs': typeof HubsRoute
+  '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
   '/quiz': typeof QuizRoute
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
   '/hubs': typeof HubsRoute
+  '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
   '/quiz': typeof QuizRoute
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -154,12 +178,14 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/crypto'
     | '/hubs'
+    | '/login'
     | '/paystack'
     | '/products'
     | '/quiz'
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -170,39 +196,46 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/crypto'
     | '/hubs'
+    | '/login'
     | '/paystack'
     | '/products'
     | '/quiz'
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
   id:
     | '__root__'
     | '/'
+    | '/_authenticated'
     | '/about'
     | '/bundles'
     | '/checkout'
     | '/crypto'
     | '/hubs'
+    | '/login'
     | '/paystack'
     | '/products'
     | '/quiz'
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/_authenticated/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AboutRoute: typeof AboutRoute
   BundlesRoute: typeof BundlesRoute
   CheckoutRoute: typeof CheckoutRoute
   CryptoRoute: typeof CryptoRoute
   HubsRoute: typeof HubsRoute
+  LoginRoute: typeof LoginRoute
   PaystackRoute: typeof PaystackRoute
   ProductsRoute: typeof ProductsRouteWithChildren
   QuizRoute: typeof QuizRoute
@@ -256,6 +289,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PaystackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/hubs': {
       id: '/hubs'
       path: '/hubs'
@@ -291,6 +331,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -305,6 +352,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductsSlugRouteImport
       parentRoute: typeof ProductsRoute
     }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/api/public/paystack-webhook': {
       id: '/api/public/paystack-webhook'
       path: '/api/public/paystack-webhook'
@@ -314,6 +368,18 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedRouteChildren {
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
 
 interface ProductsRouteChildren {
   ProductsSlugRoute: typeof ProductsSlugRoute
@@ -329,11 +395,13 @@ const ProductsRouteWithChildren = ProductsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AboutRoute: AboutRoute,
   BundlesRoute: BundlesRoute,
   CheckoutRoute: CheckoutRoute,
   CryptoRoute: CryptoRoute,
   HubsRoute: HubsRoute,
+  LoginRoute: LoginRoute,
   PaystackRoute: PaystackRoute,
   ProductsRoute: ProductsRouteWithChildren,
   QuizRoute: QuizRoute,
@@ -345,12 +413,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
