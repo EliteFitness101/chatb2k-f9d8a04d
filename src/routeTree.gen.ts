@@ -25,6 +25,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCandyRouteImport } from './routes/_authenticated/candy'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -106,6 +107,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedCandyRoute = AuthenticatedCandyRouteImport.update({
+  id: '/candy',
+  path: '/candy',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const ApiPublicPaystackWebhookRoute =
   ApiPublicPaystackWebhookRouteImport.update({
     id: '/api/public/paystack-webhook',
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/candy': typeof AuthenticatedCandyRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByTo {
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/candy': typeof AuthenticatedCandyRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
@@ -165,6 +173,7 @@ export interface FileRoutesById {
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/_authenticated/candy': typeof AuthenticatedCandyRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
@@ -185,6 +194,7 @@ export interface FileRouteTypes {
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/candy'
     | '/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/candy'
     | '/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/_authenticated/candy'
     | '/_authenticated/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
@@ -359,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/candy': {
+      id: '/_authenticated/candy'
+      path: '/candy'
+      fullPath: '/candy'
+      preLoaderRoute: typeof AuthenticatedCandyRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/api/public/paystack-webhook': {
       id: '/api/public/paystack-webhook'
       path: '/api/public/paystack-webhook'
@@ -370,10 +389,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedCandyRoute: typeof AuthenticatedCandyRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedCandyRoute: AuthenticatedCandyRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
 }
 
@@ -413,3 +434,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
