@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      candy_leads: {
+        Row: {
+          activity: string
+          created_at: string
+          email: string | null
+          goal: string
+          id: string
+          metadata: Json
+          phone: string | null
+          source: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+          weight_kg: number
+        }
+        Insert: {
+          activity: string
+          created_at?: string
+          email?: string | null
+          goal: string
+          id?: string
+          metadata?: Json
+          phone?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          weight_kg: number
+        }
+        Update: {
+          activity?: string
+          created_at?: string
+          email?: string | null
+          goal?: string
+          id?: string
+          metadata?: Json
+          phone?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          weight_kg?: number
+        }
+        Relationships: []
+      }
+      generated_content: {
+        Row: {
+          asset_url: string | null
+          bpm: number | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          duration_seconds: number | null
+          id: string
+          metadata: Json
+          music_track: string | null
+          status: string
+          tags: string[]
+          thumbnail_url: string | null
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          asset_url?: string | null
+          bpm?: number | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          metadata?: Json
+          music_track?: string | null
+          status?: string
+          tags?: string[]
+          thumbnail_url?: string | null
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_url?: string | null
+          bpm?: number | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          metadata?: Json
+          music_track?: string | null
+          status?: string
+          tags?: string[]
+          thumbnail_url?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hubs: {
         Row: {
           address: string
@@ -180,6 +279,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       weight_logs: {
         Row: {
           created_at: string
@@ -212,10 +332,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "coach" | "member"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -342,6 +468,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "coach", "member"],
+    },
   },
 } as const
