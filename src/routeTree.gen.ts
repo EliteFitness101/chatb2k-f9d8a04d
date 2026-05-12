@@ -25,6 +25,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedContentEngineRouteImport } from './routes/_authenticated/content-engine'
 import { Route as AuthenticatedCandyRouteImport } from './routes/_authenticated/candy'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 
@@ -107,6 +108,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedContentEngineRoute =
+  AuthenticatedContentEngineRouteImport.update({
+    id: '/content-engine',
+    path: '/content-engine',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedCandyRoute = AuthenticatedCandyRouteImport.update({
   id: '/candy',
   path: '/candy',
@@ -134,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/candy': typeof AuthenticatedCandyRoute
+  '/content-engine': typeof AuthenticatedContentEngineRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
@@ -153,6 +161,7 @@ export interface FileRoutesByTo {
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/candy': typeof AuthenticatedCandyRoute
+  '/content-engine': typeof AuthenticatedContentEngineRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
@@ -174,6 +183,7 @@ export interface FileRoutesById {
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
   '/_authenticated/candy': typeof AuthenticatedCandyRoute
+  '/_authenticated/content-engine': typeof AuthenticatedContentEngineRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/shopify'
     | '/success'
     | '/candy'
+    | '/content-engine'
     | '/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/shopify'
     | '/success'
     | '/candy'
+    | '/content-engine'
     | '/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
@@ -234,6 +246,7 @@ export interface FileRouteTypes {
     | '/shopify'
     | '/success'
     | '/_authenticated/candy'
+    | '/_authenticated/content-engine'
     | '/_authenticated/dashboard'
     | '/products/$slug'
     | '/api/public/paystack-webhook'
@@ -371,6 +384,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/content-engine': {
+      id: '/_authenticated/content-engine'
+      path: '/content-engine'
+      fullPath: '/content-engine'
+      preLoaderRoute: typeof AuthenticatedContentEngineRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/candy': {
       id: '/_authenticated/candy'
       path: '/candy'
@@ -390,11 +410,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedCandyRoute: typeof AuthenticatedCandyRoute
+  AuthenticatedContentEngineRoute: typeof AuthenticatedContentEngineRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCandyRoute: AuthenticatedCandyRoute,
+  AuthenticatedContentEngineRoute: AuthenticatedContentEngineRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
 }
 
