@@ -3,19 +3,23 @@ import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/hooks/use-auth";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import { CurrencyBadge } from "./CurrencyBadge";
 
 const NAV = [
-  { to: "/products", label: "Arsenal" },
-  { to: "/bundles", label: "Bundles" },
-  { to: "/quiz", label: "Reset Quiz" },
-  { to: "/hubs", label: "Hubs" },
-  { to: "/about", label: "Authority" },
+  { to: "/products", key: "nav.arsenal" },
+  { to: "/bundles", key: "nav.bundles" },
+  { to: "/quiz", key: "nav.quiz" },
+  { to: "/hubs", key: "nav.hubs" },
+  { to: "/about", key: "nav.about" },
 ] as const;
 
 export function Header() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -40,21 +44,23 @@ export function Header() {
               className="text-foreground/80 hover:text-gold transition-colors"
               activeProps={{ className: "text-gold" }}
             >
-              {n.label}
+              {t(n.key)}
             </Link>
           ))}
         </nav>
         <div className="hidden md:flex items-center gap-3">
+          <CurrencyBadge />
+          <LanguageSwitcher />
           {user ? (
-            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">Dashboard</Link>
+            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
           ) : (
-            <Link to="/login" className="text-sm text-foreground/80 hover:text-gold">Sign in</Link>
+            <Link to="/login" className="text-sm text-foreground/80 hover:text-gold">{t("cta.signin")}</Link>
           )}
           <Link
             to="/checkout"
             className="px-5 py-2 rounded-sm bg-gold-gradient text-[var(--ink)] text-sm font-semibold tracking-wide hover:shadow-gold transition-shadow"
           >
-            Checkout
+            {t("cta.checkout")}
           </Link>
         </div>
         <button
@@ -76,15 +82,19 @@ export function Header() {
                 className="py-2 text-foreground/80"
                 activeProps={{ className: "text-gold" }}
               >
-                {n.label}
+                {t(n.key)}
               </Link>
             ))}
+            <div className="flex items-center justify-between pt-2 border-t border-[var(--glass-border)]">
+              <CurrencyBadge />
+              <LanguageSwitcher />
+            </div>
             <Link
               to="/checkout"
               onClick={() => setOpen(false)}
               className="mt-2 px-5 py-2.5 rounded-sm bg-gold-gradient text-[var(--ink)] text-center font-semibold"
             >
-              Checkout
+              {t("cta.checkout")}
             </Link>
           </div>
         </div>
