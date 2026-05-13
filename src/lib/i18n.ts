@@ -35,13 +35,18 @@ const resources = {
   }},
 };
 
-if (typeof window !== "undefined" && !i18n.isInitialized) {
-  i18n.use(LanguageDetector).use(initReactI18next).init({
+if (!i18n.isInitialized) {
+  const chain = typeof window !== "undefined"
+    ? i18n.use(LanguageDetector).use(initReactI18next)
+    : i18n.use(initReactI18next);
+  chain.init({
     resources,
+    lng: typeof window === "undefined" ? "en" : undefined,
     fallbackLng: "en",
     supportedLngs: ["en", "fr", "es", "ar", "zh"],
     interpolation: { escapeValue: false },
     detection: { order: ["localStorage", "navigator"], caches: ["localStorage"] },
+    react: { useSuspense: false },
   });
 }
 

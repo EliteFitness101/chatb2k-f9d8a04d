@@ -17,6 +17,7 @@ import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HubsRouteImport } from './routes/hubs'
+import { Route as EliteCheckoutRouteImport } from './routes/elite-checkout'
 import { Route as CryptoRouteImport } from './routes/crypto'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as BundlesRouteImport } from './routes/bundles'
@@ -67,6 +68,11 @@ const LoginRoute = LoginRouteImport.update({
 const HubsRoute = HubsRouteImport.update({
   id: '/hubs',
   path: '/hubs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EliteCheckoutRoute = EliteCheckoutRouteImport.update({
+  id: '/elite-checkout',
+  path: '/elite-checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CryptoRoute = CryptoRouteImport.update({
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/bundles': typeof BundlesRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
+  '/elite-checkout': typeof EliteCheckoutRoute
   '/hubs': typeof HubsRoute
   '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/bundles': typeof BundlesRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
+  '/elite-checkout': typeof EliteCheckoutRoute
   '/hubs': typeof HubsRoute
   '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
@@ -174,6 +182,7 @@ export interface FileRoutesById {
   '/bundles': typeof BundlesRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
+  '/elite-checkout': typeof EliteCheckoutRoute
   '/hubs': typeof HubsRoute
   '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/bundles'
     | '/checkout'
     | '/crypto'
+    | '/elite-checkout'
     | '/hubs'
     | '/login'
     | '/paystack'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/bundles'
     | '/checkout'
     | '/crypto'
+    | '/elite-checkout'
     | '/hubs'
     | '/login'
     | '/paystack'
@@ -237,6 +248,7 @@ export interface FileRouteTypes {
     | '/bundles'
     | '/checkout'
     | '/crypto'
+    | '/elite-checkout'
     | '/hubs'
     | '/login'
     | '/paystack'
@@ -259,6 +271,7 @@ export interface RootRouteChildren {
   BundlesRoute: typeof BundlesRoute
   CheckoutRoute: typeof CheckoutRoute
   CryptoRoute: typeof CryptoRoute
+  EliteCheckoutRoute: typeof EliteCheckoutRoute
   HubsRoute: typeof HubsRoute
   LoginRoute: typeof LoginRoute
   PaystackRoute: typeof PaystackRoute
@@ -326,6 +339,13 @@ declare module '@tanstack/react-router' {
       path: '/hubs'
       fullPath: '/hubs'
       preLoaderRoute: typeof HubsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/elite-checkout': {
+      id: '/elite-checkout'
+      path: '/elite-checkout'
+      fullPath: '/elite-checkout'
+      preLoaderRoute: typeof EliteCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/crypto': {
@@ -443,6 +463,7 @@ const rootRouteChildren: RootRouteChildren = {
   BundlesRoute: BundlesRoute,
   CheckoutRoute: CheckoutRoute,
   CryptoRoute: CryptoRoute,
+  EliteCheckoutRoute: EliteCheckoutRoute,
   HubsRoute: HubsRoute,
   LoginRoute: LoginRoute,
   PaystackRoute: PaystackRoute,
@@ -456,12 +477,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
