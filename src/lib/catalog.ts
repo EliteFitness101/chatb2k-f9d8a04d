@@ -130,6 +130,21 @@ export const products: Product[] = [
   },
 ];
 
+// Premium digital access SKU used by /elite-checkout. Server-priced.
+products.push({
+  slug: "elite-access",
+  sku: "RES-ELITE-ACCESS",
+  title: "ResoFlex Elite Access",
+  tagline: "The Sovereign tier. Lifetime access.",
+  description:
+    "Unlock the full Elite-LuxeGold blueprint vault, Apex protocols, and member-only drops.",
+  category: "digital",
+  ngnMinor: 25000000, // ₦250,000
+  usdMinor: 15900,
+  badge: "Elite",
+  highlights: ["Lifetime access", "Sovereign vault", "Apex protocols"],
+});
+
 export const productBySlug = (slug: string) =>
   products.find((p) => p.slug === slug);
 
