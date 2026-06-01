@@ -59,6 +59,45 @@ export type Database = {
         }
         Relationships: []
       }
+      gallery_images: {
+        Row: {
+          created_at: string
+          height: number | null
+          id: string
+          label: string
+          slot: string
+          sort_order: number
+          storage_path: string | null
+          updated_at: string
+          url: string
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          label?: string
+          slot?: string
+          sort_order?: number
+          storage_path?: string | null
+          updated_at?: string
+          url: string
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          label?: string
+          slot?: string
+          sort_order?: number
+          storage_path?: string | null
+          updated_at?: string
+          url?: string
+          width?: number | null
+        }
+        Relationships: []
+      }
       generated_content: {
         Row: {
           asset_url: string | null
