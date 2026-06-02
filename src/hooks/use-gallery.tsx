@@ -16,18 +16,18 @@ const inflight = new Map<string, Promise<GalleryImage[]>>();
 async function fetchSlot(slot: string): Promise<GalleryImage[]> {
   if (cache.has(slot)) return cache.get(slot)!;
   if (inflight.has(slot)) return inflight.get(slot)!;
-  const p = supabase
-    .from("gallery_images")
-    .select("id,label,slot,url,sort_order")
-    .eq("slot", slot)
-    .order("sort_order", { ascending: true })
-    .then(({ data }) => {
-      const items = (data ?? []) as GalleryImage[];
-      cache.set(slot, items);
-      listeners.get(slot)?.forEach((cb) => cb(items));
-      inflight.delete(slot);
-      return items;
-    });
+  const p = (async () => {
+    const { data } = await supabase
+      .from("gallery_images")
+      .select("id,label,slot,url,sort_order")
+      .eq("slot", slot)
+      .order("sort_order", { ascending: true });
+    const items = (data ?? []) as GalleryImage[];
+    cache.set(slot, items);
+    listeners.get(slot)?.forEach((cb) => cb(items));
+    inflight.delete(slot);
+    return items;
+  })();
   inflight.set(slot, p);
   return p;
 }
