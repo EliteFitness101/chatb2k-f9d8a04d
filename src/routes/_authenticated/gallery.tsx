@@ -28,6 +28,54 @@ interface GalleryImage {
 
 const SLOTS = ["hero", "products", "content", "general"] as const;
 
+const SLOT_USAGE: Record<
+  (typeof SLOTS)[number],
+  {
+    purpose: string;
+    labelHint: string;
+    consumers: { page: string; route: string; component: string }[];
+  }
+> = {
+  hero: {
+    purpose: "Large above-the-fold banner imagery for landing surfaces.",
+    labelHint: "Any label (first image by sort order is used).",
+    consumers: [
+      { page: "Home", route: "/", component: "src/routes/index.tsx" },
+      { page: "About", route: "/about", component: "src/routes/about.tsx" },
+      { page: "Hubs", route: "/hubs", component: "src/routes/hubs.tsx" },
+    ],
+  },
+  products: {
+    purpose: "Product photography for the Arsenal grid and product detail page.",
+    labelHint:
+      "Label MUST equal the product SKU, slug, or title (e.g. RES-IRON-50, cast-iron-50kg).",
+    consumers: [
+      { page: "Arsenal grid", route: "/products", component: "src/components/site/ProductCard.tsx" },
+      { page: "Product detail", route: "/products/$slug", component: "src/routes/products.$slug.tsx" },
+      { page: "Bundles", route: "/bundles", component: "src/routes/bundles.tsx" },
+      { page: "Elite checkout", route: "/elite-checkout", component: "src/routes/elite-checkout.tsx" },
+    ],
+  },
+  content: {
+    purpose: "Editorial / content-engine thumbnails and clip covers.",
+    labelHint: "Free-form label; ordered by sort_order in the gallery.",
+    consumers: [
+      {
+        page: "Content Engine",
+        route: "/content-engine",
+        component: "src/routes/_authenticated/content-engine.tsx",
+      },
+    ],
+  },
+  general: {
+    purpose: "Fallback bucket for any imagery not pinned to a specific surface.",
+    labelHint: "Used as a generic fallback where no slot-specific match is found.",
+    consumers: [
+      { page: "Footer / misc", route: "*", component: "src/components/site/Footer.tsx" },
+    ],
+  },
+};
+
 function GalleryAdminPage() {
   const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
