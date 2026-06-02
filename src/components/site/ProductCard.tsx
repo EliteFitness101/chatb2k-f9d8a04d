@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Product, formatNGN, formatUSD } from "@/lib/catalog";
+import { findGalleryImage, useGalleryBySlot } from "@/hooks/use-gallery";
 
 export function ProductCard({
   product,
@@ -9,6 +10,8 @@ export function ProductCard({
   currency?: "NGN" | "USD";
 }) {
   const price = currency === "NGN" ? formatNGN(product.ngnMinor) : formatUSD(product.usdMinor);
+  const gallery = useGalleryBySlot("products");
+  const img = findGalleryImage(gallery, [product.sku, product.slug, product.title]);
   return (
     <Link
       to="/products/$slug"
@@ -16,10 +19,21 @@ export function ProductCard({
       className="group glass rounded-md p-6 flex flex-col gap-4 hover:shadow-gold transition-shadow relative overflow-hidden"
     >
       <div className="aspect-[4/3] rounded-sm bg-[var(--ink)] border border-[var(--glass-border)] relative overflow-hidden">
-        <div className="absolute inset-0 ember-bg opacity-60" />
-        <div className="absolute inset-0 grid place-items-center">
-          <Glyph category={product.category} weight={product.weightKg} />
-        </div>
+        {img ? (
+          <img
+            src={img.url}
+            alt={img.label || product.title}
+            loading="lazy"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <>
+            <div className="absolute inset-0 ember-bg opacity-60" />
+            <div className="absolute inset-0 grid place-items-center">
+              <Glyph category={product.category} weight={product.weightKg} />
+            </div>
+          </>
+        )}
         {product.badge && (
           <span className="absolute top-3 left-3 text-[10px] tracking-[0.2em] uppercase bg-gold-gradient text-[var(--ink)] px-2.5 py-1 rounded-sm font-semibold">
             {product.badge}
