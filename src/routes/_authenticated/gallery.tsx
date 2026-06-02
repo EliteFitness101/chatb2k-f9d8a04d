@@ -28,6 +28,54 @@ interface GalleryImage {
 
 const SLOTS = ["hero", "products", "content", "general"] as const;
 
+const SLOT_USAGE: Record<
+  (typeof SLOTS)[number],
+  {
+    purpose: string;
+    labelHint: string;
+    consumers: { page: string; route: string; component: string }[];
+  }
+> = {
+  hero: {
+    purpose: "Large above-the-fold banner imagery for landing surfaces.",
+    labelHint: "Any label (first image by sort order is used).",
+    consumers: [
+      { page: "Home", route: "/", component: "src/routes/index.tsx" },
+      { page: "About", route: "/about", component: "src/routes/about.tsx" },
+      { page: "Hubs", route: "/hubs", component: "src/routes/hubs.tsx" },
+    ],
+  },
+  products: {
+    purpose: "Product photography for the Arsenal grid and product detail page.",
+    labelHint:
+      "Label MUST equal the product SKU, slug, or title (e.g. RES-IRON-50, cast-iron-50kg).",
+    consumers: [
+      { page: "Arsenal grid", route: "/products", component: "src/components/site/ProductCard.tsx" },
+      { page: "Product detail", route: "/products/$slug", component: "src/routes/products.$slug.tsx" },
+      { page: "Bundles", route: "/bundles", component: "src/routes/bundles.tsx" },
+      { page: "Elite checkout", route: "/elite-checkout", component: "src/routes/elite-checkout.tsx" },
+    ],
+  },
+  content: {
+    purpose: "Editorial / content-engine thumbnails and clip covers.",
+    labelHint: "Free-form label; ordered by sort_order in the gallery.",
+    consumers: [
+      {
+        page: "Content Engine",
+        route: "/content-engine",
+        component: "src/routes/_authenticated/content-engine.tsx",
+      },
+    ],
+  },
+  general: {
+    purpose: "Fallback bucket for any imagery not pinned to a specific surface.",
+    labelHint: "Used as a generic fallback where no slot-specific match is found.",
+    consumers: [
+      { page: "Footer / misc", route: "*", component: "src/components/site/Footer.tsx" },
+    ],
+  },
+};
+
 function GalleryAdminPage() {
   const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
@@ -251,6 +299,56 @@ function GalleryAdminPage() {
             <span className="text-xs text-[#F4EADE]/40 ml-auto">
               <Upload className="inline h-3 w-3 mr-1" /> max 15 MB per file
             </span>
+          </div>
+        </section>
+
+        {/* Slot → consumer map */}
+        <section className="mt-10 border border-[#C69B3C]/25 rounded-md p-5 bg-black/30">
+          <h2 className="text-sm uppercase tracking-[0.3em] text-[#C69B3C]">
+            Slot Configuration
+          </h2>
+          <p className="text-xs text-[#F4EADE]/50 mt-2">
+            Where each slot is consumed across the site. Use the labelling
+            convention shown below so the right image is picked up automatically.
+          </p>
+          <div className="mt-5 grid md:grid-cols-2 gap-4">
+            {SLOTS.map((s) => {
+              const cfg = SLOT_USAGE[s];
+              return (
+                <div
+                  key={s}
+                  className="border border-[#C69B3C]/20 rounded p-4 bg-black/40"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.3em] text-[#C69B3C]">
+                      {s}
+                    </span>
+                    <span className="text-[10px] text-[#F4EADE]/40">
+                      {items.filter((i) => i.slot === s).length} image(s)
+                    </span>
+                  </div>
+                  <p className="text-sm mt-2 text-[#F4EADE]/80">{cfg.purpose}</p>
+                  <p className="text-[11px] mt-2 text-[#C69B3C]/80">
+                    <span className="uppercase tracking-widest">Label rule:</span>{" "}
+                    <span className="text-[#F4EADE]/70">{cfg.labelHint}</span>
+                  </p>
+                  <ul className="mt-3 space-y-1.5">
+                    {cfg.consumers.map((c) => (
+                      <li
+                        key={c.component}
+                        className="text-[11px] flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                      >
+                        <span className="text-[#F4EADE]">{c.page}</span>
+                        <code className="text-[10px] text-[#C69B3C]/80">{c.route}</code>
+                        <code className="text-[10px] text-[#F4EADE]/40">
+                          {c.component}
+                        </code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
         </section>
 

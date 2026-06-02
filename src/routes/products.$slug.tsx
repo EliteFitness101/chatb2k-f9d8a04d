@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { SiteShell } from "@/components/site/SiteShell";
 import { productBySlug, formatNGN, formatUSD } from "@/lib/catalog";
 import { pageMeta } from "@/lib/site-meta";
+import { findGalleryImage, useGalleryBySlot } from "@/hooks/use-gallery";
 
 export const Route = createFileRoute("/products/$slug")({
   loader: ({ params }) => {
@@ -36,16 +37,28 @@ export const Route = createFileRoute("/products/$slug")({
 
 function ProductPage() {
   const { product } = Route.useLoaderData();
+  const gallery = useGalleryBySlot("products");
+  const img = findGalleryImage(gallery, [product.sku, product.slug, product.title]);
   return (
     <SiteShell>
       <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-12 pb-20 grid md:grid-cols-2 gap-10">
         <div className="glass rounded-md aspect-square relative overflow-hidden">
-          <div className="absolute inset-0 ember-bg" />
-          <div className="absolute inset-0 grid place-items-center">
-            <div className="font-display text-6xl text-gold-gradient">
-              {product.weightKg ? `${product.weightKg} kg` : product.category.toUpperCase()}
-            </div>
-          </div>
+          {img ? (
+            <img
+              src={img.url}
+              alt={img.label || product.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <>
+              <div className="absolute inset-0 ember-bg" />
+              <div className="absolute inset-0 grid place-items-center">
+                <div className="font-display text-6xl text-gold-gradient">
+                  {product.weightKg ? `${product.weightKg} kg` : product.category.toUpperCase()}
+                </div>
+              </div>
+            </>
+          )}
           {product.badge && (
             <span className="absolute top-4 left-4 text-[10px] tracking-[0.2em] uppercase bg-gold-gradient text-[var(--ink)] px-2.5 py-1 rounded-sm font-semibold">
               {product.badge}
