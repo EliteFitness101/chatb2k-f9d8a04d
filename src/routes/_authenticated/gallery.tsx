@@ -302,6 +302,56 @@ function GalleryAdminPage() {
           </div>
         </section>
 
+        {/* Slot → consumer map */}
+        <section className="mt-10 border border-[#C69B3C]/25 rounded-md p-5 bg-black/30">
+          <h2 className="text-sm uppercase tracking-[0.3em] text-[#C69B3C]">
+            Slot Configuration
+          </h2>
+          <p className="text-xs text-[#F4EADE]/50 mt-2">
+            Where each slot is consumed across the site. Use the labelling
+            convention shown below so the right image is picked up automatically.
+          </p>
+          <div className="mt-5 grid md:grid-cols-2 gap-4">
+            {SLOTS.map((s) => {
+              const cfg = SLOT_USAGE[s];
+              return (
+                <div
+                  key={s}
+                  className="border border-[#C69B3C]/20 rounded p-4 bg-black/40"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.3em] text-[#C69B3C]">
+                      {s}
+                    </span>
+                    <span className="text-[10px] text-[#F4EADE]/40">
+                      {items.filter((i) => i.slot === s).length} image(s)
+                    </span>
+                  </div>
+                  <p className="text-sm mt-2 text-[#F4EADE]/80">{cfg.purpose}</p>
+                  <p className="text-[11px] mt-2 text-[#C69B3C]/80">
+                    <span className="uppercase tracking-widest">Label rule:</span>{" "}
+                    <span className="text-[#F4EADE]/70">{cfg.labelHint}</span>
+                  </p>
+                  <ul className="mt-3 space-y-1.5">
+                    {cfg.consumers.map((c) => (
+                      <li
+                        key={c.component}
+                        className="text-[11px] flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                      >
+                        <span className="text-[#F4EADE]">{c.page}</span>
+                        <code className="text-[10px] text-[#C69B3C]/80">{c.route}</code>
+                        <code className="text-[10px] text-[#F4EADE]/40">
+                          {c.component}
+                        </code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* Gallery list grouped by slot */}
         <section className="mt-10 space-y-10">
           {loading ? (
