@@ -1,34 +1,61 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { ProductCard } from "@/components/site/ProductCard";
 import { CurrencyBadge } from "@/components/site/CurrencyBadge";
-import { products, formatNGN } from "@/lib/catalog";
+import { products } from "@/lib/catalog";
 import { pageMeta } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: pageMeta({
-      title: "The Global Mechanical Authority",
+      title: "Transform Your Body with AI Precision — Start for ₦1,000",
       description:
-        "ResoFlex™ Global Sanctuary — cast iron, ancestral doctrine, and white-glove fulfilment from hubs in Nigeria, the United States and Canada.",
+        "Personalized Nigerian meal plans, fitness coaching, and AI assessment designed to build your ideal body faster.",
     }),
+    links: [
+      { rel: "preload", as: "image", href: "/hero/product-1.webp" },
+      { rel: "preload", as: "image", href: "/hero/product-2.webp" },
+    ],
   }),
   component: Index,
 });
 
+const NG_FUNNEL = "https://joy-funnel-ai.lovable.app";
+const INTL_FUNNEL = "https://candera.resofit.fit";
+const ENROLLMENT = "https://resofit-evolution.lovable.app";
+const WHATSAPP = "https://wa.me/2348000000000";
+
+function track(event: string) {
+  // soft-track if window analytics exists; no new system added
+  try {
+    (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push({ event });
+  } catch {}
+}
+
 function Index() {
-  const apex = products.find((p) => p.apex)!;
   const featured = products.filter((p) => ["iron", "bench"].includes(p.category)).slice(0, 4);
+  const [isNigeria, setIsNigeria] = useState(true);
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      setIsNigeria(tz.includes("Africa"));
+    } catch {
+      setIsNigeria(false);
+    }
+  }, []);
+  const primaryHref = isNigeria ? NG_FUNNEL : INTL_FUNNEL;
+
   return (
     <SiteShell>
       {/* HERO */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 ember-bg pointer-events-none" />
         <div className="absolute inset-0 [background:radial-gradient(circle_at_30%_40%,oklch(0.78_0.13_87/0.12),transparent_55%)] pointer-events-none" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-20 sm:pt-28 pb-24 sm:pb-32">
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-20 sm:pt-28 pb-24 sm:pb-32 pb-28 sm:pb-32">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -37,110 +64,83 @@ function Index() {
           >
             <CurrencyBadge />
             <h1 className="mt-6 font-display text-5xl sm:text-6xl md:text-7xl leading-[1.05]">
-              The global <span className="text-gold-gradient">mechanical</span> authority.
+              Transform Your Body with <span className="text-gold-gradient">AI Precision</span>.
+              <span className="block mt-2 text-3xl sm:text-4xl md:text-5xl text-foreground/90">
+                Start for ₦1,000.
+              </span>
             </h1>
             <p className="mt-6 text-lg text-muted-foreground max-w-2xl leading-relaxed">
-              ResoFlex™ delivers cast iron, ancestral doctrine, and white-glove
-              fulfilment from sanctuaries in Abia, Lagos, Port Harcourt, Jersey
-              City and Ottawa. One identity. Verified globally.
+              Personalized Nigerian meal plans, fitness coaching, and AI assessment
+              designed to build your ideal body faster.
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
-              <Link
-                to="/bundles"
+              <a
+                href={primaryHref}
+                onClick={() => track("cta_click_primary")}
                 className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold tracking-wide shadow-gold hover:brightness-110 transition"
               >
-                Claim the Apex Bundle
-              </Link>
+                Start Your ₦1,000 Transformation
+              </a>
               <Link
-                to="/products"
+                to="/quiz"
+                onClick={() => track("chatb2k_start")}
                 className="px-6 py-3.5 rounded-sm glass text-foreground font-medium hover:border-[var(--gold)] transition"
               >
-                Inspect the Arsenal
+                Take AI Assessment (ChatB2K)
               </Link>
+              <a
+                href={WHATSAPP}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3.5 rounded-sm border border-[var(--glass-border)] text-foreground font-medium hover:border-[var(--gold)] transition"
+              >
+                Talk to Coach (WhatsApp)
+              </a>
+            </div>
+            <div className="mt-6">
+              <a
+                href={ENROLLMENT}
+                className="text-xs tracking-[0.3em] uppercase text-gold/90 hover:text-gold transition"
+              >
+                Already convinced? Enroll now →
+              </a>
             </div>
           </motion.div>
-
-          {/* Authority strip */}
-          <div className="mt-20 grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[
-              { k: "7", v: "Global Hubs" },
-              { k: "3", v: "Continents" },
-              { k: "₦380k+", v: "Apex Bundle" },
-              { k: "100%", v: "Buchi-Approved" },
-            ].map((s) => (
-              <div key={s.v} className="glass rounded-md p-5 text-center">
-                <div className="font-display text-3xl text-gold-gradient">{s.k}</div>
-                <div className="text-xs tracking-widest uppercase text-muted-foreground mt-1">
-                  {s.v}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
-      {/* APEX BUNDLE FEATURE */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-20">
-        <div className="glass rounded-md overflow-hidden grid md:grid-cols-2">
-          <div className="p-8 sm:p-12 flex flex-col justify-center">
-            <div className="text-xs tracking-[0.3em] uppercase text-gold mb-4">
-              The Apex Bundle
-            </div>
-            <h2 className="font-display text-4xl sm:text-5xl">
-              {apex.title}
-            </h2>
-            <p className="mt-4 text-muted-foreground leading-relaxed">
-              {apex.description}
-            </p>
-            <ul className="mt-6 space-y-2 text-sm">
-              {apex.highlights.map((h) => (
-                <li key={h} className="flex gap-2">
-                  <span className="text-gold">◆</span> {h}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8 flex items-baseline gap-4">
-              <span className="font-display text-4xl text-gold-gradient">
-                {formatNGN(apex.ngnMinor)}
-              </span>
-              <span className="text-sm text-muted-foreground">/ unit · global</span>
-            </div>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                to="/products/$slug"
-                params={{ slug: apex.slug }}
-                className="px-5 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold"
-              >
-                Claim now
-              </Link>
-              <Link
-                to="/checkout"
-                className="px-5 py-3 rounded-sm glass text-foreground"
-              >
-                Smart checkout →
-              </Link>
-            </div>
-          </div>
-          <div className="relative bg-[var(--ink)] min-h-[320px] flex items-center justify-center border-l border-[var(--glass-border)]">
-            <div className="absolute inset-0 ember-bg" />
-            <div className="relative text-center">
-              <div className="font-display text-7xl text-gold-gradient leading-none">
-                APEX
+      {/* TRUST AUTHORITY */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
+        <SectionHeading
+          eyebrow="Proof"
+          title="Trusted Transformation System"
+          sub="Real installations, real deployments, real deliveries — across Nigeria and beyond."
+        />
+        <div className="mt-10 grid sm:grid-cols-3 gap-5">
+          {[
+            { title: "Home Installations", caption: "Delivered across Nigeria", emoji: "🏠" },
+            { title: "Boutique Gym Deployments", caption: "Trusted by private gyms", emoji: "🏋️" },
+            { title: "Nationwide Delivery Proof", caption: "Premium fitness installations", emoji: "🚚" },
+          ].map((t) => (
+            <div key={t.title} className="glass rounded-md overflow-hidden">
+              <div className="aspect-[4/3] bg-[var(--ink)] ember-bg grid place-items-center text-5xl">
+                <span aria-hidden>{t.emoji}</span>
               </div>
-              <div className="mt-3 tracking-[0.4em] text-xs text-gold uppercase">
-                Buchi · Power · Verified
+              <div className="p-5">
+                <div className="font-display text-xl">{t.title}</div>
+                <div className="text-xs tracking-widest uppercase text-gold/80 mt-2">{t.caption}</div>
               </div>
             </div>
-          </div>
+          ))}
         </div>
       </section>
 
       {/* FEATURED ARSENAL */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-12">
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-12 opacity-90">
         <SectionHeading
-          eyebrow="The Arsenal"
-          title="Iron and steel, codified."
-          sub="Every plate, bar and bench dispatched from your nearest hub. Hand-finished. Verified. Delivered."
+          eyebrow="Catalog"
+          title="Browse the arsenal."
+          sub="Optional gear browsing. The ₦1,000 transformation is the fastest path."
         />
         <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {featured.map((p) => (
@@ -157,72 +157,55 @@ function Index() {
         </div>
       </section>
 
-      {/* RAILS */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-20">
+      {/* Financial Router section soft-hidden per funnel patch. */}
+
+      {/* FINAL CTA */}
+      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-20 text-center">
         <SectionHeading
-          eyebrow="Financial Router"
-          title="Pay your way. We verify."
-          sub="The system detects your geography and routes you to the right rail. Manual override always available."
+          align="center"
+          eyebrow="Your move"
+          title="Build your ideal body — starting at ₦1,000."
+          sub="Personalized AI plan in minutes. Coach-verified. No fluff."
         />
-        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { to: "/paystack" as const, label: "Paystack", note: "Nigeria · NGN" },
-            { to: "/shopify" as const, label: "Shopify", note: "USD / GBP / EUR" },
-            { to: "/crypto" as const, label: "Crypto", note: "USDT · BTC · Apex+" },
-            { to: "/selar" as const, label: "Selar", note: "Digital downloads" },
-          ].map((r) => (
-            <Link
-              key={r.to}
-              to={r.to}
-              className="glass rounded-md p-6 hover:shadow-gold transition group"
-            >
-              <div className="font-display text-2xl group-hover:text-gold transition">
-                {r.label}
-              </div>
-              <div className="text-xs tracking-widest uppercase text-muted-foreground mt-2">
-                {r.note}
-              </div>
-              <div className="mt-6 text-sm text-gold opacity-0 group-hover:opacity-100 transition">
-                Open rail →
-              </div>
-            </Link>
-          ))}
+        <div className="mt-10 flex flex-wrap gap-4 justify-center">
+          <a
+            href={primaryHref}
+            onClick={() => track("cta_click_primary")}
+            className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
+          >
+            Start Your ₦1,000 Transformation
+          </a>
+          <a
+            href={ENROLLMENT}
+            onClick={() => track("checkout_initiated")}
+            className="px-6 py-3.5 rounded-sm glass text-foreground hover:border-[var(--gold)] transition"
+          >
+            Enroll in the Evolution →
+          </a>
         </div>
       </section>
 
-      {/* HUBS */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-20">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <SectionHeading
-              eyebrow="Global Sanctuaries"
-              title="One brand. Seven hubs. Three continents."
-              sub="Global HQ in Umudike. National branches in Lagos and Port Harcourt. International hubs in Jersey City and Ottawa."
-            />
-            <Link
-              to="/hubs"
-              className="mt-8 inline-block px-6 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold"
-            >
-              Locate the nearest hub →
-            </Link>
-          </div>
-          <div className="glass rounded-md p-8 grid grid-cols-2 gap-4 text-sm">
-            {[
-              ["Abia, NG", "Global HQ"],
-              ["Lagos, NG", "Lekki × 2"],
-              ["Port Harcourt", "Sobaz · Shell RA"],
-              ["Jersey City, US", "108 CraneFord"],
-              ["Ottawa, CA", "Wellness Villa"],
-              ["Worldwide", "White-glove"],
-            ].map(([city, label]) => (
-              <div key={city} className="border border-[var(--glass-border)] rounded-sm p-4">
-                <div className="text-gold text-xs uppercase tracking-widest">{label}</div>
-                <div className="font-display text-lg mt-1">{city}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* MOBILE STICKY CTA */}
+      <div className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-[var(--glass-border)] bg-[var(--ink)]/95 backdrop-blur px-3 py-3 flex gap-2 items-center">
+        <a
+          href={primaryHref}
+          onClick={() => track("cta_click_primary")}
+          className="flex-1 text-center px-4 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
+        >
+          Start ₦1,000
+        </a>
+        <a
+          href={WHATSAPP}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="WhatsApp coach"
+          className="h-11 w-11 grid place-items-center rounded-sm border border-[var(--glass-border)] text-gold"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M20.5 3.5A11 11 0 0 0 3.2 17l-1.2 4.4 4.5-1.2A11 11 0 1 0 20.5 3.5Zm-8.5 18a9 9 0 0 1-4.6-1.3l-.3-.2-2.7.7.7-2.6-.2-.3A9 9 0 1 1 12 21.5Zm5-6.7c-.3-.1-1.6-.8-1.8-.9s-.4-.1-.6.1-.7.9-.8 1-.3.2-.5.1a7.4 7.4 0 0 1-3.7-3.2c-.3-.5.3-.5.8-1.5a.5.5 0 0 0 0-.5l-.8-2c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-1 2.3c0 1.4 1 2.7 1.2 2.9s2.1 3.2 5.1 4.5a17 17 0 0 0 1.7.6 4 4 0 0 0 1.8.1c.6-.1 1.6-.7 1.8-1.3s.2-1.2.1-1.3-.2-.2-.5-.4Z"/>
+          </svg>
+        </a>
+      </div>
     </SiteShell>
   );
 }

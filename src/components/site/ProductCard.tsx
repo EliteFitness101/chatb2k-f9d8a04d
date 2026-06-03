@@ -25,6 +25,9 @@ export function ProductCard({
             alt={img.label || product.title}
             loading="lazy"
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.src = "/images/fallback/premium-placeholder.webp";
+            }}
           />
         ) : (
           <>
