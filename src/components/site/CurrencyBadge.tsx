@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getGeo } from "@/server/geo.functions";
+import { getGeo } from "@/lib/geo.functions";
 
 export function CurrencyBadge() {
   const [geo, setGeo] = useState<{ country: string; currency: string; suggestedHub: string } | null>(null);

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { products, productBySku, formatNGN, formatUSD } from "@/lib/catalog";
-import { getGeo } from "@/server/geo.functions";
+import { getGeo } from "@/lib/geo.functions";
 import { pageMeta } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/checkout")({

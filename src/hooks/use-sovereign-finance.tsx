@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getGeo } from "@/server/geo.functions";
+import { getGeo } from "@/lib/geo.functions";
 
 export type CurrencyCode = "NGN" | "USD" | "GBP" | "EUR";
 
