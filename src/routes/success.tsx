@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { SiteShell } from "@/components/site/SiteShell";
-import { verifyPaystackTransaction } from "@/server/paystack.functions";
+import { verifyPaystackTransaction } from "@/lib/paystack.functions";
 import { pageMeta } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/success")({

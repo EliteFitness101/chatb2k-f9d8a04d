@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import { SiteShell } from "@/components/site/SiteShell";
-import { initPaystackTransaction } from "@/server/paystack.functions";
+import { initPaystackTransaction } from "@/lib/paystack.functions";
 import { productBySku, formatNGN } from "@/lib/catalog";
 import { pageMeta } from "@/lib/site-meta";
 

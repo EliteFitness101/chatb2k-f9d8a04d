@@ -4,7 +4,7 @@ import { z } from "zod";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { products, productBySku, formatNGN } from "@/lib/catalog";
-import { initPaystackTransaction } from "@/server/paystack.functions";
+import { initPaystackTransaction } from "@/lib/paystack.functions";
 import { pageMeta } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/paystack")({
