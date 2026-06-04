@@ -12,9 +12,9 @@ import { pageMeta } from "@/lib/site-meta";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: pageMeta({
-      title: "Transform Your Body with AI Precision — Start for ₦1,000",
+      title: "Transform Your Body with ChatB2K Precision — Start for ₦1,000",
       description:
-        "Personalized Nigerian meal plans, fitness coaching, and AI assessment designed to build your ideal body faster.",
+        "Get a personalized nutrition, fitness, and wellness roadmap designed around your goals, lifestyle, body type, and metabolic profile.",
     }),
     links: [
       { rel: "preload", as: "image", href: "/hero/product-1.webp" },
@@ -24,10 +24,11 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const NG_FUNNEL = "https://joy-funnel-ai.lovable.app";
-const INTL_FUNNEL = "https://candera.resofit.fit";
+const PRIMARY_CTA = "https://joy-funnel-ai.lovable.app";
 const ENROLLMENT = "https://resofit-evolution.lovable.app";
-const WHATSAPP = "https://wa.me/2348000000000";
+const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
+  "Hello Coach Buchi,\n\nI just started my Metabolic Reset on ResoFit and would like guidance on the next step."
+);
 
 type CtaVariant = "direct" | "pain" | "ai" | "trust";
 
@@ -35,15 +36,15 @@ function track(event: string, props: Record<string, unknown> = {}) {
   // soft-track if window analytics exists; no new system added
   try {
     (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push({ event, ...props });
+    const key = "rf_events";
+    const raw = localStorage.getItem(key);
+    const arr = raw ? JSON.parse(raw) : [];
+    arr.push({ event, props, t: Date.now() });
+    localStorage.setItem(key, JSON.stringify(arr.slice(-200)));
   } catch {}
 }
 
-const CTA_COPY: Record<CtaVariant, string> = {
-  direct: "Start Your ₦1,000 Transformation",
-  pain: "End the Frustration — Start for ₦1,000",
-  ai: "Unlock Your AI Body Plan — ₦1,000",
-  trust: "Join Thousands Transforming — ₦1,000",
-};
+const PRIMARY_CTA_LABEL = "Start Your Metabolic Reset →";
 
 function pickCtaVariant(): CtaVariant {
   if (typeof window === "undefined") return "direct";
@@ -63,16 +64,7 @@ function pickCtaVariant(): CtaVariant {
 
 function Index() {
   const featured = products.filter((p) => ["iron", "bench"].includes(p.category)).slice(0, 4);
-  const [isNigeria, setIsNigeria] = useState(true);
   const [ctaVariant, setCtaVariant] = useState<CtaVariant>("direct");
-  useEffect(() => {
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-      setIsNigeria(tz.includes("Africa"));
-    } catch {
-      setIsNigeria(false);
-    }
-  }, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -86,7 +78,7 @@ function Index() {
     } catch {}
     const v = pickCtaVariant();
     setCtaVariant(v);
-    track("cta_view", { variant: v });
+    track("landing_view", { variant: v });
 
     // scroll depth
     let d50 = false, d90 = false;
@@ -99,12 +91,12 @@ function Index() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-  const primaryHref = isNigeria ? NG_FUNNEL : INTL_FUNNEL;
-  const ctaLabel = CTA_COPY[ctaVariant];
-  const onPrimaryCta = () => {
+  const primaryHref = PRIMARY_CTA;
+  const onPrimaryCta = (surface: "primary" | "sticky" | "final" = "primary") => {
     try { localStorage.setItem("rf_last_cta_click", String(Date.now())); } catch {}
-    track("cta_click", { variant: ctaVariant, surface: "primary" });
-    track("checkout_start", { variant: ctaVariant });
+    track("metabolic_reset_click", { variant: ctaVariant, surface });
+    track("assessment_started", { variant: ctaVariant, surface });
+    track("checkout_started", { variant: ctaVariant, surface });
   };
 
   return (
@@ -122,37 +114,41 @@ function Index() {
           >
             <CurrencyBadge />
             <h1 className="mt-6 font-display text-5xl sm:text-6xl md:text-7xl leading-[1.05]">
-              Transform Your Body with <span className="text-gold-gradient">AI Precision</span>.
-              <span className="block mt-2 text-3xl sm:text-4xl md:text-5xl text-foreground/90">
-                Start for ₦1,000.
-              </span>
+              Transform Your Body With <span className="text-gold-gradient">ChatB2K Precision</span>.
             </h1>
             <p className="mt-6 text-lg text-muted-foreground max-w-2xl leading-relaxed">
-              Personalized Nigerian meal plans, fitness coaching, and AI assessment
-              designed to build your ideal body faster.
+              Get a personalized nutrition, fitness, and wellness roadmap designed around
+              your goals, lifestyle, body type, and metabolic profile.
             </p>
+            <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-foreground/80">
+              {[
+                "ChatB2K-Powered Recommendations",
+                "Coach Verified",
+                "Nigerian Meal Plans",
+                "Start for ₦1,000",
+              ].map((t) => (
+                <li key={t} className="inline-flex items-center gap-2">
+                  <span className="text-gold">✓</span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
             <div className="mt-10 flex flex-wrap gap-4">
               <a
                 href={primaryHref}
-                onClick={onPrimaryCta}
+                onClick={() => onPrimaryCta("primary")}
                 className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold tracking-wide shadow-gold hover:brightness-110 transition"
               >
-                {ctaLabel}
+                {PRIMARY_CTA_LABEL}
               </a>
-              <Link
-                to="/quiz"
-                onClick={() => track("chatb2k_start")}
-                className="px-6 py-3.5 rounded-sm glass text-foreground font-medium hover:border-[var(--gold)] transition"
-              >
-                Take AI Assessment (ChatB2K)
-              </Link>
               <a
                 href={WHATSAPP}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => track("whatsapp_click", { surface: "hero" })}
                 className="px-6 py-3.5 rounded-sm border border-[var(--glass-border)] text-foreground font-medium hover:border-[var(--gold)] transition"
               >
-                Talk to Coach (WhatsApp)
+                Chat With a Coach
               </a>
             </div>
             <div className="mt-6">
@@ -228,14 +224,14 @@ function Index() {
         <div className="mt-10 flex flex-wrap gap-4 justify-center">
           <a
             href={primaryHref}
-            onClick={onPrimaryCta}
+            onClick={() => onPrimaryCta("final")}
             className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
           >
-            {ctaLabel}
+            {PRIMARY_CTA_LABEL}
           </a>
           <a
             href={ENROLLMENT}
-            onClick={() => track("checkout_initiated")}
+            onClick={() => track("enroll_click", { surface: "final" })}
             className="px-6 py-3.5 rounded-sm glass text-foreground hover:border-[var(--gold)] transition"
           >
             Enroll in the Evolution →
@@ -247,15 +243,16 @@ function Index() {
       <div className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-[var(--glass-border)] bg-[var(--ink)]/95 backdrop-blur px-3 py-3 flex gap-2 items-center">
         <a
           href={primaryHref}
-          onClick={() => { onPrimaryCta(); track("cta_click", { variant: ctaVariant, surface: "sticky" }); }}
+          onClick={() => onPrimaryCta("sticky")}
           className="flex-1 text-center px-4 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
         >
-          Start ₦1,000
+          Start Metabolic Reset →
         </a>
         <a
           href={WHATSAPP}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => track("whatsapp_click", { surface: "sticky" })}
           aria-label="WhatsApp coach"
           className="h-11 w-11 grid place-items-center rounded-sm border border-[var(--glass-border)] text-gold"
         >
