@@ -29,16 +29,42 @@ const INTL_FUNNEL = "https://candera.resofit.fit";
 const ENROLLMENT = "https://resofit-evolution.lovable.app";
 const WHATSAPP = "https://wa.me/2348000000000";
 
-function track(event: string) {
+type CtaVariant = "direct" | "pain" | "ai" | "trust";
+
+function track(event: string, props: Record<string, unknown> = {}) {
   // soft-track if window analytics exists; no new system added
   try {
-    (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push({ event });
+    (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push({ event, ...props });
   } catch {}
+}
+
+const CTA_COPY: Record<CtaVariant, string> = {
+  direct: "Start Your ₦1,000 Transformation",
+  pain: "End the Frustration — Start for ₦1,000",
+  ai: "Unlock Your AI Body Plan — ₦1,000",
+  trust: "Join Thousands Transforming — ₦1,000",
+};
+
+function pickCtaVariant(): CtaVariant {
+  if (typeof window === "undefined") return "direct";
+  try {
+    const ref = document.referrer || "";
+    const src = new URLSearchParams(window.location.search).get("utm_source") || "";
+    if (/tiktok/i.test(ref) || /tiktok/i.test(src)) return "pain";
+    const visits = Number(localStorage.getItem("rf_visits") || "0");
+    if (visits >= 3) return "direct"; // high-intent returning
+    const bounced = localStorage.getItem("rf_bounced") === "1";
+    if (bounced) return "trust";
+    return "ai";
+  } catch {
+    return "direct";
+  }
 }
 
 function Index() {
   const featured = products.filter((p) => ["iron", "bench"].includes(p.category)).slice(0, 4);
   const [isNigeria, setIsNigeria] = useState(true);
+  const [ctaVariant, setCtaVariant] = useState<CtaVariant>("direct");
   useEffect(() => {
     try {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
@@ -47,7 +73,39 @@ function Index() {
       setIsNigeria(false);
     }
   }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const visits = Number(localStorage.getItem("rf_visits") || "0") + 1;
+      localStorage.setItem("rf_visits", String(visits));
+      // mark bounce if last visit had no cta_click
+      const lastClick = Number(localStorage.getItem("rf_last_cta_click") || "0");
+      const lastVisit = Number(localStorage.getItem("rf_last_visit") || "0");
+      if (lastVisit && lastClick < lastVisit) localStorage.setItem("rf_bounced", "1");
+      localStorage.setItem("rf_last_visit", String(Date.now()));
+    } catch {}
+    const v = pickCtaVariant();
+    setCtaVariant(v);
+    track("cta_view", { variant: v });
+
+    // scroll depth
+    let d50 = false, d90 = false;
+    const onScroll = () => {
+      const h = document.documentElement;
+      const pct = (h.scrollTop + window.innerHeight) / h.scrollHeight;
+      if (!d50 && pct >= 0.5) { d50 = true; track("scroll_depth_50"); }
+      if (!d90 && pct >= 0.9) { d90 = true; track("scroll_depth_90"); }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const primaryHref = isNigeria ? NG_FUNNEL : INTL_FUNNEL;
+  const ctaLabel = CTA_COPY[ctaVariant];
+  const onPrimaryCta = () => {
+    try { localStorage.setItem("rf_last_cta_click", String(Date.now())); } catch {}
+    track("cta_click", { variant: ctaVariant, surface: "primary" });
+    track("checkout_start", { variant: ctaVariant });
+  };
 
   return (
     <SiteShell>
@@ -76,10 +134,10 @@ function Index() {
             <div className="mt-10 flex flex-wrap gap-4">
               <a
                 href={primaryHref}
-                onClick={() => track("cta_click_primary")}
+                onClick={onPrimaryCta}
                 className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold tracking-wide shadow-gold hover:brightness-110 transition"
               >
-                Start Your ₦1,000 Transformation
+                {ctaLabel}
               </a>
               <Link
                 to="/quiz"
@@ -170,10 +228,10 @@ function Index() {
         <div className="mt-10 flex flex-wrap gap-4 justify-center">
           <a
             href={primaryHref}
-            onClick={() => track("cta_click_primary")}
+            onClick={onPrimaryCta}
             className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
           >
-            Start Your ₦1,000 Transformation
+            {ctaLabel}
           </a>
           <a
             href={ENROLLMENT}
@@ -189,7 +247,7 @@ function Index() {
       <div className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-[var(--glass-border)] bg-[var(--ink)]/95 backdrop-blur px-3 py-3 flex gap-2 items-center">
         <a
           href={primaryHref}
-          onClick={() => track("cta_click_primary")}
+          onClick={() => { onPrimaryCta(); track("cta_click", { variant: ctaVariant, surface: "sticky" }); }}
           className="flex-1 text-center px-4 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
         >
           Start ₦1,000
