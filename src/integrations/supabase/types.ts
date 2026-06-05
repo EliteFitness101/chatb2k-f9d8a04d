@@ -59,6 +59,30 @@ export type Database = {
         }
         Relationships: []
       }
+      funnel_events: {
+        Row: {
+          event_name: string
+          id: string
+          occurred_at: string
+          props: Json
+          rsid: string | null
+        }
+        Insert: {
+          event_name: string
+          id?: string
+          occurred_at?: string
+          props?: Json
+          rsid?: string | null
+        }
+        Update: {
+          event_name?: string
+          id?: string
+          occurred_at?: string
+          props?: Json
+          rsid?: string | null
+        }
+        Relationships: []
+      }
       gallery_images: {
         Row: {
           created_at: string
@@ -315,6 +339,51 @@ export type Database = {
           tier?: string
           updated_at?: string
           xp?: number
+        }
+        Relationships: []
+      }
+      revenue_events: {
+        Row: {
+          amount_minor: number
+          created_at: string
+          currency: string
+          email: string | null
+          id: string
+          occurred_at: string
+          product_sku: string | null
+          reference: string
+          rsid: string | null
+          source: string | null
+          utm: Json
+          variant: string | null
+        }
+        Insert: {
+          amount_minor: number
+          created_at?: string
+          currency?: string
+          email?: string | null
+          id?: string
+          occurred_at?: string
+          product_sku?: string | null
+          reference: string
+          rsid?: string | null
+          source?: string | null
+          utm?: Json
+          variant?: string | null
+        }
+        Update: {
+          amount_minor?: number
+          created_at?: string
+          currency?: string
+          email?: string | null
+          id?: string
+          occurred_at?: string
+          product_sku?: string | null
+          reference?: string
+          rsid?: string | null
+          source?: string | null
+          utm?: Json
+          variant?: string | null
         }
         Relationships: []
       }

@@ -1,58 +1,119 @@
 
-# ResoFlex™ Global Sanctuary — Build Plan
+# Production Patch Plan — Revenue OS, Trust, Fulfillment, SEO
 
-A luxury, dark-glassmorphism fitness brand site with two live checkout rails: **Shopify** for international buyers and **Paystack** for Nigerian buyers. A smart `/checkout` page picks the rail based on visitor IP, with dedicated `/shopify` and `/paystack` pages for direct ad linking. `/selar` and `/crypto` ship as "coming soon" placeholders so the URL structure exists without blocking launch.
+Non-destructive. Reuses existing catalog, ProductCard, routes (`/`, `/products/$slug`, `/paystack`, `/checkout`, `/success`), and analytics events. No UI rebuild, no new design system.
 
-## What gets built
+---
 
-### Pages (TanStack Start routes)
-- `/` — Hero, brand promise, featured Apex Bundle, hub map preview, CTA to checkout
-- `/products` — Full SKU grid: Cast Iron Sets (15–50kg), Elite Bench, Digital Protocols, Coaching, Apex Bundle
-- `/products/$slug` — Product detail: gallery, specs, price (auto-currency), Add to Cart / Buy Now
-- `/bundles` — Spotlight on the **Buchi Power Apex Bundle** (₦380,000) and tier comparison
-- `/hubs` — Global HQ + National + International hub directory with addresses and "nearest hub" auto-highlight
-- `/about` — Authority story, founder, methodology
-- `/checkout` — **Smart router**: detects IP → defaults to Paystack (NG) or Shopify (intl), with manual rail switcher
-- `/shopify` — Dedicated international checkout entry (USD/GBP/EUR via Shopify)
-- `/paystack` — Dedicated Nigerian checkout entry (NGN via Paystack inline)
-- `/selar` — "Coming soon" placeholder
-- `/crypto` — "Coming soon" placeholder (USDT/BTC for ₦380k+ bundles)
-- `/success` — Post-payment confirmation with order ref + assigned fulfillment hub
-- Each route gets unique `head()` metadata (title, description, og tags)
+## 1. Revenue attribution (RSID + UTM)
 
-### Visual system
-- Background `#0A0A0A`, gold accent `#D4AF37`, frosted-glass cards (backdrop-blur + subtle gold borders)
-- Inter for body, a serif display face for headings (luxury editorial feel)
-- Subtle gold gradient washes, animated ember/glow accents on hero, smooth scroll reveals
-- All shadcn components retuned to the dark/gold theme via CSS tokens in `styles.css`
+**New:** `src/lib/attribution.ts`
+- `getRSID()` — read/write `rf_rsid` from `localStorage`, generate with `crypto.randomUUID()`.
+- `captureUTM()` — on first paint, read `utm_*` from `location.search`, persist to `localStorage` under `rf_utm` (only overwrite if new utm_source present).
+- `getAttribution()` → `{ rsid, utm }`.
 
-### Checkout & payments
-- **Shopify** — Standard Shopify integration (you'll be prompted to create or connect a store). Product catalog, cart, and Shopify-hosted checkout handle international payments, tax, and shipping.
-- **Paystack** — Inline popup checkout in NGN. Server function creates a transaction reference; webhook at `/api/public/paystack-webhook` verifies signature and records the order.
-- **Auto-currency routing** — Server function reads visitor IP headers, geolocates country, sets default currency (NGN for NG, USD/GBP/EUR otherwise), and assigns the nearest fulfillment hub for display.
-- **Mechanical Necessity Upsell** — After a successful iron purchase, success page shows a 5-second "Verifying authority…" animation, then a one-tap upsell card for the Elite Bench or App Plus.
+**Edit:** `src/routes/index.tsx` — extend existing `track()` helper to merge `getAttribution()` into every event payload. Call `captureUTM()` inside the existing `useEffect` that fires `landing_view`. Pass `rsid` in the Paystack init metadata via the existing checkout flow.
 
-### Backend (Lovable Cloud)
-- Tables: `products`, `orders`, `order_items`, `hubs`, `upsell_events`
-- Order records store rail (shopify/paystack), currency, assigned hub, status
-- Webhook endpoints under `/api/public/*` with HMAC signature verification
+**Edit:** `src/lib/paystack.functions.ts` — accept optional `rsid`, `utm`, `variant`, `source` in `InitSchema`; pass them into Paystack `metadata` and persist into a new `revenue_events` row on webhook.
 
-### Secrets needed (you'll be asked for these after approval)
-- `PAYSTACK_SECRET_KEY` — server-side, for transaction init + webhook verification
-- `PAYSTACK_PUBLIC_KEY` — public, for inline popup
-- Shopify is connected via the Shopify integration (no manual keys)
+## 2. Database — revenue_events + funnel_events
 
-## Out of scope for v1 (can add later)
-- PayPal / Stripe / Apple Pay direct rails (Shopify covers these via its checkout)
-- Selar integration (placeholder page only)
-- Crypto / USDT / BTC checkout (placeholder page only)
-- Coaching subscription billing portal
-- Real-time IP→hub map animation (static "nearest hub" badge in v1)
-- Admin dashboard for order management (use Shopify admin + Cloud table view)
+**Migration:** create two tables with RLS (admin-only read, service_role write), proper GRANTs.
+- `revenue_events(id, reference, amount_minor, currency, email, rsid, utm jsonb, product_sku, variant, source, occurred_at)`
+- `funnel_events(id, rsid, event_name, props jsonb, occurred_at)`
 
-## Notes on your brief
-- **Hosting**: Building on TanStack Start, deployed via Lovable (not Vercel/Next). Custom domain `resofit.fit` connects after first publish. The env vars in your brief are reframed as Lovable Cloud secrets and Shopify connection.
-- **`/shopify` and `/paystack` as routes**: These exist as direct entry points (good for ad campaigns), and `/checkout` is the smart default that picks for the visitor.
-- **Crypto + Selar**: Shipping as URL placeholders so links don't 404 and you can wire them in a follow-up pass without restructuring.
+Both: `GRANT SELECT TO authenticated` gated by `has_role(auth.uid(),'admin')` policy; `GRANT ALL TO service_role`.
 
-After you approve, I'll enable Lovable Cloud + Shopify, request the Paystack keys, then build the site top-to-bottom.
+## 3. Paystack webhook — extend, do not duplicate
+
+**Edit:** existing `src/routes/api/public/paystack-webhook.ts` (do NOT create `/api/paystack/webhook` — that conflicts with existing route). On `charge.success`, in addition to current `orders.status='paid'` update, insert into `revenue_events` with `metadata.rsid/utm/sku/variant/source` from Paystack metadata.
+
+## 4. Security cleanup (blocking findings)
+
+- **Delete** `src/routes/api/public/_webhook-selftest.ts` (flagged: unauthenticated DB write).
+- **Edit** `src/lib/paystack.functions.ts`:
+  - `getOrderByReference`: switch to user-scoped `requireSupabaseAuth` OR restrict columns to non-PII (`status, reference, amount_minor, currency, assigned_hub_id`) so success page can still render.
+  - `verifyPaystackTransaction`: keep but only update status when Paystack response is `success`; never write `failed` from this path (let webhook own failure state).
+- **Migration:** tighten RLS on `orders`, `order_items`, `profiles` (drop public SELECT; admin or owner only). Add column-restrictive trigger on `profiles` to block client writes to `xp`, `points`, `tier`.
+
+## 5. Fulfillment estimator
+
+**New:** `src/components/site/FulfillmentEstimate.tsx` — small badge component.
+- Uses existing `getGeo()` serverFn (already returns `suggestedHub`).
+- Renders: "Ships from {hub} • Est. delivery {window}" where window = NG→"1–3 business days", US→"5–8 business days", else→"7–14 business days".
+
+**Edit:** mount above primary CTA in `src/routes/index.tsx` (hero block) and `src/routes/products.$slug.tsx` (next to price/CTA). No layout changes beyond inserting one component.
+
+## 6. Trust component
+
+**New:** `src/components/site/NigerianEcommerceTrustCheck.tsx` — extracts the 4 trust badges already inline in `index.tsx` into a reusable component (Paystack secure / 24–48h insured delivery / WhatsApp support / Premium guarantee). Same styling/tokens.
+
+**Edit:** `src/routes/index.tsx` replaces inline badges with `<NigerianEcommerceTrustCheck />`. `src/routes/products.$slug.tsx` renders it above CTA.
+
+## 7. Product SEO metadata
+
+**New:** `src/lib/product-seo.ts` — `Record<slug, { title, description, ogImage, alt }>` for all 9 slugs, written in obsidian + gold brand voice.
+
+**Edit:** `src/routes/products.$slug.tsx` — extend existing `head()` to use product-seo entries (title, description, og:title, og:description, og:image from existing `/images/products/{slug}.jpg`, canonical, JSON-LD `Product` schema with price + SKU). Image `alt` from `product-seo`.
+
+Existing per-product dedicated route already exists (`/products/$slug`), so no new routes needed — requirement #6 is already satisfied; we extend.
+
+## 8. Checkout SKU accuracy
+
+**Edit:** `src/lib/catalog.ts` — add `paystackSku` / `shopifySku` fields per product (defaults to existing `sku`). Used by `initPaystackTransaction` (already uses `productBySku` correctly — verify mapping for bundle).
+
+No checkout UI changes. Currency routing already correct (NGN→Paystack via geo).
+
+## 9. Admin revenue dashboard
+
+**New route:** `src/routes/_authenticated/admin.revenue.tsx`
+- `requireSupabaseAuth` + `has_role(uid,'admin')` check via new serverFn `getRevenueDashboard` in `src/lib/admin.functions.ts`.
+- ServerFn queries `revenue_events` for: today's revenue, order count, conv rate (paid/funnel_events 'landing_view'), grouped by `utm_source`, grouped by `product_sku`, latest 20 payments.
+- UI: reuses existing `glass`, `font-display`, gold tokens. No new design system. Simple grid of cards + table.
+
+## 10. Analytics compatibility
+
+Preserve all existing events: `landing_view`, `metabolic_reset_click`, `assessment_started`, `checkout_started`, `whatsapp_click`, `scroll_depth_50`, `scroll_depth_90`. Extend payloads with `{rsid, utm}` only. Mirror to `funnel_events` table via a fire-and-forget serverFn `recordFunnelEvent` (best-effort, no UI block).
+
+---
+
+## Files (created / edited)
+
+```text
+NEW
+  src/lib/attribution.ts
+  src/lib/product-seo.ts
+  src/lib/admin.functions.ts
+  src/components/site/FulfillmentEstimate.tsx
+  src/components/site/NigerianEcommerceTrustCheck.tsx
+  src/routes/_authenticated/admin.revenue.tsx
+  supabase/migrations/<ts>_revenue_os.sql
+
+EDIT
+  src/routes/index.tsx                       (extend track(), add components)
+  src/routes/products.$slug.tsx              (SEO head + trust + fulfillment)
+  src/lib/catalog.ts                         (optional sku variant fields)
+  src/lib/paystack.functions.ts              (rsid/utm pass-through, security fix)
+  src/routes/api/public/paystack-webhook.ts  (insert revenue_events)
+
+DELETE
+  src/routes/api/public/_webhook-selftest.ts
+```
+
+## Out of scope (per "minimal change")
+
+- No redesign of hero / cards / footer
+- No new fonts/colors
+- No replacement of `index.tsx` content
+- No removal of existing routes
+- Existing edge-only Shopify rail untouched
+
+---
+
+## Sequence
+
+1. Migration (blocking — wait for approval) — tables + RLS tightening
+2. After migration runs: write all NEW files in parallel
+3. Edit existing routes/lib files in parallel
+4. Delete self-test route
+5. Verify build, hit webhook with a real Paystack event in staging
