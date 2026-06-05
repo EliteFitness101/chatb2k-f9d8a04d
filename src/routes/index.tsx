@@ -7,6 +7,9 @@ import { ProductCard } from "@/components/site/ProductCard";
 import { CurrencyBadge } from "@/components/site/CurrencyBadge";
 import { products } from "@/lib/catalog";
 import { pageMeta } from "@/lib/site-meta";
+import { NigerianEcommerceTrustCheck } from "@/components/site/NigerianEcommerceTrustCheck";
+import { FulfillmentEstimate } from "@/components/site/FulfillmentEstimate";
+import { getAttribution } from "@/lib/attribution";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -33,14 +36,23 @@ const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
 type CtaVariant = "direct" | "pain" | "ai" | "trust";
 
 function track(event: string, props: Record<string, unknown> = {}) {
-  // soft-track if window analytics exists; no new system added
+  // soft-track + revenue attribution. RSID + UTM merged into every event.
   try {
-    (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push({ event, ...props });
+    const { rsid, utm } = getAttribution();
+    const payload = { event, rsid, utm, ...props };
+    (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push(payload);
     const key = "rf_events";
     const raw = localStorage.getItem(key);
     const arr = raw ? JSON.parse(raw) : [];
-    arr.push({ event, props, t: Date.now() });
+    arr.push({ event, props: { rsid, utm, ...props }, t: Date.now() });
     localStorage.setItem(key, JSON.stringify(arr.slice(-200)));
+    // Fire-and-forget mirror to funnel_events table.
+    void fetch("/api/public/funnel-event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_name: event, rsid, props: { utm, ...props } }),
+      keepalive: true,
+    }).catch(() => {});
   } catch {}
 }
 
@@ -134,22 +146,9 @@ function Index() {
               ))}
             </ul>
             {/* Nigerian E-Commerce Trust Badges — above the fold */}
-            <ul className="mt-5 grid sm:grid-cols-2 gap-2 max-w-2xl">
-              {[
-                { icon: "🔒", t: "Secured Instant Bank Transfer / Card Payment via Paystack" },
-                { icon: "🚚", t: "24–48 Hour Insured Delivery to Lagos & Abuja" },
-                { icon: "💬", t: "Real-Time Tracking & WhatsApp Support Available" },
-                { icon: "🛡️", t: "100% Premium Industrial Guarantee" },
-              ].map((b) => (
-                <li
-                  key={b.t}
-                  className="flex items-start gap-2 rounded-sm border border-[var(--glass-border)] bg-[var(--ink)]/40 px-3 py-2 text-xs text-foreground/85"
-                >
-                  <span aria-hidden className="text-base leading-none">{b.icon}</span>
-                  <span className="leading-snug">{b.t}</span>
-                </li>
-              ))}
-            </ul>
+            <NigerianEcommerceTrustCheck className="mt-5" />
+            {/* Fulfillment estimate — above primary CTA */}
+            <FulfillmentEstimate className="mt-5" />
             <div className="mt-10 flex flex-wrap gap-4">
               <a
                 href={primaryHref}

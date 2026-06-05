@@ -9,6 +9,10 @@ const InitSchema = z.object({
   items: z
     .array(z.object({ sku: z.string(), quantity: z.number().int().positive() }))
     .min(1),
+  rsid: z.string().max(64).optional(),
+  utm: z.record(z.string(), z.string().max(256)).optional(),
+  source: z.string().max(64).optional(),
+  variant: z.string().max(64).optional(),
 });
 
 // Initialize a Paystack transaction. Returns reference + access_code.
@@ -90,7 +94,15 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
         amount: amountKobo,
         currency: "NGN",
         reference,
-        metadata: { order_id: order.id, name: data.name },
+        metadata: {
+          order_id: order.id,
+          name: data.name,
+          rsid: data.rsid ?? null,
+          utm: data.utm ?? {},
+          source: data.source ?? null,
+          variant: data.variant ?? null,
+          sku: data.items[0]?.sku ?? null,
+        },
       }),
     });
 

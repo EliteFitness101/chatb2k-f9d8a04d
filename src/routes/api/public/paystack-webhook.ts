@@ -23,19 +23,42 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
 
         const event = JSON.parse(body) as {
           event: string;
-          data?: { reference?: string; status?: string };
+          data?: {
+            reference?: string;
+            status?: string;
+            amount?: number;
+            currency?: string;
+            customer?: { email?: string };
+            metadata?: Record<string, unknown> | null;
+          };
         };
 
-        if (event.event === "charge.success" && event.data?.reference) {
+        const ref = event.data?.reference;
+        if (event.event === "charge.success" && ref) {
           await supabaseAdmin
             .from("orders")
             .update({ status: "paid" })
-            .eq("reference", event.data.reference);
-        } else if (event.event === "charge.failed" && event.data?.reference) {
+            .eq("reference", ref);
+
+          // Revenue OS — record attributable event
+          const meta = (event.data?.metadata ?? {}) as Record<string, unknown>;
+          const utm = meta.utm && typeof meta.utm === "object" ? meta.utm : {};
+          await supabaseAdmin.from("revenue_events").insert({
+            reference: ref,
+            amount_minor: event.data?.amount ?? 0,
+            currency: event.data?.currency ?? "NGN",
+            email: event.data?.customer?.email ?? null,
+            rsid: typeof meta.rsid === "string" ? meta.rsid : null,
+            utm: utm as never,
+            product_sku: typeof meta.sku === "string" ? meta.sku : null,
+            variant: typeof meta.variant === "string" ? meta.variant : null,
+            source: typeof meta.source === "string" ? meta.source : null,
+          });
+        } else if (event.event === "charge.failed" && ref) {
           await supabaseAdmin
             .from("orders")
             .update({ status: "failed" })
-            .eq("reference", event.data.reference);
+            .eq("reference", ref);
         }
 
         return new Response("ok");

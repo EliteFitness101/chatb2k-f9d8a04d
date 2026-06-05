@@ -30,7 +30,8 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedContentEngineRouteImport } from './routes/_authenticated/content-engine'
 import { Route as AuthenticatedCandyRouteImport } from './routes/_authenticated/candy'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
-import { Route as ApiPublicWebhookSelftestRouteImport } from './routes/api/public/_webhook-selftest'
+import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
+import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
 
 const SuccessRoute = SuccessRouteImport.update({
   id: '/success',
@@ -138,11 +139,16 @@ const ApiPublicPaystackWebhookRoute =
     path: '/api/public/paystack-webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicWebhookSelftestRoute =
-  ApiPublicWebhookSelftestRouteImport.update({
-    id: '/api/public/_webhook-selftest',
-    path: '/api/public',
-    getParentRoute: () => rootRouteImport,
+const ApiPublicFunnelEventRoute = ApiPublicFunnelEventRouteImport.update({
+  id: '/api/public/funnel-event',
+  path: '/api/public/funnel-event',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAdminRevenueRoute =
+  AuthenticatedAdminRevenueRouteImport.update({
+    id: '/admin/revenue',
+    path: '/admin/revenue',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -165,7 +171,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
-  '/api/public': typeof ApiPublicWebhookSelftestRoute
+  '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
+  '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -188,7 +195,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
-  '/api/public': typeof ApiPublicWebhookSelftestRoute
+  '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
+  '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
 export interface FileRoutesById {
@@ -213,7 +221,8 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
-  '/api/public/_webhook-selftest': typeof ApiPublicWebhookSelftestRoute
+  '/_authenticated/admin/revenue': typeof AuthenticatedAdminRevenueRoute
+  '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
 export interface FileRouteTypes {
@@ -238,7 +247,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
-    | '/api/public'
+    | '/admin/revenue'
+    | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -261,7 +271,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
-    | '/api/public'
+    | '/admin/revenue'
+    | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
   id:
     | '__root__'
@@ -285,7 +296,8 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/gallery'
     | '/products/$slug'
-    | '/api/public/_webhook-selftest'
+    | '/_authenticated/admin/revenue'
+    | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
   fileRoutesById: FileRoutesById
 }
@@ -305,7 +317,7 @@ export interface RootRouteChildren {
   SelarRoute: typeof SelarRoute
   ShopifyRoute: typeof ShopifyRoute
   SuccessRoute: typeof SuccessRoute
-  ApiPublicWebhookSelftestRoute: typeof ApiPublicWebhookSelftestRoute
+  ApiPublicFunnelEventRoute: typeof ApiPublicFunnelEventRoute
   ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
 }
 
@@ -458,12 +470,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaystackWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/_webhook-selftest': {
-      id: '/api/public/_webhook-selftest'
-      path: '/api/public'
-      fullPath: '/api/public'
-      preLoaderRoute: typeof ApiPublicWebhookSelftestRouteImport
+    '/api/public/funnel-event': {
+      id: '/api/public/funnel-event'
+      path: '/api/public/funnel-event'
+      fullPath: '/api/public/funnel-event'
+      preLoaderRoute: typeof ApiPublicFunnelEventRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin/revenue': {
+      id: '/_authenticated/admin/revenue'
+      path: '/admin/revenue'
+      fullPath: '/admin/revenue'
+      preLoaderRoute: typeof AuthenticatedAdminRevenueRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
   }
 }
@@ -473,6 +492,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedContentEngineRoute: typeof AuthenticatedContentEngineRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedGalleryRoute: typeof AuthenticatedGalleryRoute
+  AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -480,6 +500,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedContentEngineRoute: AuthenticatedContentEngineRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedGalleryRoute: AuthenticatedGalleryRoute,
+  AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -514,18 +535,9 @@ const rootRouteChildren: RootRouteChildren = {
   SelarRoute: SelarRoute,
   ShopifyRoute: ShopifyRoute,
   SuccessRoute: SuccessRoute,
-  ApiPublicWebhookSelftestRoute: ApiPublicWebhookSelftestRoute,
+  ApiPublicFunnelEventRoute: ApiPublicFunnelEventRoute,
   ApiPublicPaystackWebhookRoute: ApiPublicPaystackWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

@@ -3,6 +3,9 @@ import { SiteShell } from "@/components/site/SiteShell";
 import { productBySlug, formatNGN, formatUSD } from "@/lib/catalog";
 import { pageMeta } from "@/lib/site-meta";
 import { findGalleryImage, useGalleryBySlot } from "@/hooks/use-gallery";
+import { NigerianEcommerceTrustCheck } from "@/components/site/NigerianEcommerceTrustCheck";
+import { FulfillmentEstimate } from "@/components/site/FulfillmentEstimate";
+import { getProductSeo } from "@/lib/product-seo";
 
 export const Route = createFileRoute("/products/$slug")({
   loader: ({ params }) => {
@@ -11,10 +14,49 @@ export const Route = createFileRoute("/products/$slug")({
     return { product };
   },
   head: ({ loaderData }) => ({
-    meta: pageMeta({
-      title: loaderData?.product.title ?? "Product",
-      description: loaderData?.product.tagline ?? "",
-    }),
+    meta: (() => {
+      const p = loaderData?.product;
+      const seo = p ? getProductSeo(p.slug) : null;
+      const title = seo?.title ?? p?.title ?? "Product";
+      const description = seo?.description ?? p?.tagline ?? "";
+      const url = p ? `https://resoflex-global.lovable.app/products/${p.slug}` : undefined;
+      return [
+        ...pageMeta({ title, description }),
+        ...(seo?.ogImage ? [{ property: "og:image", content: seo.ogImage }] : []),
+        ...(seo?.ogImage ? [{ name: "twitter:image", content: seo.ogImage }] : []),
+        ...(url ? [{ property: "og:url", content: url }] : []),
+        { property: "og:type", content: "product" },
+      ];
+    })(),
+    links: loaderData?.product
+      ? [
+          {
+            rel: "canonical",
+            href: `https://resoflex-global.lovable.app/products/${loaderData.product.slug}`,
+          },
+        ]
+      : [],
+    scripts: loaderData?.product
+      ? [
+          {
+            type: "application/ld+json",
+            children: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Product",
+              name: loaderData.product.title,
+              description: loaderData.product.description,
+              sku: loaderData.product.sku,
+              image: getProductSeo(loaderData.product.slug)?.ogImage,
+              offers: {
+                "@type": "Offer",
+                priceCurrency: "NGN",
+                price: (loaderData.product.ngnMinor / 100).toFixed(2),
+                availability: "https://schema.org/InStock",
+              },
+            }),
+          },
+        ]
+      : [],
   }),
   notFoundComponent: () => (
     <SiteShell>
@@ -39,14 +81,16 @@ function ProductPage() {
   const { product } = Route.useLoaderData();
   const gallery = useGalleryBySlot("products");
   const img = findGalleryImage(gallery, [product.sku, product.slug, product.title]);
+  const seo = getProductSeo(product.slug);
+  const fallbackImg = seo?.ogImage;
   return (
     <SiteShell>
       <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-12 pb-20 grid md:grid-cols-2 gap-10">
         <div className="glass rounded-md aspect-square relative overflow-hidden">
-          {img ? (
+          {img || fallbackImg ? (
             <img
-              src={img.url}
-              alt={img.label || product.title}
+              src={img?.url ?? fallbackImg}
+              alt={seo?.alt ?? img?.label ?? product.title}
               className="absolute inset-0 w-full h-full object-cover"
             />
           ) : (
@@ -82,20 +126,16 @@ function ProductPage() {
             <span className="font-display text-4xl text-gold-gradient">{formatNGN(product.ngnMinor)}</span>
             <span className="text-sm text-muted-foreground">/ {formatUSD(product.usdMinor)}</span>
           </div>
+          <div className="mt-5 text-xs text-muted-foreground">SKU: {product.sku}</div>
+          <NigerianEcommerceTrustCheck className="mt-6" />
+          <FulfillmentEstimate className="mt-4" />
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               to="/checkout"
               search={{ sku: product.sku }}
               className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
             >
-              Smart checkout
-            </Link>
-            <Link
-              to="/paystack"
-              search={{ sku: product.sku }}
-              className="px-6 py-3.5 rounded-sm glass hover:border-[var(--gold)] transition"
-            >
-              Pay in Naira →
+              Buy Now →
             </Link>
           </div>
         </div>
