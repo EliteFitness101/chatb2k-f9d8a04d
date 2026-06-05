@@ -54,7 +54,7 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
             product_sku: typeof meta.sku === "string" ? meta.sku : null,
             variant: typeof meta.variant === "string" ? meta.variant : null,
             source: typeof meta.source === "string" ? meta.source : null,
-          } as never);
+          });
         } else if (event.event === "charge.failed" && ref) {
           await supabaseAdmin
             .from("orders")
