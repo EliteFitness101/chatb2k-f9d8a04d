@@ -31,6 +31,7 @@ import { Route as AuthenticatedContentEngineRouteImport } from './routes/_authen
 import { Route as AuthenticatedCandyRouteImport } from './routes/_authenticated/candy'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 import { Route as ApiPublicWebhookSelftestRouteImport } from './routes/api/public/_webhook-selftest'
+import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
 
 const SuccessRoute = SuccessRouteImport.update({
   id: '/success',
@@ -144,6 +145,12 @@ const ApiPublicWebhookSelftestRoute =
     path: '/api/public',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthenticatedAdminRevenueRoute =
+  AuthenticatedAdminRevenueRouteImport.update({
+    id: '/admin/revenue',
+    path: '/admin/revenue',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/api/public': typeof ApiPublicWebhookSelftestRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -188,6 +196,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/api/public': typeof ApiPublicWebhookSelftestRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -213,6 +222,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/_authenticated/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/api/public/_webhook-selftest': typeof ApiPublicWebhookSelftestRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
+    | '/admin/revenue'
     | '/api/public'
     | '/api/public/paystack-webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
+    | '/admin/revenue'
     | '/api/public'
     | '/api/public/paystack-webhook'
   id:
@@ -285,6 +297,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/gallery'
     | '/products/$slug'
+    | '/_authenticated/admin/revenue'
     | '/api/public/_webhook-selftest'
     | '/api/public/paystack-webhook'
   fileRoutesById: FileRoutesById
@@ -465,6 +478,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhookSelftestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/admin/revenue': {
+      id: '/_authenticated/admin/revenue'
+      path: '/admin/revenue'
+      fullPath: '/admin/revenue'
+      preLoaderRoute: typeof AuthenticatedAdminRevenueRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -473,6 +493,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedContentEngineRoute: typeof AuthenticatedContentEngineRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedGalleryRoute: typeof AuthenticatedGalleryRoute
+  AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -480,6 +501,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedContentEngineRoute: AuthenticatedContentEngineRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedGalleryRoute: AuthenticatedGalleryRoute,
+  AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
