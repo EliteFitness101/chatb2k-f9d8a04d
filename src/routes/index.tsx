@@ -25,7 +25,8 @@ export const Route = createFileRoute("/")({
 });
 
 const PRIMARY_CTA = "https://joy-funnel-ai.lovable.app";
-const ENROLLMENT = "https://resofit-evolution.lovable.app";
+const ENROLLMENT = "https://reso-flex.lovable.app";
+const SHOP = "https://reso-flex.lovable.app";
 const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
   "Hello Coach Buchi,\n\nI just started my Metabolic Reset on ResoFit and would like guidance on the next step."
 );
@@ -133,6 +134,23 @@ function Index() {
                 </li>
               ))}
             </ul>
+            {/* Nigerian E-Commerce Trust Badges — above the fold */}
+            <ul className="mt-5 grid sm:grid-cols-2 gap-2 max-w-2xl">
+              {[
+                { icon: "🔒", t: "Secured Instant Bank Transfer / Card Payment via Paystack" },
+                { icon: "🚚", t: "24–48 Hour Insured Delivery to Lagos & Abuja" },
+                { icon: "💬", t: "Real-Time Tracking & WhatsApp Support Available" },
+                { icon: "🛡️", t: "100% Premium Industrial Guarantee" },
+              ].map((b) => (
+                <li
+                  key={b.t}
+                  className="flex items-start gap-2 rounded-sm border border-[var(--glass-border)] bg-[var(--ink)]/40 px-3 py-2 text-xs text-foreground/85"
+                >
+                  <span aria-hidden className="text-base leading-none">{b.icon}</span>
+                  <span className="leading-snug">{b.t}</span>
+                </li>
+              ))}
+            </ul>
             <div className="mt-10 flex flex-wrap gap-4">
               <a
                 href={primaryHref}
@@ -154,9 +172,11 @@ function Index() {
             <div className="mt-6">
               <a
                 href={ENROLLMENT}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-xs tracking-[0.3em] uppercase text-gold/90 hover:text-gold transition"
               >
-                Already convinced? Enroll now →
+                Already convinced? Shop the Arsenal →
               </a>
             </div>
           </motion.div>
@@ -202,12 +222,14 @@ function Index() {
           ))}
         </div>
         <div className="mt-10 text-center">
-          <Link
-            to="/products"
+          <a
+            href={SHOP}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-block px-6 py-3 rounded-sm glass hover:border-[var(--gold)] transition"
           >
-            View full arsenal →
-          </Link>
+            View full arsenal on reso-flex →
+          </a>
         </div>
       </section>
 
@@ -231,10 +253,12 @@ function Index() {
           </a>
           <a
             href={ENROLLMENT}
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={() => track("enroll_click", { surface: "final" })}
             className="px-6 py-3.5 rounded-sm glass text-foreground hover:border-[var(--gold)] transition"
           >
-            Enroll in the Evolution →
+            Shop the Arsenal →
           </a>
         </div>
       </section>

@@ -2,6 +2,19 @@ import { Link } from "@tanstack/react-router";
 import { Product, formatNGN, formatUSD } from "@/lib/catalog";
 import { findGalleryImage, useGalleryBySlot } from "@/hooks/use-gallery";
 
+// Brand-guided premium product imagery (obsidian + gold).
+const PRODUCT_IMAGES: Record<string, string> = {
+  "cast-iron-15kg": "/images/products/cast-iron-15kg.jpg",
+  "cast-iron-30kg": "/images/products/cast-iron-30kg.jpg",
+  "cast-iron-50kg": "/images/products/cast-iron-50kg.jpg",
+  "elite-bench": "/images/products/elite-bench.jpg",
+  "ancestral-nutrition": "/images/products/ancestral-nutrition.jpg",
+  "90-day-protocol": "/images/products/90-day-protocol.jpg",
+  "app-plus-coaching": "/images/products/app-plus-coaching.jpg",
+  "buchi-power-apex": "/images/products/buchi-power-apex.jpg",
+  "elite-access": "/images/products/elite-access.jpg",
+};
+
 export function ProductCard({
   product,
   currency = "NGN",
@@ -11,7 +24,9 @@ export function ProductCard({
 }) {
   const price = currency === "NGN" ? formatNGN(product.ngnMinor) : formatUSD(product.usdMinor);
   const gallery = useGalleryBySlot("products");
-  const img = findGalleryImage(gallery, [product.sku, product.slug, product.title]);
+  const galleryImg = findGalleryImage(gallery, [product.sku, product.slug, product.title]);
+  const brandImg = PRODUCT_IMAGES[product.slug];
+  const img = galleryImg ?? (brandImg ? { url: brandImg, label: product.title } : null);
   return (
     <Link
       to="/products/$slug"
