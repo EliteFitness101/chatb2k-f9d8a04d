@@ -42,15 +42,14 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
 
           // Revenue OS — record attributable event
           const meta = (event.data?.metadata ?? {}) as Record<string, unknown>;
-          const utm =
-            (meta.utm as Record<string, unknown> | undefined) ?? null;
+          const utm = meta.utm && typeof meta.utm === "object" ? meta.utm : {};
           await supabaseAdmin.from("revenue_events").insert({
             reference: ref,
             amount_minor: event.data?.amount ?? 0,
             currency: event.data?.currency ?? "NGN",
             email: event.data?.customer?.email ?? null,
             rsid: typeof meta.rsid === "string" ? meta.rsid : null,
-            utm: utm ?? {},
+            utm: utm as never,
             product_sku: typeof meta.sku === "string" ? meta.sku : null,
             variant: typeof meta.variant === "string" ? meta.variant : null,
             source: typeof meta.source === "string" ? meta.source : null,
