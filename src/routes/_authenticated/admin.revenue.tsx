@@ -117,6 +117,75 @@ function AdminRevenue() {
             />
           </Panel>
         </div>
+
+        <div className="mt-10 grid lg:grid-cols-2 gap-6">
+          <Panel title="Funnel — Today">
+            <Table
+              head={["Stage", "Count", "Conv %", "Drop-off %"]}
+              rows={[
+                ["Landing Views", String(data.funnel.landing_views), "—", "—"],
+                [
+                  "Product Views",
+                  String(data.funnel.product_views),
+                  `${(data.funnel.conv_landing_to_product * 100).toFixed(1)}%`,
+                  `${(data.funnel.dropoff_landing_to_product * 100).toFixed(1)}%`,
+                ],
+                [
+                  "Checkout Starts",
+                  String(data.funnel.checkout_starts),
+                  `${(data.funnel.conv_product_to_checkout * 100).toFixed(1)}%`,
+                  `${(data.funnel.dropoff_product_to_checkout * 100).toFixed(1)}%`,
+                ],
+                [
+                  "Purchases",
+                  String(data.funnel.purchases),
+                  `${(data.funnel.conv_checkout_to_purchase * 100).toFixed(1)}%`,
+                  `${(data.funnel.dropoff_checkout_to_purchase * 100).toFixed(1)}%`,
+                ],
+              ]}
+            />
+          </Panel>
+          <Panel title="Revenue Intelligence">
+            <Table
+              head={["Metric", "Value"]}
+              rows={[
+                ["Avg Order Value", fmtNGN(data.intelligence.aov_minor)],
+                [
+                  "Top SKU — Revenue",
+                  data.intelligence.top_sku_by_revenue
+                    ? `${data.intelligence.top_sku_by_revenue.product_sku} (${fmtNGN(data.intelligence.top_sku_by_revenue.amount_minor)})`
+                    : "—",
+                ],
+                [
+                  "Top SKU — Conversions",
+                  data.intelligence.top_sku_by_conversions
+                    ? `${data.intelligence.top_sku_by_conversions.product_sku} (${data.intelligence.top_sku_by_conversions.count})`
+                    : "—",
+                ],
+                [
+                  "Top SKU — AOV",
+                  data.intelligence.top_sku_by_aov
+                    ? `${data.intelligence.top_sku_by_aov.product_sku} (${fmtNGN(data.intelligence.top_sku_by_aov.aov_minor)})`
+                    : "—",
+                ],
+              ]}
+            />
+          </Panel>
+        </div>
+
+        <div className="mt-6">
+          <Panel title="Revenue by UTM Campaign">
+            <Table
+              head={["Source", "Campaign", "Orders", "Revenue"]}
+              rows={data.intelligence.by_campaign.map((r) => [
+                r.utm_source,
+                r.utm_campaign,
+                String(r.count),
+                fmtNGN(r.amount_minor),
+              ])}
+            />
+          </Panel>
+        </div>
       </section>
     </SiteShell>
   );
