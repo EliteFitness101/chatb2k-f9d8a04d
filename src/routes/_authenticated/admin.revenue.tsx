@@ -62,9 +62,17 @@ function AdminRevenue() {
           title="Today's Revenue Console"
           sub="Live signal: attributable revenue, conversion, and source mix."
         />
-        <div className="mt-10 grid sm:grid-cols-3 gap-4">
+        <div className="mt-10 grid sm:grid-cols-4 gap-4">
           <StatCard label="Today Revenue" value={fmtNGN(data.today_revenue_minor)} />
           <StatCard label="Orders Today" value={String(data.today_orders)} />
+          <StatCard
+            label="Avg Order Value"
+            value={fmtNGN(
+              data.today_orders > 0
+                ? Math.round(data.today_revenue_minor / data.today_orders)
+                : 0,
+            )}
+          />
           <StatCard
             label="Conversion Rate"
             value={`${(data.conversion_rate * 100).toFixed(2)}%`}
