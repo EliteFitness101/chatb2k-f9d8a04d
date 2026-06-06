@@ -42,12 +42,21 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
 
     const reference = `RES-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-    // Find a hub (default to Global HQ)
-    const { data: hub } = await supabaseAdmin
-      .from("hubs")
-      .select("id")
-      .eq("tier", "global_hq")
-      .maybeSingle();
+    // Geo-routed hub assignment. NG→global_hq, US→Jersey City, CA→Ottawa, else→global_hq.
+    const country = (data.utm?.country ?? "NG").toUpperCase();
+    let hubQuery = supabaseAdmin.from("hubs").select("id");
+    if (country === "US") hubQuery = hubQuery.eq("country_code", "US").eq("tier", "international");
+    else if (country === "CA") hubQuery = hubQuery.eq("country_code", "CA").eq("tier", "international");
+    else hubQuery = hubQuery.eq("tier", "global_hq");
+    let { data: hub } = await hubQuery.maybeSingle();
+    if (!hub) {
+      const fallback = await supabaseAdmin
+        .from("hubs")
+        .select("id")
+        .eq("tier", "global_hq")
+        .maybeSingle();
+      hub = fallback.data;
+    }
 
     // Persist pending order
     const { data: order, error: orderErr } = await supabaseAdmin
@@ -102,6 +111,8 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
           source: data.source ?? null,
           variant: data.variant ?? null,
           sku: data.items[0]?.sku ?? null,
+          assigned_hub_id: hub?.id ?? null,
+          country,
         },
       }),
     });
