@@ -20,6 +20,25 @@ export interface RevenueDashboard {
   by_source: { source: string; amount_minor: number; count: number }[];
   by_product: { product_sku: string; amount_minor: number; count: number }[];
   latest: DashboardRow[];
+  funnel: {
+    landing_views: number;
+    product_views: number;
+    checkout_starts: number;
+    purchases: number;
+    conv_landing_to_product: number;
+    conv_product_to_checkout: number;
+    conv_checkout_to_purchase: number;
+    dropoff_landing_to_product: number;
+    dropoff_product_to_checkout: number;
+    dropoff_checkout_to_purchase: number;
+  };
+  intelligence: {
+    aov_minor: number;
+    top_sku_by_revenue: { product_sku: string; amount_minor: number } | null;
+    top_sku_by_conversions: { product_sku: string; count: number } | null;
+    top_sku_by_aov: { product_sku: string; aov_minor: number } | null;
+    by_campaign: { utm_source: string; utm_campaign: string; amount_minor: number; count: number }[];
+  };
 }
 
 export const getRevenueDashboard = createServerFn({ method: "GET" })
@@ -44,6 +63,15 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
         by_source: [],
         by_product: [],
         latest: [],
+        funnel: {
+          landing_views: 0, product_views: 0, checkout_starts: 0, purchases: 0,
+          conv_landing_to_product: 0, conv_product_to_checkout: 0, conv_checkout_to_purchase: 0,
+          dropoff_landing_to_product: 0, dropoff_product_to_checkout: 0, dropoff_checkout_to_purchase: 0,
+        },
+        intelligence: {
+          aov_minor: 0, top_sku_by_revenue: null, top_sku_by_conversions: null,
+          top_sku_by_aov: null, by_campaign: [],
+        },
       };
     }
 
@@ -74,12 +102,13 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
 
     const { data: allRows } = await supabaseAdmin
       .from("revenue_events")
-      .select("reference, amount_minor, currency, email, product_sku, source, occurred_at")
+      .select("reference, amount_minor, currency, email, product_sku, source, occurred_at, utm")
       .order("occurred_at", { ascending: false })
       .limit(500);
 
     const bySrcMap = new Map<string, { amount_minor: number; count: number }>();
     const byProdMap = new Map<string, { amount_minor: number; count: number }>();
+    const byCampaignMap = new Map<string, { utm_source: string; utm_campaign: string; amount_minor: number; count: number }>();
     for (const r of allRows ?? []) {
       const src = r.source || "(direct)";
       const prod = r.product_sku || "(unknown)";
@@ -91,7 +120,52 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
       p.amount_minor += Number(r.amount_minor ?? 0);
       p.count += 1;
       byProdMap.set(prod, p);
+      const utm = ((r as { utm?: Record<string, string> | null }).utm ?? {}) as Record<string, string>;
+      const utm_source = utm.utm_source || "(direct)";
+      const utm_campaign = utm.utm_campaign || "(none)";
+      const ckey = `${utm_source}::${utm_campaign}`;
+      const c = byCampaignMap.get(ckey) ?? { utm_source, utm_campaign, amount_minor: 0, count: 0 };
+      c.amount_minor += Number(r.amount_minor ?? 0);
+      c.count += 1;
+      byCampaignMap.set(ckey, c);
     }
+
+    // Funnel: today
+    const countEvent = async (name: string) => {
+      const { count } = await supabaseAdmin
+        .from("funnel_events")
+        .select("*", { count: "exact", head: true })
+        .eq("event_name", name)
+        .gte("occurred_at", isoStart);
+      return count ?? 0;
+    };
+    const [landing_views, product_views, checkout_starts] = await Promise.all([
+      Promise.resolve(landingCount ?? 0),
+      countEvent("product_view"),
+      countEvent("checkout_started"),
+    ]);
+    const purchases = today_orders;
+    const pct = (a: number, b: number) => (b > 0 ? a / b : 0);
+
+    // Intelligence
+    const top_sku_by_revenue =
+      [...byProdMap.entries()]
+        .map(([product_sku, v]) => ({ product_sku, amount_minor: v.amount_minor }))
+        .sort((a, b) => b.amount_minor - a.amount_minor)[0] ?? null;
+    const top_sku_by_conversions =
+      [...byProdMap.entries()]
+        .map(([product_sku, v]) => ({ product_sku, count: v.count }))
+        .sort((a, b) => b.count - a.count)[0] ?? null;
+    const top_sku_by_aov =
+      [...byProdMap.entries()]
+        .map(([product_sku, v]) => ({
+          product_sku,
+          aov_minor: v.count > 0 ? Math.round(v.amount_minor / v.count) : 0,
+        }))
+        .sort((a, b) => b.aov_minor - a.aov_minor)[0] ?? null;
+    const total_rev = [...byProdMap.values()].reduce((s, v) => s + v.amount_minor, 0);
+    const total_count = [...byProdMap.values()].reduce((s, v) => s + v.count, 0);
+    const aov_minor = total_count > 0 ? Math.round(total_rev / total_count) : 0;
 
     return {
       ok: true,
@@ -105,5 +179,24 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
         .map(([product_sku, v]) => ({ product_sku, ...v }))
         .sort((a, b) => b.amount_minor - a.amount_minor),
       latest: (allRows ?? []).slice(0, 20) as DashboardRow[],
+      funnel: {
+        landing_views,
+        product_views,
+        checkout_starts,
+        purchases,
+        conv_landing_to_product: pct(product_views, landing_views),
+        conv_product_to_checkout: pct(checkout_starts, product_views),
+        conv_checkout_to_purchase: pct(purchases, checkout_starts),
+        dropoff_landing_to_product: 1 - pct(product_views, landing_views),
+        dropoff_product_to_checkout: 1 - pct(checkout_starts, product_views),
+        dropoff_checkout_to_purchase: 1 - pct(purchases, checkout_starts),
+      },
+      intelligence: {
+        aov_minor,
+        top_sku_by_revenue,
+        top_sku_by_conversions,
+        top_sku_by_aov,
+        by_campaign: [...byCampaignMap.values()].sort((a, b) => b.amount_minor - a.amount_minor).slice(0, 20),
+      },
     };
   });
