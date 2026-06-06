@@ -200,26 +200,3 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
       },
     };
   });
-
-// Stripped duplicate return below — replaced by extended block above.
-const _unused_legacy = async () => {
-  const bySrcMap = new Map<string, { amount_minor: number; count: number }>();
-  const byProdMap = new Map<string, { amount_minor: number; count: number }>();
-  void bySrcMap; void byProdMap;
-};
-    }
-
-    return {
-      ok: true,
-      today_revenue_minor,
-      today_orders,
-      conversion_rate,
-      by_source: [...bySrcMap.entries()]
-        .map(([source, v]) => ({ source, ...v }))
-        .sort((a, b) => b.amount_minor - a.amount_minor),
-      by_product: [...byProdMap.entries()]
-        .map(([product_sku, v]) => ({ product_sku, ...v }))
-        .sort((a, b) => b.amount_minor - a.amount_minor),
-      latest: (allRows ?? []).slice(0, 20) as DashboardRow[],
-    };
-  });
