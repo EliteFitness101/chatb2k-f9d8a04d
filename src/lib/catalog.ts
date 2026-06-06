@@ -79,7 +79,7 @@ export const products: Product[] = [
     description:
       "Our complete nutritional doctrine — meal architecture, macronutrient sequencing, and the ancestral fuel framework. Delivered instantly.",
     category: "digital",
-    ngnMinor: 3500000,
+    ngnMinor: 1490000, // ₦14,900
     usdMinor: 4900,
     highlights: ["PDF + video", "Lifetime updates", "Instant delivery"],
   },
@@ -91,7 +91,7 @@ export const products: Product[] = [
     description:
       "Twelve weeks of programmed mechanical work. Periodised, audited, and delivered as a digital programme paired with form-check video.",
     category: "digital",
-    ngnMinor: 4500000,
+    ngnMinor: 1990000, // ₦19,900
     usdMinor: 6900,
     highlights: ["12-week structured plan", "Video form library", "Digital download"],
   },
@@ -103,7 +103,7 @@ export const products: Product[] = [
     description:
       "The ResoFlex App with personalised 1-on-1 coaching. Weekly check-ins, programme adjustment, and direct access to your assigned coach.",
     category: "coaching",
-    ngnMinor: 7500000,
+    ngnMinor: 39900000, // ₦399,000 — Elite Coaching
     usdMinor: 11900,
     highlights: ["Weekly check-ins", "Custom programming", "Direct chat"],
   },
