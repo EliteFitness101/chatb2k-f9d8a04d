@@ -69,7 +69,7 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
         status: "pending",
         customer_email: data.email,
         customer_name: data.name,
-        customer_country: "NG",
+        customer_country: country,
         assigned_hub_id: hub?.id ?? null,
       })
       .select()
