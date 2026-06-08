@@ -345,45 +345,90 @@ export type Database = {
       revenue_events: {
         Row: {
           amount_minor: number
+          confidence_score: number | null
           created_at: string
           currency: string
           email: string | null
           id: string
+          lifecycle_stage: string
           occurred_at: string
+          predicted_revenue_lift: number | null
           product_sku: string | null
           reference: string
           rsid: string | null
           source: string | null
+          status: string
           utm: Json
           variant: string | null
         }
         Insert: {
           amount_minor: number
+          confidence_score?: number | null
           created_at?: string
           currency?: string
           email?: string | null
           id?: string
+          lifecycle_stage?: string
           occurred_at?: string
+          predicted_revenue_lift?: number | null
           product_sku?: string | null
           reference: string
           rsid?: string | null
           source?: string | null
+          status?: string
           utm?: Json
           variant?: string | null
         }
         Update: {
           amount_minor?: number
+          confidence_score?: number | null
           created_at?: string
           currency?: string
           email?: string | null
           id?: string
+          lifecycle_stage?: string
           occurred_at?: string
+          predicted_revenue_lift?: number | null
           product_sku?: string | null
           reference?: string
           rsid?: string | null
           source?: string | null
+          status?: string
           utm?: Json
           variant?: string | null
+        }
+        Relationships: []
+      }
+      revenue_predictions: {
+        Row: {
+          confidence_score: number
+          created_at: string
+          id: string
+          model_version: string
+          predicted_conversion_rate: number
+          predicted_revenue: number
+          rsid: string | null
+          sku: string | null
+        }
+        Insert: {
+          confidence_score?: number
+          created_at?: string
+          id?: string
+          model_version?: string
+          predicted_conversion_rate?: number
+          predicted_revenue?: number
+          rsid?: string | null
+          sku?: string | null
+        }
+        Update: {
+          confidence_score?: number
+          created_at?: string
+          id?: string
+          model_version?: string
+          predicted_conversion_rate?: number
+          predicted_revenue?: number
+          rsid?: string | null
+          sku?: string | null
         }
         Relationships: []
       }
