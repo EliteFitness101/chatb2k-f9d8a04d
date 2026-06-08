@@ -31,6 +31,7 @@ import { Route as AuthenticatedContentEngineRouteImport } from './routes/_authen
 import { Route as AuthenticatedCandyRouteImport } from './routes/_authenticated/candy'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
+import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -144,6 +145,12 @@ const ApiPublicFunnelEventRoute = ApiPublicFunnelEventRouteImport.update({
   path: '/api/public/funnel-event',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAdminRevenueAiRoute =
+  AuthenticatedAdminRevenueAiRouteImport.update({
+    id: '/admin/revenue-ai',
+    path: '/admin/revenue-ai',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAdminRevenueRoute =
   AuthenticatedAdminRevenueRouteImport.update({
     id: '/admin/revenue',
@@ -172,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
+  '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -196,6 +204,7 @@ export interface FileRoutesByTo {
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
+  '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -222,6 +231,7 @@ export interface FileRoutesById {
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/_authenticated/admin/revenue': typeof AuthenticatedAdminRevenueRoute
+  '/_authenticated/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
 }
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/products/$slug'
     | '/admin/revenue'
+    | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/products/$slug'
     | '/admin/revenue'
+    | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
   id:
@@ -297,6 +309,7 @@ export interface FileRouteTypes {
     | '/_authenticated/gallery'
     | '/products/$slug'
     | '/_authenticated/admin/revenue'
+    | '/_authenticated/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
   fileRoutesById: FileRoutesById
@@ -477,6 +490,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicFunnelEventRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/admin/revenue-ai': {
+      id: '/_authenticated/admin/revenue-ai'
+      path: '/admin/revenue-ai'
+      fullPath: '/admin/revenue-ai'
+      preLoaderRoute: typeof AuthenticatedAdminRevenueAiRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/admin/revenue': {
       id: '/_authenticated/admin/revenue'
       path: '/admin/revenue'
@@ -493,6 +513,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedGalleryRoute: typeof AuthenticatedGalleryRoute
   AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
+  AuthenticatedAdminRevenueAiRoute: typeof AuthenticatedAdminRevenueAiRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -501,6 +522,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedGalleryRoute: AuthenticatedGalleryRoute,
   AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
+  AuthenticatedAdminRevenueAiRoute: AuthenticatedAdminRevenueAiRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
