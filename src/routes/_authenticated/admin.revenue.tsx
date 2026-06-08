@@ -63,7 +63,7 @@ function AdminRevenue() {
           sub="Live signal: attributable revenue, conversion, and source mix."
         />
         <div className="mt-10 grid sm:grid-cols-4 gap-4">
-          <StatCard label="Today Revenue" value={fmtNGN(data.today_revenue_minor)} />
+          <StatCard label="Net Revenue (Today)" value={fmtNGN(data.brain.net_revenue_today_minor)} />
           <StatCard label="Orders Today" value={String(data.today_orders)} />
           <StatCard
             label="Avg Order Value"
@@ -77,6 +77,52 @@ function AdminRevenue() {
             label="Conversion Rate"
             value={`${(data.conversion_rate * 100).toFixed(2)}%`}
           />
+        </div>
+
+        <div className="mt-6 grid sm:grid-cols-3 gap-4">
+          <StatCard label="Forecast — Today" value={fmtNGN(data.brain.forecast.today_minor)} />
+          <StatCard label="Forecast — 7 Days" value={fmtNGN(data.brain.forecast.projected_7d_minor)} />
+          <StatCard label="Forecast — 30 Days" value={fmtNGN(data.brain.forecast.projected_30d_minor)} />
+        </div>
+
+        <div className="mt-10 grid lg:grid-cols-2 gap-6">
+          <Panel title="AI CEO — Top 3 Decisions">
+            <Table
+              head={["#", "Action", "Predicted ROI", "Revenue Impact", "Confidence"]}
+              rows={data.brain.top_decisions.map((d) => [
+                String(d.priority_rank),
+                d.label ?? d.type,
+                `${(d.predicted_roi * 100).toFixed(1)}%`,
+                fmtNGN(d.revenue_impact),
+                `${(d.confidence * 100).toFixed(0)}%`,
+              ])}
+            />
+          </Panel>
+          <Panel title="Refund Impact (Today)">
+            <Table
+              head={["Metric", "Value"]}
+              rows={[
+                ["Gross Revenue", fmtNGN(data.brain.gross_revenue_today_minor)],
+                ["Refund / Chargeback Count", String(data.brain.refund_count_today)],
+                ["Refunded Amount", fmtNGN(data.brain.refund_amount_today_minor)],
+                ["Net Revenue", fmtNGN(data.brain.net_revenue_today_minor)],
+              ]}
+            />
+          </Panel>
+        </div>
+
+        <div className="mt-6">
+          <Panel title="Event Reliability Monitor">
+            <Table
+              head={["Metric", "Value"]}
+              rows={[
+                ["Avg Reliability Score", `${data.brain.reliability.avg_score} / 100`],
+                ["Orphan RSID Events", String(data.brain.reliability.orphan_events)],
+                ["Duplicate References", String(data.brain.reliability.duplicate_refs)],
+                ["Events Scored", String(data.brain.reliability.total_scored)],
+              ]}
+            />
+          </Panel>
         </div>
 
         <div className="mt-10 grid lg:grid-cols-2 gap-6">
