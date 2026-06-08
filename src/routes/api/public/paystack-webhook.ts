@@ -43,21 +43,45 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
           // Revenue OS — record attributable event
           const meta = (event.data?.metadata ?? {}) as Record<string, unknown>;
           const utm = meta.utm && typeof meta.utm === "object" ? meta.utm : {};
-          await supabaseAdmin.from("revenue_events").insert({
-            reference: ref,
-            amount_minor: event.data?.amount ?? 0,
-            currency: event.data?.currency ?? "NGN",
-            email: event.data?.customer?.email ?? null,
-            rsid: typeof meta.rsid === "string" ? meta.rsid : null,
-            utm: utm as never,
-            product_sku: typeof meta.sku === "string" ? meta.sku : null,
-            variant: typeof meta.variant === "string" ? meta.variant : null,
-            source: typeof meta.source === "string" ? meta.source : null,
-          });
+          // Dedupe by reference (unique index). onConflict ignores duplicates.
+          await supabaseAdmin
+            .from("revenue_events")
+            .upsert(
+              {
+                reference: ref,
+                amount_minor: event.data?.amount ?? 0,
+                currency: event.data?.currency ?? "NGN",
+                email: event.data?.customer?.email ?? null,
+                rsid: typeof meta.rsid === "string" ? meta.rsid : null,
+                utm: utm as never,
+                product_sku: typeof meta.sku === "string" ? meta.sku : null,
+                variant: typeof meta.variant === "string" ? meta.variant : null,
+                source: typeof meta.source === "string" ? meta.source : null,
+                status: "success",
+                lifecycle_stage: "paid",
+              },
+              { onConflict: "reference", ignoreDuplicates: true },
+            );
         } else if (event.event === "charge.failed" && ref) {
           await supabaseAdmin
             .from("orders")
             .update({ status: "failed" })
+            .eq("reference", ref);
+        } else if (
+          (event.event === "refund.processed" ||
+            event.event === "charge.dispute.create") &&
+          ref
+        ) {
+          // Refund / chargeback correction loop
+          const newStatus =
+            event.event === "refund.processed" ? "refunded" : "chargeback";
+          await supabaseAdmin
+            .from("revenue_events")
+            .update({ status: newStatus, lifecycle_stage: "refunded" })
+            .eq("reference", ref);
+          await supabaseAdmin
+            .from("orders")
+            .update({ status: newStatus })
             .eq("reference", ref);
         }
 
