@@ -244,10 +244,7 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
         {
           type: "WHATSAPP_RECOVERY",
           label: "Recover abandoned checkouts via WhatsApp",
-          impact_weight: Math.max(
-            1,
-            data?.funnel?.checkout_starts ?? 0,
-          ) as unknown as number,
+          impact_weight: Math.max(1, checkout_starts),
           data: { confidence: 0.7 },
         },
         {
