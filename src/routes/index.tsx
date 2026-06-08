@@ -129,7 +129,10 @@ function Index() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-  const primaryHref = PRIMARY_CTA;
+  const primaryHref = withAttribution(PRIMARY_CTA);
+  const shopHref = withAttribution(SHOP);
+  const enrollHref = withAttribution(ENROLLMENT);
+  const primaryLabel = ctaLabelForRsidValue();
   const onPrimaryCta = (surface: "primary" | "sticky" | "final" = "primary") => {
     try { localStorage.setItem("rf_last_cta_click", String(Date.now())); } catch {}
     track("metabolic_reset_click", { variant: ctaVariant, surface });
@@ -181,7 +184,7 @@ function Index() {
                 onClick={() => onPrimaryCta("primary")}
                 className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold tracking-wide shadow-gold hover:brightness-110 transition"
               >
-                {PRIMARY_CTA_LABEL}
+                {primaryLabel}
               </a>
               <a
                 href={WHATSAPP}
@@ -195,7 +198,7 @@ function Index() {
             </div>
             <div className="mt-6">
               <a
-                href={ENROLLMENT}
+                href={enrollHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs tracking-[0.3em] uppercase text-gold/90 hover:text-gold transition"
@@ -216,14 +219,19 @@ function Index() {
         />
         <div className="mt-10 grid sm:grid-cols-3 gap-5">
           {[
-            { title: "Home Installations", caption: "Delivered across Nigeria", emoji: "🏠" },
-            { title: "Boutique Gym Deployments", caption: "Trusted by private gyms", emoji: "🏋️" },
-            { title: "Nationwide Delivery Proof", caption: "Premium fitness installations", emoji: "🚚" },
+            { title: "Home Installations", caption: "Delivered across Nigeria", img: "/images/proof/home-installations.jpg" },
+            { title: "Boutique Gym Deployments", caption: "Trusted by private gyms", img: "/images/proof/boutique-gym.jpg" },
+            { title: "Nationwide Delivery Proof", caption: "Premium fitness installations", img: "/images/proof/nationwide-delivery.jpg" },
           ].map((t) => (
             <div key={t.title} className="glass rounded-md overflow-hidden">
-              <div className="aspect-[4/3] bg-[var(--ink)] ember-bg grid place-items-center text-5xl">
-                <span aria-hidden>{t.emoji}</span>
-              </div>
+              <img
+                src={t.img}
+                alt={`${t.title} — ${t.caption}`}
+                loading="lazy"
+                width={1024}
+                height={768}
+                className="aspect-[4/3] w-full object-cover bg-[var(--ink)]"
+              />
               <div className="p-5">
                 <div className="font-display text-xl">{t.title}</div>
                 <div className="text-xs tracking-widest uppercase text-gold/80 mt-2">{t.caption}</div>
