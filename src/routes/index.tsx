@@ -281,10 +281,10 @@ function Index() {
             onClick={() => onPrimaryCta("final")}
             className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
           >
-            {PRIMARY_CTA_LABEL}
+            {primaryLabel}
           </a>
           <a
-            href={ENROLLMENT}
+            href={shopHref}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => track("enroll_click", { surface: "final" })}
