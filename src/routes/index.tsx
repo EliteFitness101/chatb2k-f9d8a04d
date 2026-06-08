@@ -35,6 +35,34 @@ const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
 
 type CtaVariant = "direct" | "pain" | "ai" | "trust";
 
+// Append RSID + UTM + funnel_origin to outbound funnel links (attribution enforcement).
+function withAttribution(url: string): string {
+  if (typeof window === "undefined") return url;
+  try {
+    const { rsid, utm } = getAttribution();
+    const u = new URL(url);
+    if (rsid) u.searchParams.set("rsid", rsid);
+    u.searchParams.set("funnel_origin", "resofit");
+    for (const [k, v] of Object.entries(utm)) {
+      if (v) u.searchParams.set(k, String(v));
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+// CTA Intelligence — dynamic label only (no layout change).
+function ctaLabelForRsidValue(): string {
+  if (typeof window === "undefined") return "Start Your Metabolic Reset →";
+  try {
+    const tier = localStorage.getItem("rf_rsid_tier"); // "high" | "medium" | "low"
+    if (tier === "high") return "Buy Now (Priority Access) →";
+    if (tier === "medium") return "Continue Transformation →";
+  } catch {}
+  return "Start Your Metabolic Reset →";
+}
+
 function track(event: string, props: Record<string, unknown> = {}) {
   // soft-track + revenue attribution. RSID + UTM merged into every event.
   try {
@@ -55,8 +83,6 @@ function track(event: string, props: Record<string, unknown> = {}) {
     }).catch(() => {});
   } catch {}
 }
-
-const PRIMARY_CTA_LABEL = "Start Your Metabolic Reset →";
 
 function pickCtaVariant(): CtaVariant {
   if (typeof window === "undefined") return "direct";
@@ -103,7 +129,10 @@ function Index() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-  const primaryHref = PRIMARY_CTA;
+  const primaryHref = withAttribution(PRIMARY_CTA);
+  const shopHref = withAttribution(SHOP);
+  const enrollHref = withAttribution(ENROLLMENT);
+  const primaryLabel = ctaLabelForRsidValue();
   const onPrimaryCta = (surface: "primary" | "sticky" | "final" = "primary") => {
     try { localStorage.setItem("rf_last_cta_click", String(Date.now())); } catch {}
     track("metabolic_reset_click", { variant: ctaVariant, surface });
@@ -155,7 +184,7 @@ function Index() {
                 onClick={() => onPrimaryCta("primary")}
                 className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold tracking-wide shadow-gold hover:brightness-110 transition"
               >
-                {PRIMARY_CTA_LABEL}
+                {primaryLabel}
               </a>
               <a
                 href={WHATSAPP}
@@ -169,7 +198,7 @@ function Index() {
             </div>
             <div className="mt-6">
               <a
-                href={ENROLLMENT}
+                href={enrollHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs tracking-[0.3em] uppercase text-gold/90 hover:text-gold transition"
@@ -190,14 +219,19 @@ function Index() {
         />
         <div className="mt-10 grid sm:grid-cols-3 gap-5">
           {[
-            { title: "Home Installations", caption: "Delivered across Nigeria", emoji: "🏠" },
-            { title: "Boutique Gym Deployments", caption: "Trusted by private gyms", emoji: "🏋️" },
-            { title: "Nationwide Delivery Proof", caption: "Premium fitness installations", emoji: "🚚" },
+            { title: "Home Installations", caption: "Delivered across Nigeria", img: "/images/proof/home-installations.jpg" },
+            { title: "Boutique Gym Deployments", caption: "Trusted by private gyms", img: "/images/proof/boutique-gym.jpg" },
+            { title: "Nationwide Delivery Proof", caption: "Premium fitness installations", img: "/images/proof/nationwide-delivery.jpg" },
           ].map((t) => (
             <div key={t.title} className="glass rounded-md overflow-hidden">
-              <div className="aspect-[4/3] bg-[var(--ink)] ember-bg grid place-items-center text-5xl">
-                <span aria-hidden>{t.emoji}</span>
-              </div>
+              <img
+                src={t.img}
+                alt={`${t.title} — ${t.caption}`}
+                loading="lazy"
+                width={1024}
+                height={768}
+                className="aspect-[4/3] w-full object-cover bg-[var(--ink)]"
+              />
               <div className="p-5">
                 <div className="font-display text-xl">{t.title}</div>
                 <div className="text-xs tracking-widest uppercase text-gold/80 mt-2">{t.caption}</div>
@@ -247,10 +281,10 @@ function Index() {
             onClick={() => onPrimaryCta("final")}
             className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
           >
-            {PRIMARY_CTA_LABEL}
+            {primaryLabel}
           </a>
           <a
-            href={ENROLLMENT}
+            href={shopHref}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => track("enroll_click", { surface: "final" })}

@@ -61,6 +61,20 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
             .eq("reference", ref);
         }
 
+        // Make automation bridge — fire-and-forget; do not block webhook ack.
+        try {
+          await fetch(
+            "https://hook.eu1.make.com/p0c26asklninfrxhp2sw6nkdjjb19a89",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body,
+            },
+          );
+        } catch (e) {
+          console.error("Make forward failed", e);
+        }
+
         return new Response("ok");
       },
     },
