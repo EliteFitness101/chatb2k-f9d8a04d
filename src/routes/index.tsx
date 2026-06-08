@@ -35,6 +35,34 @@ const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
 
 type CtaVariant = "direct" | "pain" | "ai" | "trust";
 
+// Append RSID + UTM + funnel_origin to outbound funnel links (attribution enforcement).
+function withAttribution(url: string): string {
+  if (typeof window === "undefined") return url;
+  try {
+    const { rsid, utm } = getAttribution();
+    const u = new URL(url);
+    if (rsid) u.searchParams.set("rsid", rsid);
+    u.searchParams.set("funnel_origin", "resofit");
+    for (const [k, v] of Object.entries(utm)) {
+      if (v) u.searchParams.set(k, String(v));
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+// CTA Intelligence — dynamic label only (no layout change).
+function ctaLabelForRsidValue(): string {
+  if (typeof window === "undefined") return "Start Your Metabolic Reset →";
+  try {
+    const tier = localStorage.getItem("rf_rsid_tier"); // "high" | "medium" | "low"
+    if (tier === "high") return "Buy Now (Priority Access) →";
+    if (tier === "medium") return "Continue Transformation →";
+  } catch {}
+  return "Start Your Metabolic Reset →";
+}
+
 function track(event: string, props: Record<string, unknown> = {}) {
   // soft-track + revenue attribution. RSID + UTM merged into every event.
   try {
@@ -55,8 +83,6 @@ function track(event: string, props: Record<string, unknown> = {}) {
     }).catch(() => {});
   } catch {}
 }
-
-const PRIMARY_CTA_LABEL = "Start Your Metabolic Reset →";
 
 function pickCtaVariant(): CtaVariant {
   if (typeof window === "undefined") return "direct";
