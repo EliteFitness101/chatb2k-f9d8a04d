@@ -113,6 +113,7 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
           sku: data.items[0]?.sku ?? null,
           assigned_hub_id: hub?.id ?? null,
           country,
+          funnel_origin: "resofit",
         },
       }),
     });
