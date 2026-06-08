@@ -1,5 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import {
+  calculateROI,
+  forecastRevenue,
+  reliabilityScore,
+  type RankedAction,
+} from "@/lib/revenue-brain";
 
 export interface DashboardRow {
   reference: string;
@@ -39,6 +45,24 @@ export interface RevenueDashboard {
     top_sku_by_aov: { product_sku: string; aov_minor: number } | null;
     by_campaign: { utm_source: string; utm_campaign: string; amount_minor: number; count: number }[];
   };
+  brain: {
+    net_revenue_today_minor: number;
+    gross_revenue_today_minor: number;
+    refund_count_today: number;
+    refund_amount_today_minor: number;
+    forecast: {
+      today_minor: number;
+      projected_7d_minor: number;
+      projected_30d_minor: number;
+    };
+    top_decisions: RankedAction[];
+    reliability: {
+      avg_score: number;
+      orphan_events: number;
+      duplicate_refs: number;
+      total_scored: number;
+    };
+  };
 }
 
 export const getRevenueDashboard = createServerFn({ method: "GET" })
@@ -72,6 +96,15 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
           aov_minor: 0, top_sku_by_revenue: null, top_sku_by_conversions: null,
           top_sku_by_aov: null, by_campaign: [],
         },
+        brain: {
+          net_revenue_today_minor: 0,
+          gross_revenue_today_minor: 0,
+          refund_count_today: 0,
+          refund_amount_today_minor: 0,
+          forecast: { today_minor: 0, projected_7d_minor: 0, projected_30d_minor: 0 },
+          top_decisions: [],
+          reliability: { avg_score: 0, orphan_events: 0, duplicate_refs: 0, total_scored: 0 },
+        },
       };
     }
 
@@ -82,14 +115,26 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
 
     const { data: todayRows } = await supabaseAdmin
       .from("revenue_events")
-      .select("amount_minor")
+      .select("amount_minor, status")
       .gte("occurred_at", isoStart);
 
-    const today_revenue_minor = (todayRows ?? []).reduce(
+    const todayList = (todayRows ?? []) as Array<{ amount_minor: number | null; status?: string | null }>;
+    const gross_revenue_today_minor = todayList.reduce(
       (s, r) => s + Number(r.amount_minor ?? 0),
       0,
     );
-    const today_orders = todayRows?.length ?? 0;
+    const refundsToday = todayList.filter(
+      (r) => r.status === "refunded" || r.status === "chargeback",
+    );
+    const refund_amount_today_minor = refundsToday.reduce(
+      (s, r) => s + Number(r.amount_minor ?? 0),
+      0,
+    );
+    const today_revenue_minor =
+      gross_revenue_today_minor - refund_amount_today_minor;
+    const today_orders = todayList.filter(
+      (r) => r.status !== "refunded" && r.status !== "chargeback",
+    ).length;
 
     const { count: landingCount } = await supabaseAdmin
       .from("funnel_events")
@@ -102,7 +147,7 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
 
     const { data: allRows } = await supabaseAdmin
       .from("revenue_events")
-      .select("reference, amount_minor, currency, email, product_sku, source, occurred_at, utm")
+      .select("reference, amount_minor, currency, email, product_sku, source, occurred_at, utm, rsid, status")
       .order("occurred_at", { ascending: false })
       .limit(500);
 
@@ -110,6 +155,7 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
     const byProdMap = new Map<string, { amount_minor: number; count: number }>();
     const byCampaignMap = new Map<string, { utm_source: string; utm_campaign: string; amount_minor: number; count: number }>();
     for (const r of allRows ?? []) {
+      if (r.status === "refunded" || r.status === "chargeback") continue;
       const src = r.source || "(direct)";
       const prod = r.product_sku || "(unknown)";
       const s = bySrcMap.get(src) ?? { amount_minor: 0, count: 0 };
@@ -167,6 +213,59 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
     const total_count = [...byProdMap.values()].reduce((s, v) => s + v.count, 0);
     const aov_minor = total_count > 0 ? Math.round(total_rev / total_count) : 0;
 
+    // Brain v2 — reliability scoring across recent events
+    const seenRefs = new Set<string>();
+    const dupeRefs = new Set<string>();
+    let orphan = 0;
+    let scoreSum = 0;
+    let scored = 0;
+    for (const r of allRows ?? []) {
+      const ref = (r as { reference?: string | null }).reference ?? null;
+      const rsid = (r as { rsid?: string | null }).rsid ?? null;
+      if (ref) {
+        if (seenRefs.has(ref)) dupeRefs.add(ref);
+        seenRefs.add(ref);
+      }
+      if (!rsid) orphan += 1;
+      scoreSum += reliabilityScore({
+        reference: ref,
+        rsid,
+        source: r.source ?? null,
+        seenRefs,
+      });
+      scored += 1;
+    }
+    const avg_score = scored > 0 ? Math.round(scoreSum / scored) : 0;
+
+    // Brain v2 — forecast + ranked decisions (TOP 3)
+    const forecast = forecastRevenue(today_revenue_minor);
+    const ranked = calculateROI(
+      [
+        {
+          type: "WHATSAPP_RECOVERY",
+          label: "Recover abandoned checkouts via WhatsApp",
+          impact_weight: Math.max(
+            1,
+            data?.funnel?.checkout_starts ?? 0,
+          ) as unknown as number,
+          data: { confidence: 0.7 },
+        },
+        {
+          type: "OPTIMIZE_CHECKOUT",
+          label: "Tighten checkout flow on top SKU",
+          impact_weight: 1.2,
+          data: { confidence: 0.65 },
+        },
+        {
+          type: "CTA_OPTIMIZATION",
+          label: "Re-test hero CTA copy",
+          impact_weight: 1,
+          data: { confidence: 0.55 },
+        },
+      ],
+      today_revenue_minor,
+    ).slice(0, 3);
+
     return {
       ok: true,
       today_revenue_minor,
@@ -197,6 +296,20 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
         top_sku_by_conversions,
         top_sku_by_aov,
         by_campaign: [...byCampaignMap.values()].sort((a, b) => b.amount_minor - a.amount_minor).slice(0, 20),
+      },
+      brain: {
+        net_revenue_today_minor: today_revenue_minor,
+        gross_revenue_today_minor,
+        refund_count_today: refundsToday.length,
+        refund_amount_today_minor,
+        forecast,
+        top_decisions: ranked,
+        reliability: {
+          avg_score,
+          orphan_events: orphan,
+          duplicate_refs: dupeRefs.size,
+          total_scored: scored,
+        },
       },
     };
   });
