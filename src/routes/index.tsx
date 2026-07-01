@@ -134,6 +134,7 @@ function Index() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
   const primaryHref = withAttribution(PRIMARY_CTA);
+  const secondaryHref = withAttribution(SECONDARY_CTA);
   const shopHref = withAttribution(SHOP);
   const enrollHref = withAttribution(ENROLLMENT);
   const primaryLabel = ctaLabelForRsidValue();
