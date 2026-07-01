@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { productBySku } from "@/lib/catalog";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const InitSchema = z.object({
   email: z.string().email(),
@@ -159,18 +160,32 @@ export const verifyPaystackTransaction = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Verify failed" };
     }
 
-    const newStatus = json.data.status === "success" ? "paid" : "failed";
-    await supabaseAdmin
-      .from("orders")
-      .update({ status: newStatus })
-      .eq("reference", data.reference);
-
-    return { ok: true as const, status: newStatus };
+    // Read-only: authoritative order status is written by the Paystack webhook
+    // (HMAC-verified). This endpoint is unauthenticated so it must never mutate.
+    const paystackStatus = json.data.status;
+    const mapped =
+      paystackStatus === "success"
+        ? ("paid" as const)
+        : paystackStatus === "failed" || paystackStatus === "reversed"
+          ? ("failed" as const)
+          : ("pending" as const);
+    return { ok: true as const, status: mapped };
   });
 
 export const getOrderByReference = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ reference: z.string() }).parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Admin-only: this returns full customer PII. Require an authenticated
+    // caller with the 'admin' role. Order owners see their own reference on
+    // the success page but do not need PII readback here.
+    const { data: isAdmin } = await context.supabase.rpc("has_role", {
+      _user_id: context.userId,
+      _role: "admin",
+    });
+    if (!isAdmin) {
+      throw new Response("Forbidden", { status: 403 });
+    }
     const { data: order } = await supabaseAdmin
       .from("orders")
       .select("*, order_items(*), hubs(*)")
