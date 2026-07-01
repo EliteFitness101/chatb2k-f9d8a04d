@@ -200,6 +200,15 @@ function Index() {
               >
                 Chat With a Coach
               </a>
+              <a
+                href={secondaryHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => track("assessment_secondary_click", { surface: "hero" })}
+                className="px-6 py-3.5 rounded-sm border border-[var(--glass-border)] text-foreground/80 hover:border-[var(--gold)] transition text-sm"
+              >
+                Take ChatB2K Assessment
+              </a>
             </div>
             <div className="mt-6">
               <a
