@@ -58,8 +58,8 @@ function DashboardPage() {
     const { error } = await supabase.from("weight_logs").insert({ user_id: user!.id, weight_kg: w });
     if (error) setErr(error.message);
     else {
-      // award 10 XP per log
-      await supabase.from("profiles").update({ xp: (profile?.xp ?? 0) + 10, points: (profile?.points ?? 0) + 5 }).eq("id", user!.id);
+      // XP/points/tier are awarded server-side by database triggers/functions.
+      // Client cannot mutate gamification fields (blocked by RLS + trigger).
       setWeight("");
       await load();
     }
