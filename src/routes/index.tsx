@@ -255,6 +255,104 @@ function Index() {
         </div>
       </section>
 
+      {/* BENEFITS */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
+        <SectionHeading
+          eyebrow="Why ResoFit"
+          title="Everything your body needs, in one system."
+          sub="ChatB2K-precision plans, coach-verified execution, and hardware built for the long game."
+        />
+        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {[
+            { t: "Personalized Blueprint", d: "Your metabolism, your goals, your schedule — mapped into one plan." },
+            { t: "Nigerian Meal Intelligence", d: "Local ingredients, real macros, no imported guesswork." },
+            { t: "Coach-Verified", d: "Every recommendation is reviewed before it reaches you." },
+            { t: "Built for Consistency", d: "Progress tracking, streaks, and rituals that compound weekly." },
+          ].map((b) => (
+            <div key={b.t} className="glass rounded-md p-6">
+              <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Benefit</div>
+              <div className="mt-2 font-display text-xl">{b.t}</div>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{b.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
+        <SectionHeading
+          eyebrow="How it works"
+          title="Three steps to your Metabolic Reset."
+          sub="Under 10 minutes to your first personalized plan."
+        />
+        <div className="mt-10 grid sm:grid-cols-3 gap-5">
+          {[
+            { n: "01", t: "Take the Assessment", d: "Answer a short intake about your goals, lifestyle, and body." },
+            { n: "02", t: "Get Your ChatB2K Plan", d: "Nutrition, training, and recovery tuned to your metabolic profile." },
+            { n: "03", t: "Execute With a Coach", d: "Verified guidance, weekly rituals, and hardware when you're ready." },
+          ].map((s) => (
+            <div key={s.n} className="glass rounded-md p-6">
+              <div className="font-display text-4xl text-gold-gradient">{s.n}</div>
+              <div className="mt-3 font-display text-xl">{s.t}</div>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{s.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* TESTIMONIALS */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
+        <SectionHeading
+          eyebrow="Transformations"
+          title="From ResoFit clients."
+          sub="Real people, real routines, real weeks of work."
+        />
+        <div className="mt-10 grid sm:grid-cols-3 gap-5">
+          {[
+            { name: "Chinaza O.", story: "Lagos · 12 weeks", quote: "The plan was made for my life — jollof included. I dropped 8kg without hating my food." },
+            { name: "Ibrahim A.", story: "Abuja · 8 weeks", quote: "Coach check-ins kept me honest. First time I've stayed consistent past week three." },
+            { name: "Adaeze N.", story: "Port Harcourt · 16 weeks", quote: "Home setup + ChatB2K plan replaced my gym membership and my nutritionist." },
+          ].map((c) => (
+            <div key={c.name} className="glass rounded-md p-6 flex flex-col">
+              <div className="text-gold text-3xl leading-none">“</div>
+              <p className="mt-3 text-sm text-foreground/90 leading-relaxed flex-1">{c.quote}</p>
+              <div className="mt-4 pt-4 border-t border-[var(--glass-border)]">
+                <div className="font-display text-base">{c.name}</div>
+                <div className="text-xs tracking-widest uppercase text-gold/80 mt-1">{c.story}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* MID ASSESSMENT CTA */}
+      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-16 text-center">
+        <SectionHeading
+          align="center"
+          eyebrow="Free"
+          title="Start your Free Assessment."
+          sub="Get your ChatB2K-precision plan in under 10 minutes. No card required."
+        />
+        <div className="mt-8 flex flex-wrap gap-3 justify-center">
+          <a
+            href={primaryHref}
+            onClick={() => onPrimaryCta("primary")}
+            className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
+          >
+            Start Free Assessment →
+          </a>
+          <a
+            href={secondaryHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => track("assessment_secondary_click", { surface: "mid" })}
+            className="px-6 py-3.5 rounded-sm glass text-foreground/80 hover:border-[var(--gold)] transition text-sm"
+          >
+            Take ChatB2K Assessment
+          </a>
+        </div>
+      </section>
+
       {/* FEATURED ARSENAL */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 py-12 opacity-90">
         <SectionHeading
