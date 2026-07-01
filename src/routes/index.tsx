@@ -259,8 +259,8 @@ function Index() {
       <section className="mx-auto max-w-7xl px-4 sm:px-6 py-12 opacity-90">
         <SectionHeading
           eyebrow="Catalog"
-          title="Browse the arsenal."
-          sub="Optional gear browsing. The ₦1,000 transformation is the fastest path."
+          title="Equipment layer."
+          sub="Optional hardware for when your plan is dialed in. The Free Assessment is the fastest first step."
         />
         <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {featured.map((p) => (
