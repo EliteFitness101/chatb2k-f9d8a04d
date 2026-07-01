@@ -32,6 +32,10 @@ const SHOP = "https://reso-flex.lovable.app";
 const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
   "Hello Coach Buchi,\n\nI just started my Metabolic Reset on ResoFit and would like guidance on the next step."
 );
+const SECONDARY_CTA = "https://reso-fit.lovable.app"; // ChatB2K Assessment (secondary / fallback)
+// Community channels — WhatsApp reuses coach line; Telegram handle is a
+// best-effort default and safe to swap when the official URL lands.
+const TELEGRAM = "https://t.me/resofit";
 
 type CtaVariant = "direct" | "pain" | "ai" | "trust";
 
