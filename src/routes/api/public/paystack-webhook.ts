@@ -86,17 +86,21 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
         }
 
         // Make automation bridge — fire-and-forget; do not block webhook ack.
-        try {
-          await fetch(
-            "https://hook.eu1.make.com/p0c26asklninfrxhp2sw6nkdjjb19a89",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body,
-            },
-          );
-        } catch (e) {
-          console.error("Make forward failed", e);
+        // URL lives in an env secret (MAKE_WEBHOOK_URL) so it isn't committed
+        // to source. An optional MAKE_WEBHOOK_SECRET is forwarded as a shared
+        // header the Make.com scenario can verify.
+        const makeUrl = process.env.MAKE_WEBHOOK_URL;
+        if (makeUrl) {
+          try {
+            const headers: Record<string, string> = {
+              "Content-Type": "application/json",
+            };
+            const sharedSecret = process.env.MAKE_WEBHOOK_SECRET;
+            if (sharedSecret) headers["x-shared-secret"] = sharedSecret;
+            await fetch(makeUrl, { method: "POST", headers, body });
+          } catch (e) {
+            console.error("Make forward failed", e);
+          }
         }
 
         return new Response("ok");
