@@ -379,13 +379,82 @@ function Index() {
 
       {/* Financial Router section soft-hidden per funnel patch. */}
 
+      {/* COMMUNITY */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
+        <SectionHeading
+          eyebrow="Community"
+          title="Join the ResoFit circle."
+          sub="Coach access, member wins, and weekly rituals — where the transformation stays alive."
+        />
+        <div className="mt-10 grid sm:grid-cols-3 gap-5">
+          <a
+            href={WHATSAPP}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => track("whatsapp_click", { surface: "community" })}
+            className="glass rounded-md p-6 hover:border-[var(--gold)] transition"
+          >
+            <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Coach line</div>
+            <div className="mt-2 font-display text-xl">WhatsApp Coach</div>
+            <p className="mt-2 text-sm text-muted-foreground">Direct access to Coach Buchi for plan questions and check-ins.</p>
+            <div className="mt-4 text-xs tracking-widest uppercase text-gold">Open chat →</div>
+          </a>
+          <a
+            href={TELEGRAM}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => track("telegram_join_click", { surface: "community" })}
+            className="glass rounded-md p-6 hover:border-[var(--gold)] transition"
+          >
+            <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Broadcast</div>
+            <div className="mt-2 font-display text-xl">Telegram Channel</div>
+            <p className="mt-2 text-sm text-muted-foreground">Daily wins, drops, and ChatB2K tips from the ResoFit floor.</p>
+            <div className="mt-4 text-xs tracking-widest uppercase text-gold">Join channel →</div>
+          </a>
+          <a
+            href={enrollHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => track("community_hub_click", { surface: "community" })}
+            className="glass rounded-md p-6 hover:border-[var(--gold)] transition"
+          >
+            <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Hub</div>
+            <div className="mt-2 font-display text-xl">Community Hub</div>
+            <p className="mt-2 text-sm text-muted-foreground">Member portal, transformation logs, and coach-led rituals.</p>
+            <div className="mt-4 text-xs tracking-widest uppercase text-gold">Enter hub →</div>
+          </a>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-16">
+        <SectionHeading eyebrow="FAQ" title="Answers before you start." />
+        <div className="mt-10 divide-y divide-[var(--glass-border)] border-y border-[var(--glass-border)]">
+          {[
+            { q: "Is the Free Assessment really free?", a: "Yes. You get a ChatB2K-precision plan without paying. The ₦1,000 Metabolic Reset unlocks coach follow-up and full weekly execution." },
+            { q: "Do the meal plans work with Nigerian food?", a: "Every plan is built around locally-available ingredients, portioned to your metabolic profile — jollof, egusi, oats, plantain, all fair game." },
+            { q: "What if I need hardware later?", a: "The Equipment Layer above ships nationwide with verified delivery. Your plan works with zero equipment first." },
+            { q: "Can I talk to a real coach?", a: "Yes — Coach Buchi is one WhatsApp tap away, and coach review is baked into every paid tier." },
+            { q: "How is my data handled?", a: "Assessment data stays inside ResoFit. Payments run on Paystack. We never resell your inputs." },
+          ].map((f) => (
+            <details key={f.q} className="group py-5">
+              <summary className="flex cursor-pointer items-center justify-between gap-6 list-none">
+                <span className="font-display text-lg">{f.q}</span>
+                <span className="text-gold text-xl transition group-open:rotate-45">+</span>
+              </summary>
+              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
       {/* FINAL CTA */}
       <section className="mx-auto max-w-4xl px-4 sm:px-6 py-20 text-center">
         <SectionHeading
           align="center"
           eyebrow="Your move"
-          title="Build your ideal body — starting at ₦1,000."
-          sub="Personalized AI plan in minutes. Coach-verified. No fluff."
+          title="Start Free. Transform for real."
+          sub="Your ChatB2K-precision plan is one assessment away."
         />
         <div className="mt-10 flex flex-wrap gap-4 justify-center">
           <a
@@ -393,16 +462,27 @@ function Index() {
             onClick={() => onPrimaryCta("final")}
             className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
           >
-            {primaryLabel}
+            Start Free Assessment →
           </a>
+          <a
+            href={secondaryHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => track("assessment_secondary_click", { surface: "final" })}
+            className="px-6 py-3.5 rounded-sm glass text-foreground/80 hover:border-[var(--gold)] transition text-sm"
+          >
+            Take ChatB2K Assessment
+          </a>
+        </div>
+        <div className="mt-6">
           <a
             href={shopHref}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => track("enroll_click", { surface: "final" })}
-            className="px-6 py-3.5 rounded-sm glass text-foreground hover:border-[var(--gold)] transition"
+            className="text-xs tracking-[0.3em] uppercase text-gold/80 hover:text-gold transition"
           >
-            Shop the Arsenal →
+            Or shop the arsenal →
           </a>
         </div>
       </section>
