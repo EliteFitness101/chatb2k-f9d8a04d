@@ -494,7 +494,7 @@ function Index() {
           onClick={() => onPrimaryCta("sticky")}
           className="flex-1 text-center px-4 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
         >
-          Start Metabolic Reset →
+          Start Free Assessment →
         </a>
         <a
           href={WHATSAPP}
