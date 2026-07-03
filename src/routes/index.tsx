@@ -33,9 +33,8 @@ const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
   "Hello Coach Buchi,\n\nI just started my Metabolic Reset on ResoFit and would like guidance on the next step."
 );
 const SECONDARY_CTA = "https://reso-fit.lovable.app"; // ChatB2K Assessment (secondary / fallback)
-// Community channels — WhatsApp reuses coach line; Telegram handle is a
-// best-effort default and safe to swap when the official URL lands.
-const TELEGRAM = "https://t.me/resofit";
+// Community channels — single source of truth for the ResoFit Telegram community.
+const TELEGRAM = "https://t.me/resofitcommunity";
 
 type CtaVariant = "direct" | "pain" | "ai" | "trust";
 
@@ -122,13 +121,15 @@ function Index() {
     setCtaVariant(v);
     track("landing_view", { variant: v });
 
-    // scroll depth
-    let d50 = false, d90 = false;
+    // scroll depth — fire once per threshold per page view
+    let d50 = false, d75 = false, d90 = false, d100 = false;
     const onScroll = () => {
       const h = document.documentElement;
       const pct = (h.scrollTop + window.innerHeight) / h.scrollHeight;
       if (!d50 && pct >= 0.5) { d50 = true; track("scroll_depth_50"); }
+      if (!d75 && pct >= 0.75) { d75 = true; track("scroll_depth_75"); }
       if (!d90 && pct >= 0.9) { d90 = true; track("scroll_depth_90"); }
+      if (!d100 && pct >= 0.99) { d100 = true; track("scroll_depth_100"); }
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -140,9 +141,9 @@ function Index() {
   const primaryLabel = ctaLabelForRsidValue();
   const onPrimaryCta = (surface: "primary" | "sticky" | "final" = "primary") => {
     try { localStorage.setItem("rf_last_cta_click", String(Date.now())); } catch {}
-    track("metabolic_reset_click", { variant: ctaVariant, surface });
+    // Fire exactly one funnel event per click. checkout_started is emitted by
+    // the /checkout route itself so we don't inflate the funnel from the hero.
     track("assessment_started", { variant: ctaVariant, surface });
-    track("checkout_started", { variant: ctaVariant, surface });
   };
 
   return (

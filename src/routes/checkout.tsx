@@ -6,6 +6,48 @@ import { SectionHeading } from "@/components/site/SectionHeading";
 import { products, productBySku, formatNGN, formatUSD } from "@/lib/catalog";
 import { getGeo } from "@/lib/geo.functions";
 import { pageMeta } from "@/lib/site-meta";
+import { getAttribution } from "@/lib/attribution";
+
+function getSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let s = sessionStorage.getItem("rf_session");
+    if (!s) {
+      s =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `sess-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      sessionStorage.setItem("rf_session", s);
+    }
+    return s;
+  } catch {
+    return "";
+  }
+}
+
+function trackCommerce(event: string, props: Record<string, unknown> = {}) {
+  if (typeof window === "undefined") return;
+  try {
+    const { rsid, utm } = getAttribution();
+    const session_id = getSessionId();
+    const payload = {
+      event,
+      rsid,
+      session_id,
+      funnel_origin: "resofit",
+      utm,
+      timestamp: new Date().toISOString(),
+      ...props,
+    };
+    (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push(payload);
+    void fetch("/api/public/funnel-event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_name: event, rsid, props: payload }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
+}
 
 export const Route = createFileRoute("/checkout")({
   validateSearch: (s) => z.object({ sku: z.string().optional() }).parse(s),
@@ -26,6 +68,23 @@ function CheckoutPage() {
   useEffect(() => {
     getGeo().then(setGeo).catch(() => null);
   }, []);
+
+  // Fire checkout_started exactly once per SKU per session
+  useEffect(() => {
+    if (typeof window === "undefined" || !product) return;
+    try {
+      const key = `rf_checkout_started_${product.sku}`;
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+      trackCommerce("checkout_started", {
+        product_sku: product.sku,
+        product_slug: product.slug,
+        quantity: 1,
+        value: product.ngnMinor / 100,
+        currency: "NGN",
+      });
+    } catch {}
+  }, [product]);
 
   const isNG = geo?.currency === "NGN";
   const price = isNG ? formatNGN(product.ngnMinor) : formatUSD(product.usdMinor);
@@ -61,15 +120,63 @@ function CheckoutPage() {
               label="Paystack"
               note="Nigeria · Naira · Inline"
               recommended={isNG}
+              onSelect={() =>
+                trackCommerce("add_to_cart", {
+                  product_sku: product.sku,
+                  product_slug: product.slug,
+                  quantity: 1,
+                  value: product.ngnMinor / 100,
+                  currency: "NGN",
+                  variant: "paystack",
+                })
+              }
             />
             <RailButton
               to="/shopify"
               label="Shopify"
               note="USD / GBP / EUR"
               recommended={!isNG && !!geo}
+              onSelect={() =>
+                trackCommerce("add_to_cart", {
+                  product_sku: product.sku,
+                  product_slug: product.slug,
+                  quantity: 1,
+                  value: product.usdMinor / 100,
+                  currency: "USD",
+                  variant: "shopify",
+                })
+              }
             />
-            <RailButton to="/crypto" label="Crypto" note="USDT · BTC · Apex+" />
-            <RailButton to="/selar" label="Selar" note="Digital downloads" />
+            <RailButton
+              to="/crypto"
+              label="Crypto"
+              note="USDT · BTC · Apex+"
+              onSelect={() =>
+                trackCommerce("add_to_cart", {
+                  product_sku: product.sku,
+                  product_slug: product.slug,
+                  quantity: 1,
+                  value: product.usdMinor / 100,
+                  currency: "USD",
+                  variant: "crypto",
+                })
+              }
+            />
+            <RailButton
+              to="/selar"
+              label="Selar"
+              note="Digital downloads"
+              onSelect={() =>
+                trackCommerce("add_to_cart", {
+                  product_sku: product.sku,
+                  product_slug: product.slug,
+                  quantity: 1,
+                  value: product.ngnMinor / 100,
+                  currency: "NGN",
+                  variant: "selar",
+                })
+              }
+            />
           </div>
 
           <div className="mt-8 text-center">
@@ -89,18 +196,20 @@ function RailButton({
   note,
   recommended,
   search,
+  onSelect,
 }: {
   to: "/paystack" | "/shopify" | "/crypto" | "/selar";
   label: string;
   note: string;
   recommended?: boolean;
   search?: { sku?: string };
+  onSelect?: () => void;
 }) {
   const cls = recommended
     ? "glass rounded-md p-5 border-2 border-[var(--gold)] shadow-gold"
     : "glass rounded-md p-5 hover:border-[var(--gold)] transition";
   return (
-    <Link to={to} search={search as never} className={cls}>
+    <Link to={to} search={search as never} className={cls} onClick={onSelect}>
       <div className="flex items-center justify-between">
         <span className="font-display text-lg">{label}</span>
         {recommended && (
