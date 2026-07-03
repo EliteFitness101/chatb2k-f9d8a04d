@@ -42,13 +42,13 @@ export const Route = createRootRoute({
       { property: "og:title", content: "ResoFlex™ — The Global Mechanical Authority" },
       { property: "og:description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { property: "og:site_name", content: "ResoFlex™" },
+      { property: "og:locale", content: "en_US" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:site", content: "@resofit" },
+      { name: "twitter:creator", content: "@resofit" },
       { name: "twitter:title", content: "ResoFlex™ — The Global Mechanical Authority" },
-      { name: "description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
       { name: "twitter:description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/hQQDiX5DKnSMb28ltdDE1ElIVX62/social-images/social-1777724930901-resofit-hero-banner-neural-architekt.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/hQQDiX5DKnSMb28ltdDE1ElIVX62/social-images/social-1777724930901-resofit-hero-banner-neural-architekt.webp" },
     ],
     links: [
       {
@@ -60,6 +60,50 @@ export const Route = createRootRoute({
       {
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap",
+      },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              "@id": "https://resoflex-global.lovable.app/#organization",
+              name: "ResoFlex™",
+              alternateName: "ResoFit",
+              url: "https://resoflex-global.lovable.app",
+              logo: "https://resoflex-global.lovable.app/logo.png",
+              sameAs: [
+                "https://reso-fit.lovable.app",
+                "https://joy-funnel-ai.lovable.app",
+              ],
+            },
+            {
+              "@type": "Brand",
+              "@id": "https://resoflex-global.lovable.app/#brand",
+              name: "ResoFlex™",
+              slogan: "The global mechanical authority.",
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://resoflex-global.lovable.app/#website",
+              url: "https://resoflex-global.lovable.app",
+              name: "ResoFlex™ Global Sanctuary",
+              publisher: { "@id": "https://resoflex-global.lovable.app/#organization" },
+              potentialAction: {
+                "@type": "SearchAction",
+                target: {
+                  "@type": "EntryPoint",
+                  urlTemplate:
+                    "https://resoflex-global.lovable.app/products?q={search_term_string}",
+                },
+                "query-input": "required name=search_term_string",
+              },
+            },
+          ],
+        }),
       },
     ],
   }),
