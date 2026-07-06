@@ -3,14 +3,23 @@ import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { ProductCard } from "@/components/site/ProductCard";
 import { products } from "@/lib/catalog";
-import { pageMeta } from "@/lib/site-meta";
+import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/products")({
   head: () => ({
     meta: pageMeta({
       title: "The Arsenal",
       description: "Cast iron, industrial benches, ancestral protocols and 1-on-1 coaching. The full ResoFlex arsenal.",
+      url: SITE_URL + "/products",
+      type: "website",
     }),
+    links: [canonicalLink(SITE_URL + "/products")],
+    scripts: [
+      breadcrumbScript([
+        { name: "Home", url: SITE_URL + "/" },
+        { name: "Products", url: SITE_URL + "/products" },
+      ]),
+    ],
   }),
   component: ProductsPage,
 });
