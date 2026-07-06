@@ -5,7 +5,7 @@ import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { products, productBySku, formatNGN, formatUSD } from "@/lib/catalog";
 import { getGeo } from "@/lib/geo.functions";
-import { pageMeta } from "@/lib/site-meta";
+import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 import { getAttribution } from "@/lib/attribution";
 
 function getSessionId(): string {
@@ -55,7 +55,16 @@ export const Route = createFileRoute("/checkout")({
     meta: pageMeta({
       title: "Smart Checkout",
       description: "The Financial Router — pay via the rail nearest to you.",
+      url: SITE_URL + "/checkout",
+      type: "website",
     }),
+    links: [canonicalLink(SITE_URL + "/checkout")],
+    scripts: [
+      breadcrumbScript([
+        { name: "Home", url: SITE_URL + "/" },
+        { name: "Checkout", url: SITE_URL + "/checkout" },
+      ]),
+    ],
   }),
   component: CheckoutPage,
 });
