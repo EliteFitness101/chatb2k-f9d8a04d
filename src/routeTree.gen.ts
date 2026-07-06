@@ -33,6 +33,7 @@ import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/publi
 import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
 import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
+import { Route as ApiPublicHooksCheckoutAbandonmentRouteImport } from './routes/api/public/hooks/checkout-abandonment'
 
 const SuccessRoute = SuccessRouteImport.update({
   id: '/success',
@@ -157,6 +158,12 @@ const AuthenticatedAdminRevenueRoute =
     path: '/admin/revenue',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicHooksCheckoutAbandonmentRoute =
+  ApiPublicHooksCheckoutAbandonmentRouteImport.update({
+    id: '/api/public/hooks/checkout-abandonment',
+    path: '/api/public/hooks/checkout-abandonment',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -207,6 +215,7 @@ export interface FileRoutesByTo {
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -234,6 +243,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/api/public/hooks/checkout-abandonment'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -286,6 +297,7 @@ export interface FileRouteTypes {
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/api/public/hooks/checkout-abandonment'
   id:
     | '__root__'
     | '/'
@@ -312,6 +324,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/api/public/hooks/checkout-abandonment'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -332,6 +345,7 @@ export interface RootRouteChildren {
   SuccessRoute: typeof SuccessRoute
   ApiPublicFunnelEventRoute: typeof ApiPublicFunnelEventRoute
   ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
+  ApiPublicHooksCheckoutAbandonmentRoute: typeof ApiPublicHooksCheckoutAbandonmentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -504,6 +518,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRevenueRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/hooks/checkout-abandonment': {
+      id: '/api/public/hooks/checkout-abandonment'
+      path: '/api/public/hooks/checkout-abandonment'
+      fullPath: '/api/public/hooks/checkout-abandonment'
+      preLoaderRoute: typeof ApiPublicHooksCheckoutAbandonmentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -559,6 +580,8 @@ const rootRouteChildren: RootRouteChildren = {
   SuccessRoute: SuccessRoute,
   ApiPublicFunnelEventRoute: ApiPublicFunnelEventRoute,
   ApiPublicPaystackWebhookRoute: ApiPublicPaystackWebhookRoute,
+  ApiPublicHooksCheckoutAbandonmentRoute:
+    ApiPublicHooksCheckoutAbandonmentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
