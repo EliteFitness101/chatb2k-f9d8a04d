@@ -6,7 +6,7 @@ import { SectionHeading } from "@/components/site/SectionHeading";
 import { ProductCard } from "@/components/site/ProductCard";
 import { CurrencyBadge } from "@/components/site/CurrencyBadge";
 import { products } from "@/lib/catalog";
-import { pageMeta } from "@/lib/site-meta";
+import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 import { NigerianEcommerceTrustCheck } from "@/components/site/NigerianEcommerceTrustCheck";
 import { FulfillmentEstimate } from "@/components/site/FulfillmentEstimate";
 import { getAttribution } from "@/lib/attribution";
@@ -17,10 +17,16 @@ export const Route = createFileRoute("/")({
       title: "Transform Your Body with ChatB2K Precision — Start for ₦1,000",
       description:
         "Get a personalized nutrition, fitness, and wellness roadmap designed around your goals, lifestyle, body type, and metabolic profile.",
+      url: SITE_URL + "/",
+      type: "website",
     }),
     links: [
+      canonicalLink(SITE_URL + "/"),
       { rel: "preload", as: "image", href: "/hero/product-1.webp" },
       { rel: "preload", as: "image", href: "/hero/product-2.webp" },
+    ],
+    scripts: [
+      breadcrumbScript([{ name: "Home", url: SITE_URL + "/" }]),
     ],
   }),
   component: Index,
