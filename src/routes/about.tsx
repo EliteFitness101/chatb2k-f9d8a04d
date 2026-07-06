@@ -1,14 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
-import { pageMeta } from "@/lib/site-meta";
+import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
     meta: pageMeta({
       title: "Authority",
       description: "The ancestral doctrine of ResoFlex™ — codified, verified, globally fulfilled.",
+      url: SITE_URL + "/about",
+      type: "website",
     }),
+    links: [canonicalLink(SITE_URL + "/about")],
+    scripts: [
+      breadcrumbScript([
+        { name: "Home", url: SITE_URL + "/" },
+        { name: "About", url: SITE_URL + "/about" },
+      ]),
+    ],
   }),
   component: AboutPage,
 });
