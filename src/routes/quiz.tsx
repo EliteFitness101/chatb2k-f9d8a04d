@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SiteShell } from "@/components/site/SiteShell";
-import { pageMeta } from "@/lib/site-meta";
+import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 import { products } from "@/lib/catalog";
 
 export const Route = createFileRoute("/quiz")({
@@ -11,7 +11,16 @@ export const Route = createFileRoute("/quiz")({
       title: "Metabolic Reset Quiz",
       description:
         "Three questions. One Bionic Readiness Report. Discover your assigned Overseer and your custom 315 Bundle.",
+      url: SITE_URL + "/quiz",
+      type: "website",
     }),
+    links: [canonicalLink(SITE_URL + "/quiz")],
+    scripts: [
+      breadcrumbScript([
+        { name: "Home", url: SITE_URL + "/" },
+        { name: "Assessment", url: SITE_URL + "/quiz" },
+      ]),
+    ],
   }),
   component: QuizPage,
 });

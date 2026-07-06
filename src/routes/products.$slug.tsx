@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { SiteShell } from "@/components/site/SiteShell";
 import { productBySlug, formatNGN, formatUSD } from "@/lib/catalog";
-import { pageMeta } from "@/lib/site-meta";
+import { pageMeta, breadcrumbScript, SITE_URL } from "@/lib/site-meta";
 import { findGalleryImage, useGalleryBySlot } from "@/hooks/use-gallery";
 import { NigerianEcommerceTrustCheck } from "@/components/site/NigerianEcommerceTrustCheck";
 import { FulfillmentEstimate } from "@/components/site/FulfillmentEstimate";
@@ -55,6 +55,11 @@ export const Route = createFileRoute("/products/$slug")({
               },
             }),
           },
+          breadcrumbScript([
+            { name: "Home", url: SITE_URL + "/" },
+            { name: "Products", url: SITE_URL + "/products" },
+            { name: loaderData.product.title, url: `${SITE_URL}/products/${loaderData.product.slug}` },
+          ]),
         ]
       : [],
   }),

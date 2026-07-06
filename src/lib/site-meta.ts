@@ -43,3 +43,31 @@ export function pageMeta({
   }
   return meta;
 }
+
+/**
+ * BreadcrumbList JSON-LD script entry — one per eligible page.
+ * Pass absolute URLs; caller controls canonical structure.
+ */
+export function breadcrumbScript(
+  items: Array<{ name: string; url: string }>,
+) {
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: items.map((it, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: it.name,
+        item: it.url,
+      })),
+    }),
+  };
+}
+
+export function canonicalLink(url: string) {
+  return { rel: "canonical", href: url };
+}
+
+export const SITE_URL = SITE.url;
