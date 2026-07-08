@@ -1,6 +1,6 @@
 export const SITE = {
   name: "ResoFlex™ Global Sanctuary",
-  url: "https://resoflex-global.lovable.app",
+  url: "https://chatb2k.resofit.fit",
   tagline: "The global mechanical authority.",
   twitterHandle: "@resofit",
   defaultImage:
