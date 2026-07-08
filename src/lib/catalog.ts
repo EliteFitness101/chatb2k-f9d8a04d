@@ -16,6 +16,12 @@ export interface Product {
   highlights: string[];
   weightKg?: number;
   apex?: boolean;
+  /**
+   * When present, checkout routes through Paystack Shop (hosted page) instead
+   * of the inline SDK. Price is authoritative on the hosted page — the local
+   * ngnMinor/usdMinor values are display-only fallbacks.
+   */
+  paystackShopUrl?: string;
 }
 
 export const products: Product[] = [
@@ -144,6 +150,165 @@ products.push({
   badge: "Elite",
   highlights: ["Lifetime access", "Sovereign vault", "Apex protocols"],
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Coach Buchi Iron Authority™ — Paystack Shop registry (external checkout).
+// Prices on the hosted Paystack page are the source of truth; the NGN values
+// below are display fallbacks only. Do not duplicate these slugs elsewhere.
+// ─────────────────────────────────────────────────────────────────────────────
+const coachBuchiRegistry: Product[] = [
+  {
+    slug: "naijafit-tier2-5000",
+    sku: "NF-TIER2-5000",
+    title: "NaijaFit™ Enhanced Wellness Plan",
+    tagline: "Enhanced wellness. Tier 2.",
+    description: "The Enhanced Wellness tier of the NaijaFit™ system.",
+    category: "digital",
+    ngnMinor: 500000,
+    usdMinor: 500,
+    highlights: ["Enhanced protocol", "Instant delivery"],
+    paystackShopUrl: "https://paystack.shop/pay/naijafit-5000",
+  },
+  {
+    slug: "fitness-evolution",
+    sku: "CB-FIT-EVO",
+    title: "Fitness Evolution™",
+    tagline: "The evolution doctrine.",
+    description: "Coach Buchi's flagship fitness evolution programme.",
+    category: "digital",
+    ngnMinor: 1500000,
+    usdMinor: 1500,
+    highlights: ["Structured programme", "Digital delivery"],
+    paystackShopUrl: "https://paystack.shop/pay/fitness-evolution",
+  },
+  {
+    slug: "heritage-meal",
+    sku: "CB-HERITAGE-MEAL",
+    title: "Heritage Meal Protocol",
+    tagline: "Ancestral nutrition, codified.",
+    description: "Heritage meal architecture and macronutrient sequencing.",
+    category: "digital",
+    ngnMinor: 1000000,
+    usdMinor: 1000,
+    highlights: ["Meal plans", "Ancestral fuel framework"],
+    paystackShopUrl: "https://paystack.shop/pay/heritage-meal",
+  },
+  {
+    slug: "buttgrowthb2k",
+    sku: "B2K-CORE",
+    title: "Butt Growth B2K",
+    tagline: "The B2K system.",
+    description: "Coach Buchi's Butt Growth B2K programme.",
+    category: "digital",
+    ngnMinor: 2500000,
+    usdMinor: 2500,
+    highlights: ["B2K methodology", "Digital delivery"],
+    paystackShopUrl: "https://paystack.shop/pay/buttgrowthb2k",
+  },
+  {
+    slug: "rf-expansion-module-blue",
+    sku: "RF-EXP-BLUE",
+    title: "ResoFlex Expansion Module — Blue",
+    tagline: "Expansion module. Blue tier.",
+    description: "ResoFlex expansion add-on — Blue tier module.",
+    category: "iron",
+    ngnMinor: 1500000,
+    usdMinor: 1500,
+    highlights: ["Expansion module", "Blue tier"],
+    paystackShopUrl: "https://paystack.shop/pay/rf-expansion-blue",
+  },
+  {
+    slug: "rf-expansion-module-duo",
+    sku: "RF-EXP-DUO",
+    title: "ResoFlex Expansion Module — Duo",
+    tagline: "Expansion module. Duo.",
+    description: "ResoFlex expansion add-on — Duo configuration.",
+    category: "iron",
+    ngnMinor: 2500000,
+    usdMinor: 2500,
+    highlights: ["Expansion module", "Duo configuration"],
+    paystackShopUrl: "https://paystack.shop/pay/rf-expansion-duo",
+  },
+  {
+    slug: "rf-elite-coaching-30day",
+    sku: "RF-COACH-30",
+    title: "ResoFlex Elite 30-Day Coaching",
+    tagline: "30-day elite coaching cycle.",
+    description: "Thirty days of Elite 1-on-1 coaching with Coach Buchi's team.",
+    category: "coaching",
+    ngnMinor: 15000000,
+    usdMinor: 15000,
+    badge: "Elite",
+    highlights: ["30-day cycle", "1-on-1 coaching", "Weekly check-ins"],
+    paystackShopUrl: "https://paystack.shop/pay/rf-coaching-30",
+  },
+  {
+    slug: "buttgrowthb2k-starter",
+    sku: "B2K-STARTER",
+    title: "B2K Starter Kit",
+    tagline: "Enter the B2K system.",
+    description: "The B2K Starter Kit — first tier of the Butt Growth B2K ladder.",
+    category: "digital",
+    ngnMinor: 1000000,
+    usdMinor: 1000,
+    highlights: ["Entry tier", "Digital delivery"],
+    paystackShopUrl: "https://paystack.shop/pay/b2k-starter",
+  },
+  {
+    slug: "buttgrowthb2k-core",
+    sku: "B2K-CORE-SYS",
+    title: "B2K Core System",
+    tagline: "The core protocol.",
+    description: "The complete B2K Core System.",
+    category: "digital",
+    ngnMinor: 2500000,
+    usdMinor: 2500,
+    highlights: ["Core system", "Full programme"],
+    paystackShopUrl: "https://paystack.shop/pay/b2k-core",
+  },
+  {
+    slug: "buttgrowthb2k-pro",
+    sku: "B2K-PRO",
+    title: "B2K Pro Sculpt System",
+    tagline: "Pro sculpt tier.",
+    description: "The B2K Pro Sculpt System — advanced tier.",
+    category: "digital",
+    ngnMinor: 4500000,
+    usdMinor: 4500,
+    highlights: ["Pro sculpt", "Advanced tier"],
+    paystackShopUrl: "https://paystack.shop/pay/b2k-pro",
+  },
+  {
+    slug: "buttgrowthb2k-elite",
+    sku: "B2K-ELITE-90",
+    title: "B2K Elite 90-Day Transformation",
+    tagline: "90-day elite transformation.",
+    description: "The B2K Elite 90-Day Transformation — top tier of the B2K ladder.",
+    category: "coaching",
+    ngnMinor: 9000000,
+    usdMinor: 9000,
+    badge: "Elite",
+    highlights: ["90-day cycle", "Elite tier", "Full transformation"],
+    paystackShopUrl: "https://paystack.shop/pay/b2k-elite",
+  },
+  {
+    slug: "rf-90day-metabolic-blueprint",
+    sku: "RF-90D-METABOLIC",
+    title: "90-Day Metabolic Blueprint",
+    tagline: "Ninety-day metabolic architecture.",
+    description: "The 90-Day Metabolic Blueprint — Coach Buchi's metabolic doctrine.",
+    category: "digital",
+    ngnMinor: 3500000,
+    usdMinor: 3500,
+    highlights: ["90-day plan", "Metabolic architecture"],
+  },
+];
+
+// Merge guard — refuse to introduce duplicate slugs or SKUs.
+for (const p of coachBuchiRegistry) {
+  if (products.some((x) => x.slug === p.slug || x.sku === p.sku)) continue;
+  products.push(p);
+}
 
 export const productBySlug = (slug: string) =>
   products.find((p) => p.slug === slug);
