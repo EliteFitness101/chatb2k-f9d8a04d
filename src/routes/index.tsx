@@ -410,7 +410,14 @@ function Index() {
             href={TELEGRAM}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => track("telegram_join_click", { surface: "community" })}
+            onClick={() => {
+              try {
+                const k = "rf_telegram_join_click";
+                if (sessionStorage.getItem(k)) return;
+                sessionStorage.setItem(k, "1");
+              } catch {}
+              track("telegram_join_click", { surface: "community" });
+            }}
             className="glass rounded-md p-6 hover:border-[var(--gold)] transition"
           >
             <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Broadcast</div>
