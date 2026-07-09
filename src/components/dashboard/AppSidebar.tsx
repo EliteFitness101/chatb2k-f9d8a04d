@@ -5,7 +5,7 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/candy", label: "Candy Generator", icon: Sparkles },
   { to: "/content-engine", label: "Content Engine", icon: Film },
-  { to: "/growth", label: "Growth Metrics", icon: TrendingUp },
+  { to: "/admin/revenue", label: "Growth Metrics", icon: TrendingUp },
 ] as const;
 
 export function AppSidebar() {
