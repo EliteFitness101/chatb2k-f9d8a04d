@@ -44,6 +44,11 @@ export interface RevenueDashboard {
     top_sku_by_conversions: { product_sku: string; count: number } | null;
     top_sku_by_aov: { product_sku: string; aov_minor: number } | null;
     by_campaign: { utm_source: string; utm_campaign: string; amount_minor: number; count: number }[];
+    assess_to_purchase_rate: number;
+    checkout_completion_rate: number;
+    repeat_purchase_rate: number;
+    referral_revenue_minor: number;
+    referral_orders: number;
   };
   brain: {
     net_revenue_today_minor: number;
