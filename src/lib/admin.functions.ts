@@ -200,6 +200,32 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
     const purchases = today_orders;
     const pct = (a: number, b: number) => (b > 0 ? a / b : 0);
 
+    // Extended KPIs
+    const assess_today = await countEvent("assess");
+    const assess_to_purchase_rate = pct(purchases, assess_today);
+    const checkout_completion_rate = pct(purchases, checkout_starts);
+
+    // Repeat purchase rate + referral revenue across recent (non-refunded) rows
+    const emailCounts = new Map<string, number>();
+    let referral_revenue_minor = 0;
+    let referral_orders = 0;
+    const REFERRAL_SOURCES = new Set(["referral", "whatsapp", "telegram", "community"]);
+    for (const r of allRows ?? []) {
+      if (r.status === "refunded" || r.status === "chargeback") continue;
+      const email = (r.email ?? "").toLowerCase();
+      if (email) emailCounts.set(email, (emailCounts.get(email) ?? 0) + 1);
+      const utm = ((r as { utm?: Record<string, string> | null }).utm ?? {}) as Record<string, string>;
+      const utmSrc = (utm.utm_source ?? "").toLowerCase();
+      const src = (r.source ?? "").toLowerCase();
+      if (REFERRAL_SOURCES.has(utmSrc) || REFERRAL_SOURCES.has(src) || utm.utm_medium === "referral") {
+        referral_revenue_minor += Number(r.amount_minor ?? 0);
+        referral_orders += 1;
+      }
+    }
+    const distinctBuyers = emailCounts.size;
+    const repeatBuyers = [...emailCounts.values()].filter((n) => n > 1).length;
+    const repeat_purchase_rate = distinctBuyers > 0 ? repeatBuyers / distinctBuyers : 0;
+
     // Intelligence
     const top_sku_by_revenue =
       [...byProdMap.entries()]
