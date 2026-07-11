@@ -219,6 +219,25 @@ function AdminRevenue() {
           </Panel>
         </div>
 
+        <div className="mt-6 grid sm:grid-cols-4 gap-4">
+          <StatCard
+            label="Assess → Purchase"
+            value={`${(data.intelligence.assess_to_purchase_rate * 100).toFixed(2)}%`}
+          />
+          <StatCard
+            label="Checkout Completion"
+            value={`${(data.intelligence.checkout_completion_rate * 100).toFixed(2)}%`}
+          />
+          <StatCard
+            label="Repeat Purchase Rate"
+            value={`${(data.intelligence.repeat_purchase_rate * 100).toFixed(2)}%`}
+          />
+          <StatCard
+            label={`Referral Revenue (${data.intelligence.referral_orders})`}
+            value={fmtNGN(data.intelligence.referral_revenue_minor)}
+          />
+        </div>
+
         <div className="mt-6">
           <Panel title="Revenue by UTM Campaign">
             <Table
