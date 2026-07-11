@@ -326,6 +326,11 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
         top_sku_by_conversions,
         top_sku_by_aov,
         by_campaign: [...byCampaignMap.values()].sort((a, b) => b.amount_minor - a.amount_minor).slice(0, 20),
+        assess_to_purchase_rate,
+        checkout_completion_rate,
+        repeat_purchase_rate,
+        referral_revenue_minor,
+        referral_orders,
       },
       brain: {
         net_revenue_today_minor: today_revenue_minor,
