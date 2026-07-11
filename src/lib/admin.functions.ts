@@ -100,6 +100,8 @@ export const getRevenueDashboard = createServerFn({ method: "GET" })
         intelligence: {
           aov_minor: 0, top_sku_by_revenue: null, top_sku_by_conversions: null,
           top_sku_by_aov: null, by_campaign: [],
+          assess_to_purchase_rate: 0, checkout_completion_rate: 0,
+          repeat_purchase_rate: 0, referral_revenue_minor: 0, referral_orders: 0,
         },
         brain: {
           net_revenue_today_minor: 0,
