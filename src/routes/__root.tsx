@@ -40,7 +40,7 @@ export const Route = createRootRoute({
       { name: "author", content: "ResoFlex" },
       { name: "theme-color", content: "#0A0A0A" },
       { property: "og:title", content: "ResoFlex™ — The Global Mechanical Authority" },
-      { property: "og:description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
+      { property: "og:description", content: "ResoFlex™ Global Sanctuary. Cast iron, ancestral doctrine, and white-glove fulfilment from hubs in Nigeria, the United States and Canada." },
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "ResoFlex™" },
       { property: "og:locale", content: "en_US" },
@@ -48,7 +48,9 @@ export const Route = createRootRoute({
       { name: "twitter:site", content: "@resofit" },
       { name: "twitter:creator", content: "@resofit" },
       { name: "twitter:title", content: "ResoFlex™ — The Global Mechanical Authority" },
-      { name: "twitter:description", content: "Global Fitness Hub is a worldwide fitness authority offering physical products, digital assets, and coaching." },
+      { name: "twitter:description", content: "ResoFlex™ Global Sanctuary. Cast iron, ancestral doctrine, and white-glove fulfilment from hubs in Nigeria, the United States and Canada." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6Eau1IDWDDhZUhfxU2V2gQiCmo03/social-images/social-1784203101188-resofit-hero-banner-neural-architekt.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6Eau1IDWDDhZUhfxU2V2gQiCmo03/social-images/social-1784203101188-resofit-hero-banner-neural-architekt.webp" },
     ],
     links: [
       {
