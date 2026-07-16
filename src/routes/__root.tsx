@@ -49,8 +49,8 @@ export const Route = createRootRoute({
       { name: "twitter:creator", content: "@resofit" },
       { name: "twitter:title", content: "ResoFlex™ — The Global Mechanical Authority" },
       { name: "twitter:description", content: "ResoFlex™ Global Sanctuary. Cast iron, ancestral doctrine, and white-glove fulfilment from hubs in Nigeria, the United States and Canada." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6Eau1IDWDDhZUhfxU2V2gQiCmo03/social-images/social-1784203101188-resofit-hero-banner-neural-architekt.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/6Eau1IDWDDhZUhfxU2V2gQiCmo03/social-images/social-1784203101188-resofit-hero-banner-neural-architekt.webp" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/bdcgAbwS2IeBihMh9SoqBMc7zVy1/social-images/social-1784221290838-resoflex-hero-banner-101.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/bdcgAbwS2IeBihMh9SoqBMc7zVy1/social-images/social-1784221290838-resoflex-hero-banner-101.webp" },
     ],
     links: [
       {
@@ -63,6 +63,7 @@ export const Route = createRootRoute({
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap",
       },
+      { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
     ],
     scripts: [
       {
