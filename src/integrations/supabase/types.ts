@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          detail: Json
+          entity: string | null
+          entity_id: string | null
+          id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          entity?: string | null
+          entity_id?: string | null
+          id?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          entity?: string | null
+          entity_id?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       candy_leads: {
         Row: {
           activity: string
@@ -58,6 +88,84 @@ export type Database = {
           weight_kg?: number
         }
         Relationships: []
+      }
+      currency_routes: {
+        Row: {
+          country_code: string
+          created_at: string
+          crypto_threshold_minor: number
+          currency: string
+          id: string
+          rail: string
+          updated_at: string
+        }
+        Insert: {
+          country_code: string
+          created_at?: string
+          crypto_threshold_minor?: number
+          currency: string
+          id?: string
+          rail: string
+          updated_at?: string
+        }
+        Update: {
+          country_code?: string
+          created_at?: string
+          crypto_threshold_minor?: number
+          currency?: string
+          id?: string
+          rail?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      fulfillment_orders: {
+        Row: {
+          created_at: string
+          hub_id: string | null
+          id: string
+          notes: string | null
+          order_id: string
+          status: string
+          tracking_ref: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          hub_id?: string | null
+          id?: string
+          notes?: string | null
+          order_id: string
+          status?: string
+          tracking_ref?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          hub_id?: string | null
+          id?: string
+          notes?: string | null
+          order_id?: string
+          status?: string
+          tracking_ref?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fulfillment_orders_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "hubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fulfillment_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       funnel_events: {
         Row: {
@@ -215,6 +323,51 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_ledger: {
+        Row: {
+          created_at: string
+          delta: number
+          hub_id: string | null
+          id: string
+          order_id: string | null
+          reason: string
+          sku: string
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          hub_id?: string | null
+          id?: string
+          order_id?: string | null
+          reason?: string
+          sku: string
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          hub_id?: string | null
+          id?: string
+          order_id?: string | null
+          reason?: string
+          sku?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_ledger_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "hubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_ledger_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           category: string | null
@@ -305,6 +458,86 @@ export type Database = {
             columns: ["assigned_hub_id"]
             isOneToOne: false
             referencedRelation: "hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_events: {
+        Row: {
+          created_at: string
+          event_key: string
+          event_type: string
+          id: string
+          payload: Json
+          processed_at: string | null
+          provider: string
+          reference: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_key: string
+          event_type: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          provider: string
+          reference?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_key?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          provider?: string
+          reference?: string | null
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount_minor: number
+          created_at: string
+          currency: string
+          id: string
+          metadata: Json
+          order_id: string | null
+          provider: string
+          reference: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_minor: number
+          created_at?: string
+          currency: string
+          id?: string
+          metadata?: Json
+          order_id?: string | null
+          provider: string
+          reference: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_minor?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          metadata?: Json
+          order_id?: string | null
+          provider?: string
+          reference?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -431,6 +664,47 @@ export type Database = {
           sku?: string | null
         }
         Relationships: []
+      }
+      upsell_events: {
+        Row: {
+          accepted: boolean
+          amount_minor: number | null
+          created_at: string
+          id: string
+          offer_sku: string | null
+          order_id: string | null
+          rsid: string | null
+          trigger: string
+        }
+        Insert: {
+          accepted?: boolean
+          amount_minor?: number | null
+          created_at?: string
+          id?: string
+          offer_sku?: string | null
+          order_id?: string | null
+          rsid?: string | null
+          trigger?: string
+        }
+        Update: {
+          accepted?: boolean
+          amount_minor?: number | null
+          created_at?: string
+          id?: string
+          offer_sku?: string | null
+          order_id?: string | null
+          rsid?: string | null
+          trigger?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
