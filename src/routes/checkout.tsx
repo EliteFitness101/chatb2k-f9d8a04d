@@ -97,6 +97,9 @@ function CheckoutPage() {
 
   const isNG = geo?.currency === "NGN";
   const price = isNG ? formatNGN(product.ngnMinor) : formatUSD(product.usdMinor);
+  // High-ticket trigger: crypto settlement is offered on orders above ₦380,000.
+  const HIGH_TICKET_MINOR = 38_000_000;
+  const isHighTicket = product.ngnMinor >= HIGH_TICKET_MINOR;
 
   return (
     <SiteShell>
@@ -156,21 +159,24 @@ function CheckoutPage() {
                 })
               }
             />
-            <RailButton
-              to="/crypto"
-              label="Crypto"
-              note="USDT · BTC · Apex+"
-              onSelect={() =>
-                trackCommerce("add_to_cart", {
-                  product_sku: product.sku,
-                  product_slug: product.slug,
-                  quantity: 1,
-                  value: product.usdMinor / 100,
-                  currency: "USD",
-                  variant: "crypto",
-                })
-              }
-            />
+            {isHighTicket && (
+              <RailButton
+                to="/crypto"
+                label="Crypto"
+                note="USDT · BTC · Apex+ · High-ticket"
+                onSelect={() =>
+                  trackCommerce("add_to_cart", {
+                    product_sku: product.sku,
+                    product_slug: product.slug,
+                    quantity: 1,
+                    value: product.usdMinor / 100,
+                    currency: "USD",
+                    variant: "crypto",
+                    high_ticket: true,
+                  })
+                }
+              />
+            )}
             <RailButton
               to="/selar"
               label="Selar"
@@ -189,6 +195,11 @@ function CheckoutPage() {
           </div>
 
           <div className="mt-8 text-center">
+            {isHighTicket && (
+              <div className="mb-4 text-xs tracking-widest uppercase text-gold">
+                High-ticket order · crypto settlement and concierge fulfilment unlocked
+              </div>
+            )}
             <Link to="/products" className="text-sm text-muted-foreground hover:text-gold">
               ← Change product
             </Link>

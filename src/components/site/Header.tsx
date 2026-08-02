@@ -10,6 +10,9 @@ import { CurrencyBadge } from "./CurrencyBadge";
 const NAV = [
   { to: "/products", key: "nav.arsenal" },
   { to: "/bundles", key: "nav.bundles" },
+  { to: "/programs", key: "nav.programs" },
+  { to: "/elite", key: "nav.elite" },
+  { to: "/chatb2k", key: "nav.chatb2k" },
   { to: "/quiz", key: "nav.quiz" },
   { to: "/hubs", key: "nav.hubs" },
   { to: "/about", key: "nav.about" },
