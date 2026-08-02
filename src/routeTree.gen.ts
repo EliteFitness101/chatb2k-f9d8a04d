@@ -13,13 +13,16 @@ import { Route as SuccessRouteImport } from './routes/success'
 import { Route as ShopifyRouteImport } from './routes/shopify'
 import { Route as SelarRouteImport } from './routes/selar'
 import { Route as QuizRouteImport } from './routes/quiz'
+import { Route as ProgramsRouteImport } from './routes/programs'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PaystackRouteImport } from './routes/paystack'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HubsRouteImport } from './routes/hubs'
 import { Route as EliteCheckoutRouteImport } from './routes/elite-checkout'
+import { Route as EliteRouteImport } from './routes/elite'
 import { Route as CryptoRouteImport } from './routes/crypto'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as Chatb2kRouteImport } from './routes/chatb2k'
 import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
@@ -55,6 +58,11 @@ const QuizRoute = QuizRouteImport.update({
   path: '/quiz',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProgramsRoute = ProgramsRouteImport.update({
+  id: '/programs',
+  path: '/programs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductsRoute = ProductsRouteImport.update({
   id: '/products',
   path: '/products',
@@ -80,6 +88,11 @@ const EliteCheckoutRoute = EliteCheckoutRouteImport.update({
   path: '/elite-checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EliteRoute = EliteRouteImport.update({
+  id: '/elite',
+  path: '/elite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CryptoRoute = CryptoRouteImport.update({
   id: '/crypto',
   path: '/crypto',
@@ -88,6 +101,11 @@ const CryptoRoute = CryptoRouteImport.update({
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Chatb2kRoute = Chatb2kRouteImport.update({
+  id: '/chatb2k',
+  path: '/chatb2k',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BundlesRoute = BundlesRouteImport.update({
@@ -169,13 +187,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
+  '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
+  '/elite': typeof EliteRoute
   '/elite-checkout': typeof EliteCheckoutRoute
   '/hubs': typeof HubsRoute
   '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/programs': typeof ProgramsRoute
   '/quiz': typeof QuizRoute
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
@@ -195,13 +216,16 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
+  '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
+  '/elite': typeof EliteRoute
   '/elite-checkout': typeof EliteCheckoutRoute
   '/hubs': typeof HubsRoute
   '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/programs': typeof ProgramsRoute
   '/quiz': typeof QuizRoute
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
@@ -223,13 +247,16 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
+  '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
+  '/elite': typeof EliteRoute
   '/elite-checkout': typeof EliteCheckoutRoute
   '/hubs': typeof HubsRoute
   '/login': typeof LoginRoute
   '/paystack': typeof PaystackRoute
   '/products': typeof ProductsRouteWithChildren
+  '/programs': typeof ProgramsRoute
   '/quiz': typeof QuizRoute
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
@@ -251,13 +278,16 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/bundles'
+    | '/chatb2k'
     | '/checkout'
     | '/crypto'
+    | '/elite'
     | '/elite-checkout'
     | '/hubs'
     | '/login'
     | '/paystack'
     | '/products'
+    | '/programs'
     | '/quiz'
     | '/selar'
     | '/shopify'
@@ -277,13 +307,16 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/bundles'
+    | '/chatb2k'
     | '/checkout'
     | '/crypto'
+    | '/elite'
     | '/elite-checkout'
     | '/hubs'
     | '/login'
     | '/paystack'
     | '/products'
+    | '/programs'
     | '/quiz'
     | '/selar'
     | '/shopify'
@@ -304,13 +337,16 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/about'
     | '/bundles'
+    | '/chatb2k'
     | '/checkout'
     | '/crypto'
+    | '/elite'
     | '/elite-checkout'
     | '/hubs'
     | '/login'
     | '/paystack'
     | '/products'
+    | '/programs'
     | '/quiz'
     | '/selar'
     | '/shopify'
@@ -332,13 +368,16 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AboutRoute: typeof AboutRoute
   BundlesRoute: typeof BundlesRoute
+  Chatb2kRoute: typeof Chatb2kRoute
   CheckoutRoute: typeof CheckoutRoute
   CryptoRoute: typeof CryptoRoute
+  EliteRoute: typeof EliteRoute
   EliteCheckoutRoute: typeof EliteCheckoutRoute
   HubsRoute: typeof HubsRoute
   LoginRoute: typeof LoginRoute
   PaystackRoute: typeof PaystackRoute
   ProductsRoute: typeof ProductsRouteWithChildren
+  ProgramsRoute: typeof ProgramsRoute
   QuizRoute: typeof QuizRoute
   SelarRoute: typeof SelarRoute
   ShopifyRoute: typeof ShopifyRoute
@@ -378,6 +417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QuizRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/programs': {
+      id: '/programs'
+      path: '/programs'
+      fullPath: '/programs'
+      preLoaderRoute: typeof ProgramsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/products': {
       id: '/products'
       path: '/products'
@@ -413,6 +459,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EliteCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/elite': {
+      id: '/elite'
+      path: '/elite'
+      fullPath: '/elite'
+      preLoaderRoute: typeof EliteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/crypto': {
       id: '/crypto'
       path: '/crypto'
@@ -425,6 +478,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chatb2k': {
+      id: '/chatb2k'
+      path: '/chatb2k'
+      fullPath: '/chatb2k'
+      preLoaderRoute: typeof Chatb2kRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bundles': {
@@ -567,13 +627,16 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AboutRoute: AboutRoute,
   BundlesRoute: BundlesRoute,
+  Chatb2kRoute: Chatb2kRoute,
   CheckoutRoute: CheckoutRoute,
   CryptoRoute: CryptoRoute,
+  EliteRoute: EliteRoute,
   EliteCheckoutRoute: EliteCheckoutRoute,
   HubsRoute: HubsRoute,
   LoginRoute: LoginRoute,
   PaystackRoute: PaystackRoute,
   ProductsRoute: ProductsRouteWithChildren,
+  ProgramsRoute: ProgramsRoute,
   QuizRoute: QuizRoute,
   SelarRoute: SelarRoute,
   ShopifyRoute: ShopifyRoute,
@@ -586,12 +649,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
