@@ -36,7 +36,6 @@ export const submitAssessment = createServerFn({ method: "POST" })
         rsid: data.rsid ?? null,
         email: data.email ?? null,
         status: "completed",
-        source: "chatb2k",
         completed_at: new Date().toISOString(),
       })
       .select("id")
@@ -58,12 +57,12 @@ export const submitAssessment = createServerFn({ method: "POST" })
     await supabaseAdmin.from("health_profiles").insert({
       assessment_id: assessment.id,
       primary_goal: answers.primary_goal,
-      experience: answers.experience,
+      experience_level: answers.experience,
       time_availability: answers.time_availability,
-      budget_range: answers.budget,
+      budget_band: answers.budget,
       mobility_notes: answers.mobility,
-      equipment_profile: { available: answers.equipment } as never,
-      nutrition_profile: { preference: answers.nutrition } as never,
+      equipment_access: answers.equipment,
+      nutrition_preference: answers.nutrition,
     });
 
     await supabaseAdmin.from("recommendation_results").insert({
@@ -75,7 +74,7 @@ export const submitAssessment = createServerFn({ method: "POST" })
       nutrition_sku: result.nutrition_sku,
       upsell_score: result.upsell_score,
       confidence_score: result.confidence_score,
-      payload: result as never,
+      snapshot: result as never,
     });
 
     await publishEvent("AssessmentCompleted", "assessment", assessment.id, {
