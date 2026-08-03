@@ -36,6 +36,10 @@ import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/publi
 import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
 import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
+import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/public/webhooks/paystack'
+import { Route as ApiPublicWebhooksPalmpayRouteImport } from './routes/api/public/webhooks/palmpay'
+import { Route as ApiPublicWebhooksFlutterwaveRouteImport } from './routes/api/public/webhooks/flutterwave'
+import { Route as ApiPublicWebhooksCryptoRouteImport } from './routes/api/public/webhooks/crypto'
 import { Route as ApiPublicHooksCheckoutAbandonmentRouteImport } from './routes/api/public/hooks/checkout-abandonment'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -176,6 +180,29 @@ const AuthenticatedAdminRevenueRoute =
     path: '/admin/revenue',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicWebhooksPaystackRoute =
+  ApiPublicWebhooksPaystackRouteImport.update({
+    id: '/api/public/webhooks/paystack',
+    path: '/api/public/webhooks/paystack',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksPalmpayRoute =
+  ApiPublicWebhooksPalmpayRouteImport.update({
+    id: '/api/public/webhooks/palmpay',
+    path: '/api/public/webhooks/palmpay',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksFlutterwaveRoute =
+  ApiPublicWebhooksFlutterwaveRouteImport.update({
+    id: '/api/public/webhooks/flutterwave',
+    path: '/api/public/webhooks/flutterwave',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksCryptoRoute = ApiPublicWebhooksCryptoRouteImport.update({
+  id: '/api/public/webhooks/crypto',
+  path: '/api/public/webhooks/crypto',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksCheckoutAbandonmentRoute =
   ApiPublicHooksCheckoutAbandonmentRouteImport.update({
     id: '/api/public/hooks/checkout-abandonment',
@@ -211,6 +238,10 @@ export interface FileRoutesByFullPath {
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
+  '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
+  '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
+  '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -240,6 +271,10 @@ export interface FileRoutesByTo {
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
+  '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
+  '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
+  '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -271,6 +306,10 @@ export interface FileRoutesById {
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
+  '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
+  '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
+  '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -302,6 +341,10 @@ export interface FileRouteTypes {
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/webhooks/crypto'
+    | '/api/public/webhooks/flutterwave'
+    | '/api/public/webhooks/palmpay'
+    | '/api/public/webhooks/paystack'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -331,6 +374,10 @@ export interface FileRouteTypes {
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/webhooks/crypto'
+    | '/api/public/webhooks/flutterwave'
+    | '/api/public/webhooks/palmpay'
+    | '/api/public/webhooks/paystack'
   id:
     | '__root__'
     | '/'
@@ -361,6 +408,10 @@ export interface FileRouteTypes {
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/webhooks/crypto'
+    | '/api/public/webhooks/flutterwave'
+    | '/api/public/webhooks/palmpay'
+    | '/api/public/webhooks/paystack'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -385,6 +436,10 @@ export interface RootRouteChildren {
   ApiPublicFunnelEventRoute: typeof ApiPublicFunnelEventRoute
   ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
   ApiPublicHooksCheckoutAbandonmentRoute: typeof ApiPublicHooksCheckoutAbandonmentRoute
+  ApiPublicWebhooksCryptoRoute: typeof ApiPublicWebhooksCryptoRoute
+  ApiPublicWebhooksFlutterwaveRoute: typeof ApiPublicWebhooksFlutterwaveRoute
+  ApiPublicWebhooksPalmpayRoute: typeof ApiPublicWebhooksPalmpayRoute
+  ApiPublicWebhooksPaystackRoute: typeof ApiPublicWebhooksPaystackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -578,6 +633,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRevenueRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/webhooks/paystack': {
+      id: '/api/public/webhooks/paystack'
+      path: '/api/public/webhooks/paystack'
+      fullPath: '/api/public/webhooks/paystack'
+      preLoaderRoute: typeof ApiPublicWebhooksPaystackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/palmpay': {
+      id: '/api/public/webhooks/palmpay'
+      path: '/api/public/webhooks/palmpay'
+      fullPath: '/api/public/webhooks/palmpay'
+      preLoaderRoute: typeof ApiPublicWebhooksPalmpayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/flutterwave': {
+      id: '/api/public/webhooks/flutterwave'
+      path: '/api/public/webhooks/flutterwave'
+      fullPath: '/api/public/webhooks/flutterwave'
+      preLoaderRoute: typeof ApiPublicWebhooksFlutterwaveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/crypto': {
+      id: '/api/public/webhooks/crypto'
+      path: '/api/public/webhooks/crypto'
+      fullPath: '/api/public/webhooks/crypto'
+      preLoaderRoute: typeof ApiPublicWebhooksCryptoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/checkout-abandonment': {
       id: '/api/public/hooks/checkout-abandonment'
       path: '/api/public/hooks/checkout-abandonment'
@@ -645,16 +728,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPaystackWebhookRoute: ApiPublicPaystackWebhookRoute,
   ApiPublicHooksCheckoutAbandonmentRoute:
     ApiPublicHooksCheckoutAbandonmentRoute,
+  ApiPublicWebhooksCryptoRoute: ApiPublicWebhooksCryptoRoute,
+  ApiPublicWebhooksFlutterwaveRoute: ApiPublicWebhooksFlutterwaveRoute,
+  ApiPublicWebhooksPalmpayRoute: ApiPublicWebhooksPalmpayRoute,
+  ApiPublicWebhooksPaystackRoute: ApiPublicWebhooksPaystackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

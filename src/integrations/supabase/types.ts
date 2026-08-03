@@ -14,6 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      assessment_answers: {
+        Row: {
+          answer_meta: Json
+          answer_value: string
+          assessment_id: string
+          created_at: string
+          id: string
+          question_key: string
+        }
+        Insert: {
+          answer_meta?: Json
+          answer_value: string
+          assessment_id: string
+          created_at?: string
+          id?: string
+          question_key: string
+        }
+        Update: {
+          answer_meta?: Json
+          answer_value?: string
+          assessment_id?: string
+          created_at?: string
+          id?: string
+          question_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_answers_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assessments: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          email: string | null
+          id: string
+          rsid: string | null
+          session_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          rsid?: string | null
+          session_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          rsid?: string | null
+          session_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -95,8 +166,12 @@ export type Database = {
           created_at: string
           crypto_threshold_minor: number
           currency: string
+          hub_tier: string | null
           id: string
+          is_default: boolean
+          provider: string | null
           rail: string
+          region: string | null
           updated_at: string
         }
         Insert: {
@@ -104,8 +179,12 @@ export type Database = {
           created_at?: string
           crypto_threshold_minor?: number
           currency: string
+          hub_tier?: string | null
           id?: string
+          is_default?: boolean
+          provider?: string | null
           rail: string
+          region?: string | null
           updated_at?: string
         }
         Update: {
@@ -113,11 +192,83 @@ export type Database = {
           created_at?: string
           crypto_threshold_minor?: number
           currency?: string
+          hub_tier?: string | null
           id?: string
+          is_default?: boolean
+          provider?: string | null
           rail?: string
+          region?: string | null
           updated_at?: string
         }
         Relationships: []
+      }
+      domain_events: {
+        Row: {
+          aggregate: string
+          aggregate_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          processed_at: string | null
+        }
+        Insert: {
+          aggregate: string
+          aggregate_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+        }
+        Update: {
+          aggregate?: string
+          aggregate_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+        }
+        Relationships: []
+      }
+      fulfillment_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          detail: Json
+          from_status: string | null
+          fulfillment_order_id: string
+          id: string
+          to_status: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          from_status?: string | null
+          fulfillment_order_id: string
+          id?: string
+          to_status: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          from_status?: string | null
+          fulfillment_order_id?: string
+          id?: string
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fulfillment_events_fulfillment_order_id_fkey"
+            columns: ["fulfillment_order_id"]
+            isOneToOne: false
+            referencedRelation: "fulfillment_orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fulfillment_orders: {
         Row: {
@@ -284,6 +435,62 @@ export type Database = {
         }
         Relationships: []
       }
+      health_profiles: {
+        Row: {
+          assessment_id: string | null
+          budget_band: string | null
+          created_at: string
+          equipment_access: string | null
+          experience_level: string | null
+          id: string
+          mobility_notes: string | null
+          nutrition_preference: string | null
+          primary_goal: string | null
+          time_availability: string | null
+          updated_at: string
+          user_id: string | null
+          weight_kg: number | null
+        }
+        Insert: {
+          assessment_id?: string | null
+          budget_band?: string | null
+          created_at?: string
+          equipment_access?: string | null
+          experience_level?: string | null
+          id?: string
+          mobility_notes?: string | null
+          nutrition_preference?: string | null
+          primary_goal?: string | null
+          time_availability?: string | null
+          updated_at?: string
+          user_id?: string | null
+          weight_kg?: number | null
+        }
+        Update: {
+          assessment_id?: string | null
+          budget_band?: string | null
+          created_at?: string
+          equipment_access?: string | null
+          experience_level?: string | null
+          id?: string
+          mobility_notes?: string | null
+          nutrition_preference?: string | null
+          primary_goal?: string | null
+          time_availability?: string | null
+          updated_at?: string
+          user_id?: string | null
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_profiles_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hubs: {
         Row: {
           address: string
@@ -322,6 +529,47 @@ export type Database = {
           tier?: string
         }
         Relationships: []
+      }
+      inventory_items: {
+        Row: {
+          created_at: string
+          hub_id: string
+          id: string
+          on_hand: number
+          reorder_level: number
+          reserved: number
+          sku: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          hub_id: string
+          id?: string
+          on_hand?: number
+          reorder_level?: number
+          reserved?: number
+          sku: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          hub_id?: string
+          id?: string
+          on_hand?: number
+          reorder_level?: number
+          reserved?: number
+          sku?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "hubs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inventory_ledger: {
         Row: {
@@ -495,6 +743,42 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_providers: {
+        Row: {
+          code: string
+          created_at: string
+          display_name: string
+          enabled: boolean
+          live: boolean
+          sort_order: number
+          supported_currencies: string[]
+          updated_at: string
+          webhook_path: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          display_name: string
+          enabled?: boolean
+          live?: boolean
+          sort_order?: number
+          supported_currencies?: string[]
+          updated_at?: string
+          webhook_path?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          display_name?: string
+          enabled?: boolean
+          live?: boolean
+          sort_order?: number
+          supported_currencies?: string[]
+          updated_at?: string
+          webhook_path?: string | null
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount_minor: number
@@ -574,6 +858,59 @@ export type Database = {
           xp?: number
         }
         Relationships: []
+      }
+      recommendation_results: {
+        Row: {
+          assessment_id: string
+          confidence_score: number
+          created_at: string
+          engine_version: string
+          equipment_skus: string[]
+          id: string
+          membership_sku: string | null
+          nutrition_sku: string | null
+          primary_program_sku: string | null
+          snapshot: Json
+          upsell_score: number
+          user_id: string | null
+        }
+        Insert: {
+          assessment_id: string
+          confidence_score?: number
+          created_at?: string
+          engine_version?: string
+          equipment_skus?: string[]
+          id?: string
+          membership_sku?: string | null
+          nutrition_sku?: string | null
+          primary_program_sku?: string | null
+          snapshot?: Json
+          upsell_score?: number
+          user_id?: string | null
+        }
+        Update: {
+          assessment_id?: string
+          confidence_score?: number
+          created_at?: string
+          engine_version?: string
+          equipment_skus?: string[]
+          id?: string
+          membership_sku?: string | null
+          nutrition_sku?: string | null
+          primary_program_sku?: string | null
+          snapshot?: Json
+          upsell_score?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_results_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       revenue_events: {
         Row: {
