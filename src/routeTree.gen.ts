@@ -36,6 +36,7 @@ import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/publi
 import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
 import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
+import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/public/webhooks/paystack'
 import { Route as ApiPublicHooksCheckoutAbandonmentRouteImport } from './routes/api/public/hooks/checkout-abandonment'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -176,6 +177,12 @@ const AuthenticatedAdminRevenueRoute =
     path: '/admin/revenue',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicWebhooksPaystackRoute =
+  ApiPublicWebhooksPaystackRouteImport.update({
+    id: '/api/public/webhooks/paystack',
+    path: '/api/public/webhooks/paystack',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksCheckoutAbandonmentRoute =
   ApiPublicHooksCheckoutAbandonmentRouteImport.update({
     id: '/api/public/hooks/checkout-abandonment',
@@ -211,6 +218,7 @@ export interface FileRoutesByFullPath {
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -240,6 +248,7 @@ export interface FileRoutesByTo {
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -271,6 +280,7 @@ export interface FileRoutesById {
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -302,6 +312,7 @@ export interface FileRouteTypes {
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/webhooks/paystack'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -331,6 +342,7 @@ export interface FileRouteTypes {
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/webhooks/paystack'
   id:
     | '__root__'
     | '/'
@@ -361,6 +373,7 @@ export interface FileRouteTypes {
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/webhooks/paystack'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -385,6 +398,7 @@ export interface RootRouteChildren {
   ApiPublicFunnelEventRoute: typeof ApiPublicFunnelEventRoute
   ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
   ApiPublicHooksCheckoutAbandonmentRoute: typeof ApiPublicHooksCheckoutAbandonmentRoute
+  ApiPublicWebhooksPaystackRoute: typeof ApiPublicWebhooksPaystackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -578,6 +592,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRevenueRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/webhooks/paystack': {
+      id: '/api/public/webhooks/paystack'
+      path: '/api/public/webhooks/paystack'
+      fullPath: '/api/public/webhooks/paystack'
+      preLoaderRoute: typeof ApiPublicWebhooksPaystackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/checkout-abandonment': {
       id: '/api/public/hooks/checkout-abandonment'
       path: '/api/public/hooks/checkout-abandonment'
@@ -645,6 +666,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPaystackWebhookRoute: ApiPublicPaystackWebhookRoute,
   ApiPublicHooksCheckoutAbandonmentRoute:
     ApiPublicHooksCheckoutAbandonmentRoute,
+  ApiPublicWebhooksPaystackRoute: ApiPublicWebhooksPaystackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
