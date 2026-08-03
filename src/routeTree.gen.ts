@@ -22,6 +22,7 @@ import { Route as EliteCheckoutRouteImport } from './routes/elite-checkout'
 import { Route as EliteRouteImport } from './routes/elite'
 import { Route as CryptoRouteImport } from './routes/crypto'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as Chatb2kRouteImport } from './routes/chatb2k'
 import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
@@ -104,6 +105,11 @@ const CryptoRoute = CryptoRouteImport.update({
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Chatb2kRoute = Chatb2kRouteImport.update({
+  id: '/chatb2k',
+  path: '/chatb2k',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BundlesRoute = BundlesRouteImport.update({
@@ -208,6 +214,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
+  '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
   '/elite': typeof EliteRoute
@@ -240,6 +247,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
+  '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
   '/elite': typeof EliteRoute
@@ -274,6 +282,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/about': typeof AboutRoute
   '/bundles': typeof BundlesRoute
+  '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
   '/crypto': typeof CryptoRoute
   '/elite': typeof EliteRoute
@@ -308,6 +317,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/bundles'
+    | '/chatb2k'
     | '/checkout'
     | '/crypto'
     | '/elite'
@@ -340,6 +350,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/bundles'
+    | '/chatb2k'
     | '/checkout'
     | '/crypto'
     | '/elite'
@@ -373,6 +384,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/about'
     | '/bundles'
+    | '/chatb2k'
     | '/checkout'
     | '/crypto'
     | '/elite'
@@ -407,6 +419,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AboutRoute: typeof AboutRoute
   BundlesRoute: typeof BundlesRoute
+  Chatb2kRoute: typeof Chatb2kRoute
   CheckoutRoute: typeof CheckoutRoute
   CryptoRoute: typeof CryptoRoute
   EliteRoute: typeof EliteRoute
@@ -520,6 +533,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chatb2k': {
+      id: '/chatb2k'
+      path: '/chatb2k'
+      fullPath: '/chatb2k'
+      preLoaderRoute: typeof Chatb2kRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bundles': {
@@ -690,6 +710,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AboutRoute: AboutRoute,
   BundlesRoute: BundlesRoute,
+  Chatb2kRoute: Chatb2kRoute,
   CheckoutRoute: CheckoutRoute,
   CryptoRoute: CryptoRoute,
   EliteRoute: EliteRoute,
