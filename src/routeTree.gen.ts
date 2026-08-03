@@ -37,6 +37,7 @@ import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/fu
 import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
 import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/public/webhooks/paystack'
+import { Route as ApiPublicWebhooksPalmpayRouteImport } from './routes/api/public/webhooks/palmpay'
 import { Route as ApiPublicWebhooksFlutterwaveRouteImport } from './routes/api/public/webhooks/flutterwave'
 import { Route as ApiPublicHooksCheckoutAbandonmentRouteImport } from './routes/api/public/hooks/checkout-abandonment'
 
@@ -184,6 +185,12 @@ const ApiPublicWebhooksPaystackRoute =
     path: '/api/public/webhooks/paystack',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicWebhooksPalmpayRoute =
+  ApiPublicWebhooksPalmpayRouteImport.update({
+    id: '/api/public/webhooks/palmpay',
+    path: '/api/public/webhooks/palmpay',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicWebhooksFlutterwaveRoute =
   ApiPublicWebhooksFlutterwaveRouteImport.update({
     id: '/api/public/webhooks/flutterwave',
@@ -226,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
+  '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
   '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRoutesByTo {
@@ -257,6 +265,7 @@ export interface FileRoutesByTo {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
+  '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
   '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRoutesById {
@@ -290,6 +299,7 @@ export interface FileRoutesById {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
+  '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
   '/api/public/webhooks/paystack': typeof ApiPublicWebhooksPaystackRoute
 }
 export interface FileRouteTypes {
@@ -323,6 +333,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/flutterwave'
+    | '/api/public/webhooks/palmpay'
     | '/api/public/webhooks/paystack'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -354,6 +365,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/flutterwave'
+    | '/api/public/webhooks/palmpay'
     | '/api/public/webhooks/paystack'
   id:
     | '__root__'
@@ -386,6 +398,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/flutterwave'
+    | '/api/public/webhooks/palmpay'
     | '/api/public/webhooks/paystack'
   fileRoutesById: FileRoutesById
 }
@@ -412,6 +425,7 @@ export interface RootRouteChildren {
   ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
   ApiPublicHooksCheckoutAbandonmentRoute: typeof ApiPublicHooksCheckoutAbandonmentRoute
   ApiPublicWebhooksFlutterwaveRoute: typeof ApiPublicWebhooksFlutterwaveRoute
+  ApiPublicWebhooksPalmpayRoute: typeof ApiPublicWebhooksPalmpayRoute
   ApiPublicWebhooksPaystackRoute: typeof ApiPublicWebhooksPaystackRoute
 }
 
@@ -613,6 +627,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhooksPaystackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/webhooks/palmpay': {
+      id: '/api/public/webhooks/palmpay'
+      path: '/api/public/webhooks/palmpay'
+      fullPath: '/api/public/webhooks/palmpay'
+      preLoaderRoute: typeof ApiPublicWebhooksPalmpayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/webhooks/flutterwave': {
       id: '/api/public/webhooks/flutterwave'
       path: '/api/public/webhooks/flutterwave'
@@ -688,6 +709,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksCheckoutAbandonmentRoute:
     ApiPublicHooksCheckoutAbandonmentRoute,
   ApiPublicWebhooksFlutterwaveRoute: ApiPublicWebhooksFlutterwaveRoute,
+  ApiPublicWebhooksPalmpayRoute: ApiPublicWebhooksPalmpayRoute,
   ApiPublicWebhooksPaystackRoute: ApiPublicWebhooksPaystackRoute,
 }
 export const routeTree = rootRouteImport
