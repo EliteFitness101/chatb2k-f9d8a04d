@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { getRevenueDashboard } from "@/lib/admin.functions";
 
@@ -33,29 +32,29 @@ function AdminRevenue() {
 
   if (isLoading) {
     return (
-      <SiteShell>
+      <>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-20 text-center text-gold/80 tracking-[0.3em] uppercase text-xs animate-pulse">
           Loading dashboard…
         </div>
-      </SiteShell>
+      </>
     );
   }
 
   if (error || !data || !data.ok) {
     return (
-      <SiteShell>
+      <>
         <div className="mx-auto max-w-3xl px-4 sm:px-6 py-20 text-center">
           <h1 className="font-display text-3xl">Forbidden</h1>
           <p className="text-muted-foreground mt-2 text-sm">
             {data?.error ?? "Admin access required."}
           </p>
         </div>
-      </SiteShell>
+      </>
     );
   }
 
   return (
-    <SiteShell>
+    <>
       <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-12 pb-20">
         <SectionHeading
           eyebrow="Revenue OS"
@@ -252,7 +251,7 @@ function AdminRevenue() {
           </Panel>
         </div>
       </section>
-    </SiteShell>
+    </>
   );
 }
 
