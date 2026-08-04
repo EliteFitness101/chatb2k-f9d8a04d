@@ -32,10 +32,19 @@ import { Route as AuthenticatedGalleryRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedContentEngineRouteImport } from './routes/_authenticated/content-engine'
 import { Route as AuthenticatedCandyRouteImport } from './routes/_authenticated/candy'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
 import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
+import { Route as AuthenticatedAdminPaymentsRouteImport } from './routes/_authenticated/admin.payments'
+import { Route as AuthenticatedAdminOrdersRouteImport } from './routes/_authenticated/admin.orders'
+import { Route as AuthenticatedAdminInventoryRouteImport } from './routes/_authenticated/admin.inventory'
+import { Route as AuthenticatedAdminFulfillmentRouteImport } from './routes/_authenticated/admin.fulfillment'
+import { Route as AuthenticatedAdminCustomersRouteImport } from './routes/_authenticated/admin.customers'
+import { Route as AuthenticatedAdminComplianceRouteImport } from './routes/_authenticated/admin.compliance'
+import { Route as AuthenticatedAdminChatb2kRouteImport } from './routes/_authenticated/admin.chatb2k'
 import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/public/webhooks/paystack'
 import { Route as ApiPublicWebhooksPalmpayRouteImport } from './routes/api/public/webhooks/palmpay'
 import { Route as ApiPublicWebhooksFlutterwaveRouteImport } from './routes/api/public/webhooks/flutterwave'
@@ -157,6 +166,16 @@ const AuthenticatedCandyRoute = AuthenticatedCandyRouteImport.update({
   path: '/candy',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
 const ApiPublicPaystackWebhookRoute =
   ApiPublicPaystackWebhookRouteImport.update({
     id: '/api/public/paystack-webhook',
@@ -170,15 +189,57 @@ const ApiPublicFunnelEventRoute = ApiPublicFunnelEventRouteImport.update({
 } as any)
 const AuthenticatedAdminRevenueAiRoute =
   AuthenticatedAdminRevenueAiRouteImport.update({
-    id: '/admin/revenue-ai',
-    path: '/admin/revenue-ai',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/revenue-ai',
+    path: '/revenue-ai',
+    getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAdminRevenueRoute =
   AuthenticatedAdminRevenueRouteImport.update({
-    id: '/admin/revenue',
-    path: '/admin/revenue',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/revenue',
+    path: '/revenue',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminPaymentsRoute =
+  AuthenticatedAdminPaymentsRouteImport.update({
+    id: '/payments',
+    path: '/payments',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminOrdersRoute =
+  AuthenticatedAdminOrdersRouteImport.update({
+    id: '/orders',
+    path: '/orders',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminInventoryRoute =
+  AuthenticatedAdminInventoryRouteImport.update({
+    id: '/inventory',
+    path: '/inventory',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminFulfillmentRoute =
+  AuthenticatedAdminFulfillmentRouteImport.update({
+    id: '/fulfillment',
+    path: '/fulfillment',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminCustomersRoute =
+  AuthenticatedAdminCustomersRouteImport.update({
+    id: '/customers',
+    path: '/customers',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminComplianceRoute =
+  AuthenticatedAdminComplianceRouteImport.update({
+    id: '/compliance',
+    path: '/compliance',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminChatb2kRoute =
+  AuthenticatedAdminChatb2kRouteImport.update({
+    id: '/chatb2k',
+    path: '/chatb2k',
+    getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const ApiPublicWebhooksPaystackRoute =
   ApiPublicWebhooksPaystackRouteImport.update({
@@ -228,15 +289,24 @@ export interface FileRoutesByFullPath {
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/candy': typeof AuthenticatedCandyRoute
   '/content-engine': typeof AuthenticatedContentEngineRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/admin/chatb2k': typeof AuthenticatedAdminChatb2kRoute
+  '/admin/compliance': typeof AuthenticatedAdminComplianceRoute
+  '/admin/customers': typeof AuthenticatedAdminCustomersRoute
+  '/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
+  '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
+  '/admin/orders': typeof AuthenticatedAdminOrdersRoute
+  '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
@@ -266,10 +336,18 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/admin/chatb2k': typeof AuthenticatedAdminChatb2kRoute
+  '/admin/compliance': typeof AuthenticatedAdminComplianceRoute
+  '/admin/customers': typeof AuthenticatedAdminCustomersRoute
+  '/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
+  '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
+  '/admin/orders': typeof AuthenticatedAdminOrdersRoute
+  '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
@@ -296,15 +374,24 @@ export interface FileRoutesById {
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/candy': typeof AuthenticatedCandyRoute
   '/_authenticated/content-engine': typeof AuthenticatedContentEngineRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/_authenticated/admin/chatb2k': typeof AuthenticatedAdminChatb2kRoute
+  '/_authenticated/admin/compliance': typeof AuthenticatedAdminComplianceRoute
+  '/_authenticated/admin/customers': typeof AuthenticatedAdminCustomersRoute
+  '/_authenticated/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
+  '/_authenticated/admin/inventory': typeof AuthenticatedAdminInventoryRoute
+  '/_authenticated/admin/orders': typeof AuthenticatedAdminOrdersRoute
+  '/_authenticated/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/_authenticated/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/_authenticated/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
@@ -331,15 +418,24 @@ export interface FileRouteTypes {
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/admin'
     | '/candy'
     | '/content-engine'
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
+    | '/admin/chatb2k'
+    | '/admin/compliance'
+    | '/admin/customers'
+    | '/admin/fulfillment'
+    | '/admin/inventory'
+    | '/admin/orders'
+    | '/admin/payments'
     | '/admin/revenue'
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/admin/'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
@@ -369,10 +465,18 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
+    | '/admin/chatb2k'
+    | '/admin/compliance'
+    | '/admin/customers'
+    | '/admin/fulfillment'
+    | '/admin/inventory'
+    | '/admin/orders'
+    | '/admin/payments'
     | '/admin/revenue'
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/admin'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
@@ -398,15 +502,24 @@ export interface FileRouteTypes {
     | '/selar'
     | '/shopify'
     | '/success'
+    | '/_authenticated/admin'
     | '/_authenticated/candy'
     | '/_authenticated/content-engine'
     | '/_authenticated/dashboard'
     | '/_authenticated/gallery'
     | '/products/$slug'
+    | '/_authenticated/admin/chatb2k'
+    | '/_authenticated/admin/compliance'
+    | '/_authenticated/admin/customers'
+    | '/_authenticated/admin/fulfillment'
+    | '/_authenticated/admin/inventory'
+    | '/_authenticated/admin/orders'
+    | '/_authenticated/admin/payments'
     | '/_authenticated/admin/revenue'
     | '/_authenticated/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/_authenticated/admin/'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
@@ -605,6 +718,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCandyRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/api/public/paystack-webhook': {
       id: '/api/public/paystack-webhook'
       path: '/api/public/paystack-webhook'
@@ -621,17 +748,66 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/admin/revenue-ai': {
       id: '/_authenticated/admin/revenue-ai'
-      path: '/admin/revenue-ai'
+      path: '/revenue-ai'
       fullPath: '/admin/revenue-ai'
       preLoaderRoute: typeof AuthenticatedAdminRevenueAiRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedAdminRoute
     }
     '/_authenticated/admin/revenue': {
       id: '/_authenticated/admin/revenue'
-      path: '/admin/revenue'
+      path: '/revenue'
       fullPath: '/admin/revenue'
       preLoaderRoute: typeof AuthenticatedAdminRevenueRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/payments': {
+      id: '/_authenticated/admin/payments'
+      path: '/payments'
+      fullPath: '/admin/payments'
+      preLoaderRoute: typeof AuthenticatedAdminPaymentsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/orders': {
+      id: '/_authenticated/admin/orders'
+      path: '/orders'
+      fullPath: '/admin/orders'
+      preLoaderRoute: typeof AuthenticatedAdminOrdersRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/inventory': {
+      id: '/_authenticated/admin/inventory'
+      path: '/inventory'
+      fullPath: '/admin/inventory'
+      preLoaderRoute: typeof AuthenticatedAdminInventoryRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/fulfillment': {
+      id: '/_authenticated/admin/fulfillment'
+      path: '/fulfillment'
+      fullPath: '/admin/fulfillment'
+      preLoaderRoute: typeof AuthenticatedAdminFulfillmentRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/customers': {
+      id: '/_authenticated/admin/customers'
+      path: '/customers'
+      fullPath: '/admin/customers'
+      preLoaderRoute: typeof AuthenticatedAdminCustomersRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/compliance': {
+      id: '/_authenticated/admin/compliance'
+      path: '/compliance'
+      fullPath: '/admin/compliance'
+      preLoaderRoute: typeof AuthenticatedAdminComplianceRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/chatb2k': {
+      id: '/_authenticated/admin/chatb2k'
+      path: '/chatb2k'
+      fullPath: '/admin/chatb2k'
+      preLoaderRoute: typeof AuthenticatedAdminChatb2kRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
     }
     '/api/public/webhooks/paystack': {
       id: '/api/public/webhooks/paystack'
@@ -671,22 +847,49 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminChatb2kRoute: typeof AuthenticatedAdminChatb2kRoute
+  AuthenticatedAdminComplianceRoute: typeof AuthenticatedAdminComplianceRoute
+  AuthenticatedAdminCustomersRoute: typeof AuthenticatedAdminCustomersRoute
+  AuthenticatedAdminFulfillmentRoute: typeof AuthenticatedAdminFulfillmentRoute
+  AuthenticatedAdminInventoryRoute: typeof AuthenticatedAdminInventoryRoute
+  AuthenticatedAdminOrdersRoute: typeof AuthenticatedAdminOrdersRoute
+  AuthenticatedAdminPaymentsRoute: typeof AuthenticatedAdminPaymentsRoute
+  AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
+  AuthenticatedAdminRevenueAiRoute: typeof AuthenticatedAdminRevenueAiRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+}
+
+const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminChatb2kRoute: AuthenticatedAdminChatb2kRoute,
+  AuthenticatedAdminComplianceRoute: AuthenticatedAdminComplianceRoute,
+  AuthenticatedAdminCustomersRoute: AuthenticatedAdminCustomersRoute,
+  AuthenticatedAdminFulfillmentRoute: AuthenticatedAdminFulfillmentRoute,
+  AuthenticatedAdminInventoryRoute: AuthenticatedAdminInventoryRoute,
+  AuthenticatedAdminOrdersRoute: AuthenticatedAdminOrdersRoute,
+  AuthenticatedAdminPaymentsRoute: AuthenticatedAdminPaymentsRoute,
+  AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
+  AuthenticatedAdminRevenueAiRoute: AuthenticatedAdminRevenueAiRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+}
+
+const AuthenticatedAdminRouteWithChildren =
+  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
+
 interface AuthenticatedRouteChildren {
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedCandyRoute: typeof AuthenticatedCandyRoute
   AuthenticatedContentEngineRoute: typeof AuthenticatedContentEngineRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedGalleryRoute: typeof AuthenticatedGalleryRoute
-  AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
-  AuthenticatedAdminRevenueAiRoute: typeof AuthenticatedAdminRevenueAiRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedCandyRoute: AuthenticatedCandyRoute,
   AuthenticatedContentEngineRoute: AuthenticatedContentEngineRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedGalleryRoute: AuthenticatedGalleryRoute,
-  AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
-  AuthenticatedAdminRevenueAiRoute: AuthenticatedAdminRevenueAiRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -736,12 +939,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

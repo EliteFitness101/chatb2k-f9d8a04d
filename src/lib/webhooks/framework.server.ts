@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { publishEvent, audit } from "@/lib/events.server";
 import { allocateOrder } from "@/lib/fulfillment.server";
+import { raiseAlert } from "@/lib/alerts.server";
 
 /** Canonical payment lifecycle shared across every provider adapter. */
 export type PaymentStatus =
@@ -64,6 +65,14 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
   }
   if (!valid) {
     await publishEvent("WebhookRejected", "payment", null, { provider: adapter.code });
+    await raiseAlert(
+      "critical",
+      "webhook",
+      `Rejected ${adapter.code} webhook (invalid signature)`,
+      { provider: adapter.code },
+      "payment_provider",
+      adapter.code,
+    );
     return new Response("Invalid signature", { status: 401 });
   }
 
@@ -162,6 +171,17 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
   // 8. Trigger fulfillment.
   if (event.type === "paid" && order?.id) {
     await allocateOrder(order.id);
+  }
+
+  if (event.type === "failed") {
+    await raiseAlert(
+      "warning",
+      "payment",
+      `Payment failed on ${adapter.code}`,
+      { reference: event.reference, amount_minor: event.amountMinor },
+      "order",
+      event.reference,
+    );
   }
 
   // 9. Notify customer / downstream automation.

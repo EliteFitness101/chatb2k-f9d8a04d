@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_role_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["admin_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["admin_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["admin_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      admin_role_permissions: {
+        Row: {
+          created_at: string
+          id: string
+          permission: Database["public"]["Enums"]["admin_permission"]
+          role: Database["public"]["Enums"]["admin_role"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permission: Database["public"]["Enums"]["admin_permission"]
+          role: Database["public"]["Enums"]["admin_role"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permission?: Database["public"]["Enums"]["admin_permission"]
+          role?: Database["public"]["Enums"]["admin_role"]
+        }
+        Relationships: []
+      }
       assessment_answers: {
         Row: {
           answer_meta: Json
@@ -616,6 +658,54 @@ export type Database = {
           },
         ]
       }
+      ops_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          assigned_to: string | null
+          category: string
+          created_at: string
+          detail: Json
+          entity: string | null
+          entity_id: string | null
+          id: string
+          level: string
+          resolved_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          assigned_to?: string | null
+          category: string
+          created_at?: string
+          detail?: Json
+          entity?: string | null
+          entity_id?: string | null
+          id?: string
+          level?: string
+          resolved_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          assigned_to?: string | null
+          category?: string
+          created_at?: string
+          detail?: Json
+          entity?: string | null
+          entity_id?: string | null
+          id?: string
+          level?: string
+          resolved_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           category: string | null
@@ -1096,6 +1186,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      has_permission: {
+        Args: {
+          _permission: Database["public"]["Enums"]["admin_permission"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1105,6 +1202,31 @@ export type Database = {
       }
     }
     Enums: {
+      admin_permission:
+        | "orders.read"
+        | "orders.write"
+        | "payments.read"
+        | "payments.manage"
+        | "inventory.read"
+        | "inventory.manage"
+        | "customers.read"
+        | "customers.manage"
+        | "analytics.read"
+        | "audit.read"
+        | "hub.manage"
+        | "catalog.manage"
+        | "content.manage"
+      admin_role:
+        | "super_admin"
+        | "operations_admin"
+        | "finance_admin"
+        | "catalog_admin"
+        | "warehouse_admin"
+        | "coach_admin"
+        | "support_admin"
+        | "content_admin"
+        | "analytics_admin"
+        | "compliance_admin"
       app_role: "admin" | "coach" | "member"
     }
     CompositeTypes: {
@@ -1233,6 +1355,33 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      admin_permission: [
+        "orders.read",
+        "orders.write",
+        "payments.read",
+        "payments.manage",
+        "inventory.read",
+        "inventory.manage",
+        "customers.read",
+        "customers.manage",
+        "analytics.read",
+        "audit.read",
+        "hub.manage",
+        "catalog.manage",
+        "content.manage",
+      ],
+      admin_role: [
+        "super_admin",
+        "operations_admin",
+        "finance_admin",
+        "catalog_admin",
+        "warehouse_admin",
+        "coach_admin",
+        "support_admin",
+        "content_admin",
+        "analytics_admin",
+        "compliance_admin",
+      ],
       app_role: ["admin", "coach", "member"],
     },
   },
