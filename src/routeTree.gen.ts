@@ -33,6 +33,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedContentEngineRouteImport } from './routes/_authenticated/content-engine'
 import { Route as AuthenticatedCandyRouteImport } from './routes/_authenticated/candy'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/public/paystack-webhook'
 import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
 import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
@@ -163,6 +164,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
 const ApiPublicPaystackWebhookRoute =
   ApiPublicPaystackWebhookRouteImport.update({
     id: '/api/public/paystack-webhook',
@@ -244,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
@@ -268,7 +275,6 @@ export interface FileRoutesByTo {
   '/selar': typeof SelarRoute
   '/shopify': typeof ShopifyRoute
   '/success': typeof SuccessRoute
-  '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/candy': typeof AuthenticatedCandyRoute
   '/content-engine': typeof AuthenticatedContentEngineRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -278,6 +284,7 @@ export interface FileRoutesByTo {
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
@@ -314,6 +321,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
@@ -350,6 +358,7 @@ export interface FileRouteTypes {
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/admin/'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
@@ -374,7 +383,6 @@ export interface FileRouteTypes {
     | '/selar'
     | '/shopify'
     | '/success'
-    | '/admin'
     | '/candy'
     | '/content-engine'
     | '/dashboard'
@@ -384,6 +392,7 @@ export interface FileRouteTypes {
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/admin'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
@@ -419,6 +428,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/revenue-ai'
     | '/api/public/funnel-event'
     | '/api/public/paystack-webhook'
+    | '/_authenticated/admin/'
     | '/api/public/hooks/checkout-abandonment'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
@@ -624,6 +634,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/api/public/paystack-webhook': {
       id: '/api/public/paystack-webhook'
       path: '/api/public/paystack-webhook'
@@ -693,11 +710,13 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
   AuthenticatedAdminRevenueAiRoute: typeof AuthenticatedAdminRevenueAiRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
   AuthenticatedAdminRevenueAiRoute: AuthenticatedAdminRevenueAiRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
 
 const AuthenticatedAdminRouteWithChildren =
