@@ -38,6 +38,7 @@ import { Route as ApiPublicPaystackWebhookRouteImport } from './routes/api/publi
 import { Route as ApiPublicFunnelEventRouteImport } from './routes/api/public/funnel-event'
 import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authenticated/admin.revenue-ai'
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
+import { Route as AuthenticatedAdminOrdersRouteImport } from './routes/_authenticated/admin.orders'
 import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/public/webhooks/paystack'
 import { Route as ApiPublicWebhooksPalmpayRouteImport } from './routes/api/public/webhooks/palmpay'
 import { Route as ApiPublicWebhooksFlutterwaveRouteImport } from './routes/api/public/webhooks/flutterwave'
@@ -192,6 +193,12 @@ const AuthenticatedAdminRevenueRoute =
     path: '/revenue',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminOrdersRoute =
+  AuthenticatedAdminOrdersRouteImport.update({
+    id: '/orders',
+    path: '/orders',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const ApiPublicWebhooksPaystackRoute =
   ApiPublicWebhooksPaystackRouteImport.update({
     id: '/api/public/webhooks/paystack',
@@ -246,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/admin/orders': typeof AuthenticatedAdminOrdersRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
@@ -280,6 +288,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/admin/orders': typeof AuthenticatedAdminOrdersRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
@@ -317,6 +326,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
+  '/_authenticated/admin/orders': typeof AuthenticatedAdminOrdersRoute
   '/_authenticated/admin/revenue': typeof AuthenticatedAdminRevenueRoute
   '/_authenticated/admin/revenue-ai': typeof AuthenticatedAdminRevenueAiRoute
   '/api/public/funnel-event': typeof ApiPublicFunnelEventRoute
@@ -354,6 +364,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
+    | '/admin/orders'
     | '/admin/revenue'
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
@@ -388,6 +399,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/gallery'
     | '/products/$slug'
+    | '/admin/orders'
     | '/admin/revenue'
     | '/admin/revenue-ai'
     | '/api/public/funnel-event'
@@ -424,6 +436,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/gallery'
     | '/products/$slug'
+    | '/_authenticated/admin/orders'
     | '/_authenticated/admin/revenue'
     | '/_authenticated/admin/revenue-ai'
     | '/api/public/funnel-event'
@@ -669,6 +682,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRevenueRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/orders': {
+      id: '/_authenticated/admin/orders'
+      path: '/orders'
+      fullPath: '/admin/orders'
+      preLoaderRoute: typeof AuthenticatedAdminOrdersRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/api/public/webhooks/paystack': {
       id: '/api/public/webhooks/paystack'
       path: '/api/public/webhooks/paystack'
@@ -708,12 +728,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminOrdersRoute: typeof AuthenticatedAdminOrdersRoute
   AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
   AuthenticatedAdminRevenueAiRoute: typeof AuthenticatedAdminRevenueAiRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminOrdersRoute: AuthenticatedAdminOrdersRoute,
   AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
   AuthenticatedAdminRevenueAiRoute: AuthenticatedAdminRevenueAiRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
