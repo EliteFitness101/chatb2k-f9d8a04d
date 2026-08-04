@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { publishEvent, audit } from "@/lib/events.server";
+import { raiseAlert } from "@/lib/alerts.server";
 
 export const FULFILLMENT_LIFECYCLE = [
   "pending",
@@ -38,7 +39,12 @@ export async function allocateOrder(orderId: string) {
       (h.country_code === country ? 0 : 2) + (h.tier === "global_hq" ? 1 : 0);
     return rank(a) - rank(b);
   });
-  if (eligible.length === 0) return { ok: false as const, error: "No hubs configured" };
+  if (eligible.length === 0) {
+    await raiseAlert("critical", "fulfillment", "No hubs configured for allocation", {
+      order_id: orderId,
+    }, "order", orderId);
+    return { ok: false as const, error: "No hubs configured" };
+  }
 
   const items = (order.order_items ?? []) as { sku: string; quantity: number }[];
   const physical = items.filter((i) => i.sku.startsWith("RES-IRON") || i.sku.startsWith("RES-BENCH") || i.sku.startsWith("RES-BUNDLE"));
@@ -75,6 +81,16 @@ export async function allocateOrder(orderId: string) {
         .from("inventory_items")
         .update({ reserved: row.reserved + line.quantity })
         .eq("id", row.id);
+    }
+    if (!row) {
+      await raiseAlert(
+        "warning",
+        "inventory",
+        `No stock record for ${line.sku} at allocated hub`,
+        { hub_id: chosen.id, sku: line.sku },
+        "order",
+        order.id,
+      );
     }
     await supabaseAdmin.from("inventory_ledger").insert({
       hub_id: chosen.id,
