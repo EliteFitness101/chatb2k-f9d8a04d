@@ -43,6 +43,7 @@ import { Route as AuthenticatedAdminOrdersRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAdminInventoryRouteImport } from './routes/_authenticated/admin.inventory'
 import { Route as AuthenticatedAdminFulfillmentRouteImport } from './routes/_authenticated/admin.fulfillment'
 import { Route as AuthenticatedAdminCustomersRouteImport } from './routes/_authenticated/admin.customers'
+import { Route as AuthenticatedAdminComplianceRouteImport } from './routes/_authenticated/admin.compliance'
 import { Route as AuthenticatedAdminChatb2kRouteImport } from './routes/_authenticated/admin.chatb2k'
 import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/public/webhooks/paystack'
 import { Route as ApiPublicWebhooksPalmpayRouteImport } from './routes/api/public/webhooks/palmpay'
@@ -228,6 +229,12 @@ const AuthenticatedAdminCustomersRoute =
     path: '/customers',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminComplianceRoute =
+  AuthenticatedAdminComplianceRouteImport.update({
+    id: '/compliance',
+    path: '/compliance',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminChatb2kRoute =
   AuthenticatedAdminChatb2kRouteImport.update({
     id: '/chatb2k',
@@ -289,6 +296,7 @@ export interface FileRoutesByFullPath {
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/chatb2k': typeof AuthenticatedAdminChatb2kRoute
+  '/admin/compliance': typeof AuthenticatedAdminComplianceRoute
   '/admin/customers': typeof AuthenticatedAdminCustomersRoute
   '/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
   '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
@@ -329,6 +337,7 @@ export interface FileRoutesByTo {
   '/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/chatb2k': typeof AuthenticatedAdminChatb2kRoute
+  '/admin/compliance': typeof AuthenticatedAdminComplianceRoute
   '/admin/customers': typeof AuthenticatedAdminCustomersRoute
   '/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
   '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
@@ -372,6 +381,7 @@ export interface FileRoutesById {
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/_authenticated/admin/chatb2k': typeof AuthenticatedAdminChatb2kRoute
+  '/_authenticated/admin/compliance': typeof AuthenticatedAdminComplianceRoute
   '/_authenticated/admin/customers': typeof AuthenticatedAdminCustomersRoute
   '/_authenticated/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
   '/_authenticated/admin/inventory': typeof AuthenticatedAdminInventoryRoute
@@ -415,6 +425,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/products/$slug'
     | '/admin/chatb2k'
+    | '/admin/compliance'
     | '/admin/customers'
     | '/admin/fulfillment'
     | '/admin/inventory'
@@ -455,6 +466,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/products/$slug'
     | '/admin/chatb2k'
+    | '/admin/compliance'
     | '/admin/customers'
     | '/admin/fulfillment'
     | '/admin/inventory'
@@ -497,6 +509,7 @@ export interface FileRouteTypes {
     | '/_authenticated/gallery'
     | '/products/$slug'
     | '/_authenticated/admin/chatb2k'
+    | '/_authenticated/admin/compliance'
     | '/_authenticated/admin/customers'
     | '/_authenticated/admin/fulfillment'
     | '/_authenticated/admin/inventory'
@@ -782,6 +795,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminCustomersRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/compliance': {
+      id: '/_authenticated/admin/compliance'
+      path: '/compliance'
+      fullPath: '/admin/compliance'
+      preLoaderRoute: typeof AuthenticatedAdminComplianceRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/chatb2k': {
       id: '/_authenticated/admin/chatb2k'
       path: '/chatb2k'
@@ -829,6 +849,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminChatb2kRoute: typeof AuthenticatedAdminChatb2kRoute
+  AuthenticatedAdminComplianceRoute: typeof AuthenticatedAdminComplianceRoute
   AuthenticatedAdminCustomersRoute: typeof AuthenticatedAdminCustomersRoute
   AuthenticatedAdminFulfillmentRoute: typeof AuthenticatedAdminFulfillmentRoute
   AuthenticatedAdminInventoryRoute: typeof AuthenticatedAdminInventoryRoute
@@ -841,6 +862,7 @@ interface AuthenticatedAdminRouteChildren {
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminChatb2kRoute: AuthenticatedAdminChatb2kRoute,
+  AuthenticatedAdminComplianceRoute: AuthenticatedAdminComplianceRoute,
   AuthenticatedAdminCustomersRoute: AuthenticatedAdminCustomersRoute,
   AuthenticatedAdminFulfillmentRoute: AuthenticatedAdminFulfillmentRoute,
   AuthenticatedAdminInventoryRoute: AuthenticatedAdminInventoryRoute,
