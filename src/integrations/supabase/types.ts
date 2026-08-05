@@ -56,6 +56,54 @@ export type Database = {
         }
         Relationships: []
       }
+      alert_escalation_policies: {
+        Row: {
+          active: boolean
+          auto_acknowledge: boolean
+          category: string
+          create_task: boolean
+          created_at: string
+          escalate_after_minutes: number
+          escalate_to: string | null
+          id: string
+          level: string
+          notify_channel: string | null
+          task_priority: string
+          task_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          auto_acknowledge?: boolean
+          category: string
+          create_task?: boolean
+          created_at?: string
+          escalate_after_minutes?: number
+          escalate_to?: string | null
+          id?: string
+          level: string
+          notify_channel?: string | null
+          task_priority?: string
+          task_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          auto_acknowledge?: boolean
+          category?: string
+          create_task?: boolean
+          created_at?: string
+          escalate_after_minutes?: number
+          escalate_to?: string | null
+          id?: string
+          level?: string
+          notify_channel?: string | null
+          task_priority?: string
+          task_type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       assessment_answers: {
         Row: {
           answer_meta: Json
@@ -533,6 +581,56 @@ export type Database = {
           },
         ]
       }
+      hub_capacity_snapshots: {
+        Row: {
+          active_workload: number
+          available_units: number
+          avg_fulfillment_minutes: number | null
+          created_at: string
+          detail: Json
+          dispatch_backlog: number
+          hub_id: string
+          id: string
+          pending_orders: number
+          recommendation: string | null
+          utilization: number
+        }
+        Insert: {
+          active_workload?: number
+          available_units?: number
+          avg_fulfillment_minutes?: number | null
+          created_at?: string
+          detail?: Json
+          dispatch_backlog?: number
+          hub_id: string
+          id?: string
+          pending_orders?: number
+          recommendation?: string | null
+          utilization?: number
+        }
+        Update: {
+          active_workload?: number
+          available_units?: number
+          avg_fulfillment_minutes?: number | null
+          created_at?: string
+          detail?: Json
+          dispatch_backlog?: number
+          hub_id?: string
+          id?: string
+          pending_orders?: number
+          recommendation?: string | null
+          utilization?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hub_capacity_snapshots_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hubs: {
         Row: {
           address: string
@@ -667,10 +765,13 @@ export type Database = {
           detail: Json
           entity: string | null
           entity_id: string | null
+          escalated_at: string | null
+          escalation_level: number
           id: string
           level: string
           resolved_at: string | null
           status: string
+          task_id: string | null
           title: string
           updated_at: string
         }
@@ -682,10 +783,13 @@ export type Database = {
           detail?: Json
           entity?: string | null
           entity_id?: string | null
+          escalated_at?: string | null
+          escalation_level?: number
           id?: string
           level?: string
           resolved_at?: string | null
           status?: string
+          task_id?: string | null
           title: string
           updated_at?: string
         }
@@ -697,10 +801,119 @@ export type Database = {
           detail?: Json
           entity?: string | null
           entity_id?: string | null
+          escalated_at?: string | null
+          escalation_level?: number
           id?: string
           level?: string
           resolved_at?: string | null
           status?: string
+          task_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ops_alerts_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "ops_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ops_task_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          detail: Json
+          from_status: string | null
+          id: string
+          task_id: string
+          to_status: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          from_status?: string | null
+          id?: string
+          task_id: string
+          to_status: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          from_status?: string | null
+          id?: string
+          task_id?: string
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ops_task_events_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "ops_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ops_tasks: {
+        Row: {
+          alert_id: string | null
+          assignee: string | null
+          completed_at: string | null
+          created_at: string
+          dedupe_key: string | null
+          detail: Json
+          due_at: string | null
+          entity: string | null
+          entity_id: string | null
+          id: string
+          priority: string
+          source_event: string | null
+          source_event_id: string | null
+          status: string
+          task_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          alert_id?: string | null
+          assignee?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dedupe_key?: string | null
+          detail?: Json
+          due_at?: string | null
+          entity?: string | null
+          entity_id?: string | null
+          id?: string
+          priority?: string
+          source_event?: string | null
+          source_event_id?: string | null
+          status?: string
+          task_type: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          alert_id?: string | null
+          assignee?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dedupe_key?: string | null
+          detail?: Json
+          due_at?: string | null
+          entity?: string | null
+          entity_id?: string | null
+          id?: string
+          priority?: string
+          source_event?: string | null
+          source_event_id?: string | null
+          status?: string
+          task_type?: string
           title?: string
           updated_at?: string
         }
@@ -1002,6 +1215,71 @@ export type Database = {
           },
         ]
       }
+      recovery_workflows: {
+        Row: {
+          amount_minor: number
+          attempts: number
+          created_at: string
+          currency: string
+          dedupe_key: string | null
+          detail: Json
+          email: string | null
+          id: string
+          kind: string
+          last_attempt_at: string | null
+          recovered_at: string | null
+          reference: string | null
+          rsid: string | null
+          status: string
+          task_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_minor?: number
+          attempts?: number
+          created_at?: string
+          currency?: string
+          dedupe_key?: string | null
+          detail?: Json
+          email?: string | null
+          id?: string
+          kind: string
+          last_attempt_at?: string | null
+          recovered_at?: string | null
+          reference?: string | null
+          rsid?: string | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_minor?: number
+          attempts?: number
+          created_at?: string
+          currency?: string
+          dedupe_key?: string | null
+          detail?: Json
+          email?: string | null
+          id?: string
+          kind?: string
+          last_attempt_at?: string | null
+          recovered_at?: string | null
+          reference?: string | null
+          rsid?: string | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recovery_workflows_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "ops_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       revenue_events: {
         Row: {
           amount_minor: number
@@ -1089,6 +1367,51 @@ export type Database = {
           predicted_revenue?: number
           rsid?: string | null
           sku?: string | null
+        }
+        Relationships: []
+      }
+      sla_timers: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          detail: Json
+          due_at: string
+          entity: string
+          entity_id: string
+          id: string
+          sla_type: string
+          started_at: string
+          status: string
+          updated_at: string
+          warn_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          detail?: Json
+          due_at: string
+          entity: string
+          entity_id: string
+          id?: string
+          sla_type: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+          warn_at: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          detail?: Json
+          due_at?: string
+          entity?: string
+          entity_id?: string
+          id?: string
+          sla_type?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+          warn_at?: string
         }
         Relationships: []
       }

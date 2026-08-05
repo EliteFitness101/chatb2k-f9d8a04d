@@ -12,7 +12,26 @@ export type DomainEventType =
   | "FulfillmentAllocated"
   | "FulfillmentTransitioned"
   | "InventoryReserved"
-  | "WebhookRejected";
+  | "WebhookRejected"
+  | "OpsTaskCreated"
+  | "OpsTaskAssigned"
+  | "OpsTaskTransitioned"
+  | "SlaStarted"
+  | "SlaWarning"
+  | "SlaBreached"
+  | "SlaMet"
+  | "AlertEscalated"
+  | "AlertAcknowledged"
+  | "AlertResolved"
+  | "HubCapacityRefreshed"
+  | "HubReassigned"
+  | "InventoryAdjusted"
+  | "RecoveryOpened"
+  | "RecoveryContacted"
+  | "RecoveryConverted"
+  | "WebhookReprocessed"
+  | "PaymentReconciled"
+  | "CustomerSuccessTriggered";
 
 /** Publish a domain event. Never throws — observability must not break flows. */
 export async function publishEvent(

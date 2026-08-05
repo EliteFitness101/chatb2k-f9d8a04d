@@ -40,6 +40,7 @@ import { Route as AuthenticatedAdminRevenueAiRouteImport } from './routes/_authe
 import { Route as AuthenticatedAdminRevenueRouteImport } from './routes/_authenticated/admin.revenue'
 import { Route as AuthenticatedAdminPaymentsRouteImport } from './routes/_authenticated/admin.payments'
 import { Route as AuthenticatedAdminOrdersRouteImport } from './routes/_authenticated/admin.orders'
+import { Route as AuthenticatedAdminOperationsRouteImport } from './routes/_authenticated/admin.operations'
 import { Route as AuthenticatedAdminInventoryRouteImport } from './routes/_authenticated/admin.inventory'
 import { Route as AuthenticatedAdminFulfillmentRouteImport } from './routes/_authenticated/admin.fulfillment'
 import { Route as AuthenticatedAdminCustomersRouteImport } from './routes/_authenticated/admin.customers'
@@ -49,6 +50,7 @@ import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/publ
 import { Route as ApiPublicWebhooksPalmpayRouteImport } from './routes/api/public/webhooks/palmpay'
 import { Route as ApiPublicWebhooksFlutterwaveRouteImport } from './routes/api/public/webhooks/flutterwave'
 import { Route as ApiPublicWebhooksCryptoRouteImport } from './routes/api/public/webhooks/crypto'
+import { Route as ApiPublicHooksOpsAutomationRouteImport } from './routes/api/public/hooks/ops-automation'
 import { Route as ApiPublicHooksCheckoutAbandonmentRouteImport } from './routes/api/public/hooks/checkout-abandonment'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -211,6 +213,12 @@ const AuthenticatedAdminOrdersRoute =
     path: '/orders',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminOperationsRoute =
+  AuthenticatedAdminOperationsRouteImport.update({
+    id: '/operations',
+    path: '/operations',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminInventoryRoute =
   AuthenticatedAdminInventoryRouteImport.update({
     id: '/inventory',
@@ -264,6 +272,12 @@ const ApiPublicWebhooksCryptoRoute = ApiPublicWebhooksCryptoRouteImport.update({
   path: '/api/public/webhooks/crypto',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksOpsAutomationRoute =
+  ApiPublicHooksOpsAutomationRouteImport.update({
+    id: '/api/public/hooks/ops-automation',
+    path: '/api/public/hooks/ops-automation',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksCheckoutAbandonmentRoute =
   ApiPublicHooksCheckoutAbandonmentRouteImport.update({
     id: '/api/public/hooks/checkout-abandonment',
@@ -300,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/admin/customers': typeof AuthenticatedAdminCustomersRoute
   '/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
   '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
+  '/admin/operations': typeof AuthenticatedAdminOperationsRoute
   '/admin/orders': typeof AuthenticatedAdminOrdersRoute
   '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
@@ -308,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/hooks/ops-automation': typeof ApiPublicHooksOpsAutomationRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
   '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
@@ -341,6 +357,7 @@ export interface FileRoutesByTo {
   '/admin/customers': typeof AuthenticatedAdminCustomersRoute
   '/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
   '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
+  '/admin/operations': typeof AuthenticatedAdminOperationsRoute
   '/admin/orders': typeof AuthenticatedAdminOrdersRoute
   '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/admin/revenue': typeof AuthenticatedAdminRevenueRoute
@@ -349,6 +366,7 @@ export interface FileRoutesByTo {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/hooks/ops-automation': typeof ApiPublicHooksOpsAutomationRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
   '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
@@ -385,6 +403,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/customers': typeof AuthenticatedAdminCustomersRoute
   '/_authenticated/admin/fulfillment': typeof AuthenticatedAdminFulfillmentRoute
   '/_authenticated/admin/inventory': typeof AuthenticatedAdminInventoryRoute
+  '/_authenticated/admin/operations': typeof AuthenticatedAdminOperationsRoute
   '/_authenticated/admin/orders': typeof AuthenticatedAdminOrdersRoute
   '/_authenticated/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/_authenticated/admin/revenue': typeof AuthenticatedAdminRevenueRoute
@@ -393,6 +412,7 @@ export interface FileRoutesById {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/hooks/ops-automation': typeof ApiPublicHooksOpsAutomationRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
   '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
@@ -429,6 +449,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/fulfillment'
     | '/admin/inventory'
+    | '/admin/operations'
     | '/admin/orders'
     | '/admin/payments'
     | '/admin/revenue'
@@ -437,6 +458,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/admin/'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/hooks/ops-automation'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
     | '/api/public/webhooks/palmpay'
@@ -470,6 +492,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/fulfillment'
     | '/admin/inventory'
+    | '/admin/operations'
     | '/admin/orders'
     | '/admin/payments'
     | '/admin/revenue'
@@ -478,6 +501,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/admin'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/hooks/ops-automation'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
     | '/api/public/webhooks/palmpay'
@@ -513,6 +537,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/customers'
     | '/_authenticated/admin/fulfillment'
     | '/_authenticated/admin/inventory'
+    | '/_authenticated/admin/operations'
     | '/_authenticated/admin/orders'
     | '/_authenticated/admin/payments'
     | '/_authenticated/admin/revenue'
@@ -521,6 +546,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/_authenticated/admin/'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/hooks/ops-automation'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
     | '/api/public/webhooks/palmpay'
@@ -549,6 +575,7 @@ export interface RootRouteChildren {
   ApiPublicFunnelEventRoute: typeof ApiPublicFunnelEventRoute
   ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
   ApiPublicHooksCheckoutAbandonmentRoute: typeof ApiPublicHooksCheckoutAbandonmentRoute
+  ApiPublicHooksOpsAutomationRoute: typeof ApiPublicHooksOpsAutomationRoute
   ApiPublicWebhooksCryptoRoute: typeof ApiPublicWebhooksCryptoRoute
   ApiPublicWebhooksFlutterwaveRoute: typeof ApiPublicWebhooksFlutterwaveRoute
   ApiPublicWebhooksPalmpayRoute: typeof ApiPublicWebhooksPalmpayRoute
@@ -774,6 +801,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminOrdersRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/operations': {
+      id: '/_authenticated/admin/operations'
+      path: '/operations'
+      fullPath: '/admin/operations'
+      preLoaderRoute: typeof AuthenticatedAdminOperationsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/inventory': {
       id: '/_authenticated/admin/inventory'
       path: '/inventory'
@@ -837,6 +871,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhooksCryptoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/ops-automation': {
+      id: '/api/public/hooks/ops-automation'
+      path: '/api/public/hooks/ops-automation'
+      fullPath: '/api/public/hooks/ops-automation'
+      preLoaderRoute: typeof ApiPublicHooksOpsAutomationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/checkout-abandonment': {
       id: '/api/public/hooks/checkout-abandonment'
       path: '/api/public/hooks/checkout-abandonment'
@@ -853,6 +894,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminCustomersRoute: typeof AuthenticatedAdminCustomersRoute
   AuthenticatedAdminFulfillmentRoute: typeof AuthenticatedAdminFulfillmentRoute
   AuthenticatedAdminInventoryRoute: typeof AuthenticatedAdminInventoryRoute
+  AuthenticatedAdminOperationsRoute: typeof AuthenticatedAdminOperationsRoute
   AuthenticatedAdminOrdersRoute: typeof AuthenticatedAdminOrdersRoute
   AuthenticatedAdminPaymentsRoute: typeof AuthenticatedAdminPaymentsRoute
   AuthenticatedAdminRevenueRoute: typeof AuthenticatedAdminRevenueRoute
@@ -866,6 +908,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminCustomersRoute: AuthenticatedAdminCustomersRoute,
   AuthenticatedAdminFulfillmentRoute: AuthenticatedAdminFulfillmentRoute,
   AuthenticatedAdminInventoryRoute: AuthenticatedAdminInventoryRoute,
+  AuthenticatedAdminOperationsRoute: AuthenticatedAdminOperationsRoute,
   AuthenticatedAdminOrdersRoute: AuthenticatedAdminOrdersRoute,
   AuthenticatedAdminPaymentsRoute: AuthenticatedAdminPaymentsRoute,
   AuthenticatedAdminRevenueRoute: AuthenticatedAdminRevenueRoute,
@@ -931,6 +974,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPaystackWebhookRoute: ApiPublicPaystackWebhookRoute,
   ApiPublicHooksCheckoutAbandonmentRoute:
     ApiPublicHooksCheckoutAbandonmentRoute,
+  ApiPublicHooksOpsAutomationRoute: ApiPublicHooksOpsAutomationRoute,
   ApiPublicWebhooksCryptoRoute: ApiPublicWebhooksCryptoRoute,
   ApiPublicWebhooksFlutterwaveRoute: ApiPublicWebhooksFlutterwaveRoute,
   ApiPublicWebhooksPalmpayRoute: ApiPublicWebhooksPalmpayRoute,
