@@ -343,7 +343,7 @@ export const getChatB2KIntelligence = createServerFn({ method: "GET" })
       return { ok: false as const, error: "Forbidden" };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const [assessments, results, profiles] = await Promise.all([
+    const [assessments, results, profiles, upsells, funnel] = await Promise.all([
       supabaseAdmin.from("assessments").select("id, status, created_at").limit(1000),
       supabaseAdmin
         .from("recommendation_results")
@@ -351,6 +351,16 @@ export const getChatB2KIntelligence = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false })
         .limit(500),
       supabaseAdmin.from("health_profiles").select("primary_goal, experience_level, equipment_access, budget_band").limit(1000),
+      supabaseAdmin
+        .from("upsell_events")
+        .select("offer_sku, trigger, accepted, amount_minor, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1000),
+      supabaseAdmin
+        .from("funnel_events")
+        .select("event_name, rsid")
+        .order("occurred_at", { ascending: false })
+        .limit(5000),
     ]);
 
     const all = assessments.data ?? [];
@@ -371,6 +381,45 @@ export const getChatB2KIntelligence = createServerFn({ method: "GET" })
     const avg = (nums: number[]) =>
       nums.length > 0 ? nums.reduce((s, n) => s + n, 0) / nums.length : 0;
 
+    // Upsell / bundle conversion
+    const upsellRows = upsells.data ?? [];
+    const acceptedUpsells = upsellRows.filter((u) => u.accepted);
+    const byOffer: Record<string, { offered: number; accepted: number; amount_minor: number }> = {};
+    for (const u of upsellRows) {
+      const sku = u.offer_sku ?? "(unset)";
+      const b = byOffer[sku] ?? { offered: 0, accepted: 0, amount_minor: 0 };
+      b.offered += 1;
+      if (u.accepted) {
+        b.accepted += 1;
+        b.amount_minor += Number(u.amount_minor ?? 0);
+      }
+      byOffer[sku] = b;
+    }
+
+    // Drop-off funnel (distinct visitors per step)
+    const STEPS: { key: string; label: string }[] = [
+      { key: "chatb2k_view", label: "Landed on ChatB2K" },
+      { key: "assessment_started", label: "Assessment started" },
+      { key: "assessment_completed", label: "Assessment completed" },
+      { key: "recommendation_viewed", label: "Recommendation viewed" },
+      { key: "checkout_started", label: "Checkout started" },
+      { key: "purchase", label: "Purchase" },
+    ];
+    const perStep = new Map<string, Set<string>>();
+    for (const f of funnel.data ?? []) {
+      const set = perStep.get(f.event_name) ?? new Set<string>();
+      set.add(f.rsid ?? "anon");
+      perStep.set(f.event_name, set);
+    }
+    let prevCount: number | null = null;
+    const funnel_steps = STEPS.map((s) => {
+      const count = perStep.get(s.key)?.size ?? 0;
+      const drop_off = prevCount && prevCount > 0 ? 1 - count / prevCount : 0;
+      const row = { key: s.key, label: s.label, count, drop_off };
+      prevCount = count;
+      return row;
+    });
+
     return {
       ok: true as const,
       total_assessments: all.length,
@@ -378,6 +427,15 @@ export const getChatB2KIntelligence = createServerFn({ method: "GET" })
       completion_rate: all.length > 0 ? completed / all.length : 0,
       avg_confidence: avg(recs.map((r) => Number(r.confidence_score ?? 0))),
       avg_upsell: avg(recs.map((r) => Number(r.upsell_score ?? 0))),
+      upsell_offered: upsellRows.length,
+      upsell_accepted: acceptedUpsells.length,
+      upsell_conversion:
+        upsellRows.length > 0 ? acceptedUpsells.length / upsellRows.length : 0,
+      upsell_revenue_minor: acceptedUpsells.reduce((s, u) => s + Number(u.amount_minor ?? 0), 0),
+      by_offer: Object.entries(byOffer)
+        .map(([sku, v]) => ({ sku, ...v, rate: v.offered > 0 ? v.accepted / v.offered : 0 }))
+        .sort((a, b) => b.offered - a.offered),
+      funnel_steps,
       by_program: tally(recs, "primary_program_sku"),
       by_membership: tally(recs, "membership_sku"),
       by_goal: tally(profiles.data ?? [], "primary_goal"),
