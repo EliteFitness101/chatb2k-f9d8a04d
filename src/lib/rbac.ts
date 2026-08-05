@@ -42,6 +42,7 @@ export const ADMIN_DOMAINS: AdminDomain[] = [
   { key: "payments", label: "Payments", to: "/admin/payments", permission: "payments.read" },
   { key: "inventory", label: "Inventory", to: "/admin/inventory", permission: "inventory.read" },
   { key: "fulfillment", label: "Fulfillment Hubs", to: "/admin/fulfillment", permission: "inventory.read" },
+  { key: "operations", label: "Operations", to: "/admin/operations", permission: "orders.read" },
   { key: "customers", label: "Customer Intelligence", to: "/admin/customers", permission: "customers.read" },
   { key: "chatb2k", label: "ChatB2K Intelligence", to: "/admin/chatb2k", permission: "analytics.read" },
   { key: "compliance", label: "Compliance & Audit", to: "/admin/compliance", permission: "audit.read" },
