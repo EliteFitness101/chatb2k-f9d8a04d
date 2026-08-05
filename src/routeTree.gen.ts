@@ -49,6 +49,7 @@ import { Route as ApiPublicWebhooksPaystackRouteImport } from './routes/api/publ
 import { Route as ApiPublicWebhooksPalmpayRouteImport } from './routes/api/public/webhooks/palmpay'
 import { Route as ApiPublicWebhooksFlutterwaveRouteImport } from './routes/api/public/webhooks/flutterwave'
 import { Route as ApiPublicWebhooksCryptoRouteImport } from './routes/api/public/webhooks/crypto'
+import { Route as ApiPublicHooksOpsAutomationRouteImport } from './routes/api/public/hooks/ops-automation'
 import { Route as ApiPublicHooksCheckoutAbandonmentRouteImport } from './routes/api/public/hooks/checkout-abandonment'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -264,6 +265,12 @@ const ApiPublicWebhooksCryptoRoute = ApiPublicWebhooksCryptoRouteImport.update({
   path: '/api/public/webhooks/crypto',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksOpsAutomationRoute =
+  ApiPublicHooksOpsAutomationRouteImport.update({
+    id: '/api/public/hooks/ops-automation',
+    path: '/api/public/hooks/ops-automation',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksCheckoutAbandonmentRoute =
   ApiPublicHooksCheckoutAbandonmentRouteImport.update({
     id: '/api/public/hooks/checkout-abandonment',
@@ -308,6 +315,7 @@ export interface FileRoutesByFullPath {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/hooks/ops-automation': typeof ApiPublicHooksOpsAutomationRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
   '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
@@ -349,6 +357,7 @@ export interface FileRoutesByTo {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/hooks/ops-automation': typeof ApiPublicHooksOpsAutomationRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
   '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
@@ -393,6 +402,7 @@ export interface FileRoutesById {
   '/api/public/paystack-webhook': typeof ApiPublicPaystackWebhookRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/hooks/checkout-abandonment': typeof ApiPublicHooksCheckoutAbandonmentRoute
+  '/api/public/hooks/ops-automation': typeof ApiPublicHooksOpsAutomationRoute
   '/api/public/webhooks/crypto': typeof ApiPublicWebhooksCryptoRoute
   '/api/public/webhooks/flutterwave': typeof ApiPublicWebhooksFlutterwaveRoute
   '/api/public/webhooks/palmpay': typeof ApiPublicWebhooksPalmpayRoute
@@ -437,6 +447,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/admin/'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/hooks/ops-automation'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
     | '/api/public/webhooks/palmpay'
@@ -478,6 +489,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/admin'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/hooks/ops-automation'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
     | '/api/public/webhooks/palmpay'
@@ -521,6 +533,7 @@ export interface FileRouteTypes {
     | '/api/public/paystack-webhook'
     | '/_authenticated/admin/'
     | '/api/public/hooks/checkout-abandonment'
+    | '/api/public/hooks/ops-automation'
     | '/api/public/webhooks/crypto'
     | '/api/public/webhooks/flutterwave'
     | '/api/public/webhooks/palmpay'
@@ -549,6 +562,7 @@ export interface RootRouteChildren {
   ApiPublicFunnelEventRoute: typeof ApiPublicFunnelEventRoute
   ApiPublicPaystackWebhookRoute: typeof ApiPublicPaystackWebhookRoute
   ApiPublicHooksCheckoutAbandonmentRoute: typeof ApiPublicHooksCheckoutAbandonmentRoute
+  ApiPublicHooksOpsAutomationRoute: typeof ApiPublicHooksOpsAutomationRoute
   ApiPublicWebhooksCryptoRoute: typeof ApiPublicWebhooksCryptoRoute
   ApiPublicWebhooksFlutterwaveRoute: typeof ApiPublicWebhooksFlutterwaveRoute
   ApiPublicWebhooksPalmpayRoute: typeof ApiPublicWebhooksPalmpayRoute
@@ -837,6 +851,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhooksCryptoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/ops-automation': {
+      id: '/api/public/hooks/ops-automation'
+      path: '/api/public/hooks/ops-automation'
+      fullPath: '/api/public/hooks/ops-automation'
+      preLoaderRoute: typeof ApiPublicHooksOpsAutomationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/checkout-abandonment': {
       id: '/api/public/hooks/checkout-abandonment'
       path: '/api/public/hooks/checkout-abandonment'
@@ -931,6 +952,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPaystackWebhookRoute: ApiPublicPaystackWebhookRoute,
   ApiPublicHooksCheckoutAbandonmentRoute:
     ApiPublicHooksCheckoutAbandonmentRoute,
+  ApiPublicHooksOpsAutomationRoute: ApiPublicHooksOpsAutomationRoute,
   ApiPublicWebhooksCryptoRoute: ApiPublicWebhooksCryptoRoute,
   ApiPublicWebhooksFlutterwaveRoute: ApiPublicWebhooksFlutterwaveRoute,
   ApiPublicWebhooksPalmpayRoute: ApiPublicWebhooksPalmpayRoute,
