@@ -92,6 +92,14 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
       })),
     );
 
+    // SLA pipeline: payment verification starts the moment an order exists;
+    // hub assignment is pending until fulfillment allocates the order.
+    {
+      const { startSla } = await import("@/lib/ops/sla.server");
+      await startSla("payment_verification", "order", order.id, { reference });
+      await startSla("hub_assignment", "order", order.id, { reference });
+    }
+
     // Initialize with Paystack
     const res = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
