@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { publishEvent, audit } from "@/lib/events.server";
 import { allocateOrder } from "@/lib/fulfillment.server";
 import { raiseAlert } from "@/lib/alerts.server";
+import { startSla, completeSla } from "@/lib/ops/sla.server";
+import { openRecovery, markRecovered } from "@/lib/ops/recovery.server";
 
 /** Canonical payment lifecycle shared across every provider adapter. */
 export type PaymentStatus =
@@ -170,10 +172,29 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
 
   // 8. Trigger fulfillment.
   if (event.type === "paid" && order?.id) {
+    // Payment verification SLA closes on verified payment; the inventory
+    // reservation clock starts before allocation runs.
+    await completeSla("payment_verification", "order", order.id);
+    await markRecovered(event.reference);
+    await startSla("inventory_reservation", "order", order.id, {
+      reference: event.reference,
+    });
     await allocateOrder(order.id);
   }
 
   if (event.type === "failed") {
+    if (order?.id) {
+      await completeSla("payment_verification", "order", order.id);
+    }
+    await openRecovery({
+      kind: "failed_payment",
+      reference: event.reference,
+      email: event.email,
+      amountMinor: event.amountMinor,
+      currency: event.currency,
+      dedupeKey: `failed-payment:${adapter.code}:${event.reference}`,
+      detail: { provider: adapter.code },
+    });
     await raiseAlert(
       "warning",
       "payment",

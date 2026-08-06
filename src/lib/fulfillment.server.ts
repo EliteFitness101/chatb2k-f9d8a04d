@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { publishEvent, audit } from "@/lib/events.server";
 import { raiseAlert } from "@/lib/alerts.server";
+import { startSla, completeSla } from "@/lib/ops/sla.server";
+import type { SlaType } from "@/lib/ops/rules";
 
 export const FULFILLMENT_LIFECYCLE = [
   "pending",
@@ -106,6 +108,9 @@ export async function allocateOrder(orderId: string) {
       lines: physical,
     });
   }
+  // Inventory reservation SLA closes once stock is reserved (or when there is
+  // nothing physical to reserve).
+  await completeSla("inventory_reservation", "order", order.id);
 
   // 4. Fulfillment order + dispatch queue entry.
   await supabaseAdmin.from("orders").update({ assigned_hub_id: chosen.id }).eq("id", order.id);
@@ -149,8 +154,31 @@ export async function allocateOrder(orderId: string) {
     hub_id: chosen.id,
   });
 
+  // Hub assignment done → picking clock starts on the fulfillment order.
+  await completeSla("hub_assignment", "order", order.id);
+  if (fulfillmentId) {
+    await startSla("picking", "fulfillment_order", fulfillmentId, {
+      order_id: order.id,
+      hub_id: chosen.id,
+    });
+  }
+
   return { ok: true as const, hubId: chosen.id, fulfillmentId };
 }
+
+/**
+ * Fulfillment lifecycle → SLA transitions. Entering a status completes the
+ * previous stage timer and starts the next one. Fully automatic.
+ */
+const SLA_ON_ENTER: Partial<Record<FulfillmentStatus, { complete: SlaType[]; start: SlaType | null }>> = {
+  picking: { complete: [], start: "picking" },
+  packed: { complete: ["picking"], start: "packing" },
+  ready_for_dispatch: { complete: ["packing"], start: "dispatch" },
+  shipped: { complete: ["packing", "dispatch"], start: "delivery" },
+  delivered: { complete: ["delivery"], start: null },
+  completed: { complete: ["picking", "packing", "dispatch", "delivery"], start: null },
+  exception: { complete: [], start: null },
+};
 
 /** Advance a fulfillment order, writing an immutable transition record. */
 export async function transitionFulfillment(
@@ -181,5 +209,18 @@ export async function transitionFulfillment(
     from: current.status,
     to,
   });
+
+  const slaPlan = SLA_ON_ENTER[to];
+  if (slaPlan) {
+    for (const type of slaPlan.complete) {
+      await completeSla(type, "fulfillment_order", fulfillmentId);
+    }
+    if (slaPlan.start) {
+      await startSla(slaPlan.start, "fulfillment_order", fulfillmentId, {
+        order_id: current.order_id,
+      });
+    }
+  }
+
   return { ok: true as const };
 }

@@ -74,6 +74,15 @@ export async function ensureTask(spec: TaskSpec): Promise<string | null> {
     entity_id: spec.entityId ?? null,
   });
   await audit("task.created", "ops_task", data.id, { task_type: spec.type });
+
+  // Customer-support workflows carry a response SLA that starts automatically.
+  if (spec.type === "support_escalation") {
+    const { startSla } = await import("@/lib/ops/sla.server");
+    await startSla("support_response", "ops_task", data.id, {
+      entity: spec.entity ?? null,
+      entity_id: spec.entityId ?? null,
+    });
+  }
   return data.id;
 }
 
@@ -113,6 +122,14 @@ export async function transitionTask(
   });
   await publishEvent("OpsTaskTransitioned", "ops_task", taskId, { from, to });
   await audit(`task.${to}`, "ops_task", taskId, { from }, actorId);
+
+  if (
+    current.task_type === "support_escalation" &&
+    (to === "completed" || to === "cancelled")
+  ) {
+    const { completeSla } = await import("@/lib/ops/sla.server");
+    await completeSla("support_response", "ops_task", taskId);
+  }
   return { ok: true as const };
 }
 
