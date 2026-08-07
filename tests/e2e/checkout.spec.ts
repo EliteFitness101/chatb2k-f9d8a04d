@@ -36,9 +36,14 @@ test.describe("checkout smoke", () => {
     const payButton = page.getByRole("button", { name: /pay with paystack/i });
     await expect(payButton).toBeVisible();
 
-    // Empty form must not start a transaction.
-    await payButton.click();
-    await expect(page.getByText(/name and email are required/i)).toBeVisible();
+    // Empty form must not start a transaction. Retry the click until React has
+    // hydrated the island (SSR markup is clickable before handlers attach).
+    await expect(async () => {
+      await payButton.click();
+      await expect(page.getByText(/name and email are required/i)).toBeVisible({
+        timeout: 1000,
+      });
+    }).toPass({ timeout: 20_000 });
 
     // Filled form keeps the total visible and the CTA actionable.
     await inputs.nth(0).fill("E2E Tester");
