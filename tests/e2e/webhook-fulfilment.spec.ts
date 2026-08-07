@@ -11,7 +11,7 @@ function post(request: import("@playwright/test").APIRequestContext, raw: string
       "content-type": "application/json",
       ...(signature ? { "x-paystack-signature": signature } : {}),
     },
-    data: raw,
+    data: Buffer.from(raw, "utf8"),
   });
 }
 
