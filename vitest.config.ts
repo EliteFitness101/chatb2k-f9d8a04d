@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
-    exclude: ["tests/smoke/**"],
+    exclude: ["tests/smoke/**", "tests/e2e/**"],
     reporters: ["default"],
     clearMocks: true,
   },
