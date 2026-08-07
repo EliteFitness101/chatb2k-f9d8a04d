@@ -4,8 +4,9 @@ test.describe("checkout smoke", () => {
   test("smart checkout renders a product, total and payment rails", async ({ page }) => {
     await page.goto("/checkout");
 
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.locator("body")).toContainText(/₦|\$/);
+    const main = page.getByRole("main");
+    await expect(main.getByRole("heading").first()).toBeVisible();
+    await expect(main).toContainText(/₦|\$/);
 
     // Financial router must expose at least one payment rail link.
     const rails = page.locator('a[href*="/paystack"], a[href*="/crypto"], a[href*="/shopify"]');
@@ -26,9 +27,10 @@ test.describe("checkout smoke", () => {
   test("paystack rail collects customer details and validates them", async ({ page }) => {
     await page.goto("/paystack?sku=RES-ELITE-ACCESS");
 
-    const select = page.locator("select");
+    const main = page.getByRole("main");
+    const select = main.locator("select");
     await expect(select).toBeVisible();
-    const inputs = page.locator("input");
+    const inputs = main.locator("input");
     await expect(inputs).toHaveCount(2);
 
     const payButton = page.getByRole("button", { name: /pay with paystack/i });
