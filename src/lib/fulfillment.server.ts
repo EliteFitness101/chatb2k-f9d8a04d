@@ -38,23 +38,16 @@ function candidateHubs(countryCode: string) {
   return [...preferred, ...rest, configured.find(([code]) => code === "NG")!];
 }
 
-/**
- * Canonical v3.0.1 fulfillment projection.
- * The production database does not contain the retired orders/fulfillment_orders
- * model, so payment is the financial anchor and resofit_fulfillment_* is the
- * durable operational projection. All state changes also emit canonical events.
- */
+/** Canonical v3.0.1 fulfillment projection. Payment is the financial anchor. */
 export async function allocatePayment(paymentId: string, context: AllocationContext = {}) {
   const { data: payment, error: paymentError } = await supabaseAdmin
     .from("payments")
-    .select("id, paystack_ref, user_id, customer_email, amount, currency, status, product_sku, order_id")
+    .select("id, paystack_ref, user_id, customer_email, amount, currency, status, product_sku, order_id, rsid")
     .eq("id", paymentId)
     .maybeSingle();
 
   if (paymentError || !payment) return { ok: false as const, error: "Payment not found" };
-  if (payment.status !== "success" && payment.status !== "paid") {
-    return { ok: false as const, error: "Payment is not verified" };
-  }
+  if (payment.status !== "success" && payment.status !== "paid") return { ok: false as const, error: "Payment is not verified" };
 
   const paymentReference = payment.paystack_ref ?? payment.order_id ?? payment.id;
   const { data: existing } = await supabaseAdmin
@@ -62,13 +55,11 @@ export async function allocatePayment(paymentId: string, context: AllocationCont
     .select("id, status, hub_code")
     .eq("payment_reference", paymentReference)
     .maybeSingle();
-
   if (existing) return { ok: true as const, fulfillmentId: existing.id, hubCode: existing.hub_code, deduplicated: true };
 
   const items = (context.items ?? (payment.product_sku ? [{ sku: payment.product_sku, quantity: 1 }] : []))
     .filter((item) => PHYSICAL_SKU.test(item.sku));
 
-  // Digital-only purchases are fulfilled through value-delivery events, not physical dispatch.
   if (items.length === 0) {
     await publishEvent("FulfillmentAllocated", "payment", payment.id, {
       payment_reference: paymentReference,
@@ -93,19 +84,13 @@ export async function allocatePayment(paymentId: string, context: AllocationCont
         const row = (stock ?? []).find((s) => s.sku === line.sku);
         return Boolean(row && row.on_hand - row.reserved >= line.quantity);
       });
-      if (available) {
-        chosen = code;
-        break;
-      }
+      if (available) { chosen = code; break; }
     }
   }
 
   if (!chosen) {
     await raiseAlert("critical", "fulfillment", "No eligible hub has sufficient inventory", {
-      payment_id: payment.id,
-      payment_reference: paymentReference,
-      country,
-      items,
+      payment_id: payment.id, payment_reference: paymentReference, country, items,
     }, "payment", payment.id);
     const { data: blocked } = await supabaseAdmin
       .from("resofit_fulfillment_orders")
@@ -140,32 +125,26 @@ export async function allocatePayment(paymentId: string, context: AllocationCont
     })
     .select("id")
     .single();
-
   if (createError || !created) return { ok: false as const, error: createError?.message ?? "Fulfillment creation failed" };
 
   for (const item of items) {
     await supabaseAdmin.from("resofit_fulfillment_items").insert({
-      fulfillment_order_id: created.id,
-      product_id: item.productId ?? null,
-      sku: item.sku,
-      quantity: item.quantity,
+      fulfillment_order_id: created.id, product_id: item.productId ?? null, sku: item.sku, quantity: item.quantity,
     });
-    await supabaseAdmin.rpc("reserve_resofit_hub_inventory", {
-      p_hub_code: chosen,
-      p_sku: item.sku,
-      p_quantity: item.quantity,
+    const { data: reserved } = await supabaseAdmin.rpc("reserve_resofit_hub_inventory", {
+      p_hub_code: chosen, p_sku: item.sku, p_quantity: item.quantity,
     });
+    if (!reserved) {
+      await transitionFulfillment(created.id, "exception", null, { reason: "concurrent_inventory_gap", sku: item.sku });
+      return { ok: false as const, error: `Inventory reservation failed for ${item.sku}`, exception: true };
+    }
   }
 
   await supabaseAdmin.from("resofit_fulfillment_events").insert({
-    fulfillment_order_id: created.id,
-    from_status: "pending",
-    to_status: "allocated",
-    detail: { hub_code: chosen, country, items },
+    fulfillment_order_id: created.id, from_status: "pending", to_status: "allocated", detail: { hub_code: chosen, country, items },
   });
-
-  await publishEvent("InventoryReserved", "fulfillment_order", created.id, { hub_code: chosen, items, payment_id: payment.id });
-  await publishEvent("FulfillmentAllocated", "payment", payment.id, { fulfillment_order_id: created.id, hub_code: chosen });
+  await publishEvent("InventoryReserved", "fulfillment_order", created.id, { hub_code: chosen, items, payment_id: payment.id, rsid: payment.rsid });
+  await publishEvent("FulfillmentAllocated", "payment", payment.id, { fulfillment_order_id: created.id, hub_code: chosen, rsid: payment.rsid });
   await audit("fulfillment.allocated", "fulfillment_order", created.id, { hub_code: chosen, payment_reference: paymentReference });
 
   return { ok: true as const, fulfillmentId: created.id, hubCode: chosen, deduplicated: false };
@@ -173,11 +152,7 @@ export async function allocatePayment(paymentId: string, context: AllocationCont
 
 /** Backward-compatible entry point: order IDs are resolved through payments.order_id. */
 export async function allocateOrder(orderId: string, context: AllocationContext = {}) {
-  const { data: payment } = await supabaseAdmin
-    .from("payments")
-    .select("id")
-    .eq("order_id", orderId)
-    .maybeSingle();
+  const { data: payment } = await supabaseAdmin.from("payments").select("id").eq("order_id", orderId).maybeSingle();
   if (!payment) return { ok: false as const, error: "Payment for order not found" };
   return allocatePayment(payment.id, context);
 }
@@ -198,11 +173,7 @@ export async function transitionFulfillment(
 
   await supabaseAdmin.from("resofit_fulfillment_orders").update({ status: to, updated_at: new Date().toISOString() }).eq("id", fulfillmentId);
   await supabaseAdmin.from("resofit_fulfillment_events").insert({
-    fulfillment_order_id: fulfillmentId,
-    from_status: current.status,
-    to_status: to,
-    actor_id: actorId,
-    detail,
+    fulfillment_order_id: fulfillmentId, from_status: current.status, to_status: to, actor_id: actorId, detail,
   });
   await publishEvent("FulfillmentTransitioned", "fulfillment_order", fulfillmentId, { from: current.status, to, ...detail });
   await audit("fulfillment.transition", "fulfillment_order", fulfillmentId, { from: current.status, to, ...detail }, actorId);
