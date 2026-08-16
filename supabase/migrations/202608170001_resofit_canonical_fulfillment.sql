@@ -1,7 +1,5 @@
 -- ResoFit v3.0.1 canonical fulfillment projection
 -- Additive migration. Does not modify existing payments/products/revenue tables.
--- The current production schema has no durable order/fulfillment/inventory-hub state,
--- so physical fulfillment needs a canonical projection rather than the retired orders model.
 
 create table if not exists public.resofit_fulfillment_orders (
   id uuid primary key default gen_random_uuid(),
@@ -61,8 +59,6 @@ alter table public.resofit_fulfillment_items enable row level security;
 alter table public.resofit_fulfillment_events enable row level security;
 alter table public.resofit_hub_inventory enable row level security;
 
--- Backend/service-role writes. Customer visibility is deliberately not granted here;
--- fulfillment APIs should expose only the minimum order projection required by the user.
 create policy "service role manages fulfillment orders"
   on public.resofit_fulfillment_orders for all to service_role using (true) with check (true);
 create policy "service role manages fulfillment items"
@@ -72,5 +68,36 @@ create policy "service role manages fulfillment events"
 create policy "service role manages hub inventory"
   on public.resofit_hub_inventory for all to service_role using (true) with check (true);
 
--- Immutable transition history: clients and admins cannot mutate/delete event history.
+-- Atomic reservation prevents negative available inventory under concurrent payments.
+create or replace function public.reserve_resofit_hub_inventory(
+  p_hub_code text,
+  p_sku text,
+  p_quantity integer
+) returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  changed integer;
+begin
+  if p_quantity is null or p_quantity <= 0 then
+    raise exception 'quantity must be positive';
+  end if;
+
+  update public.resofit_hub_inventory
+     set reserved = reserved + p_quantity,
+         updated_at = now()
+   where hub_code = p_hub_code
+     and sku = p_sku
+     and on_hand - reserved >= p_quantity;
+
+  get diagnostics changed = row_count;
+  return changed = 1;
+end;
+$$;
+
+revoke execute on function public.reserve_resofit_hub_inventory(text,text,integer) from public, anon, authenticated;
+grant execute on function public.reserve_resofit_hub_inventory(text,text,integer) to service_role;
+
 revoke update, delete on public.resofit_fulfillment_events from authenticated, anon;
