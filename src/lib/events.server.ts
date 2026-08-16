@@ -33,16 +33,7 @@ export type DomainEventType =
   | "PaymentReconciled"
   | "CustomerSuccessTriggered";
 
-/**
- * Canonical ResoFit event publisher.
- *
- * v3 code previously targeted the retired `domain_events` table. Production
- * now uses `resofit_events` as the shared event contract consumed by the
- * ResoFit ecosystem and adapter layer.
- *
- * Observability must never break a customer journey, so failures are logged
- * locally and deliberately swallowed.
- */
+/** Canonical ResoFit event publisher. */
 export async function publishEvent(
   event_type: DomainEventType,
   aggregate: string,
@@ -63,8 +54,6 @@ export async function publishEvent(
     await supabaseAdmin.from("resofit_events").insert({
       event_name: event_type,
       source_system: "chatb2k",
-      aggregate_type: aggregate,
-      aggregate_id,
       payload: {
         aggregate,
         aggregate_id,
@@ -75,7 +64,7 @@ export async function publishEvent(
       anonymous_id,
       funnel_origin,
       utm: utm as never,
-    } as never);
+    });
   } catch (e) {
     console.error("[events] publish failed", event_type, e);
   }
