@@ -70,6 +70,31 @@ export class MockDb {
         payment.funnel_origin ??= args.p_funnel_origin;
       }
     }
+    if (fn === "create_resofit_fulfillment_atomic") {
+      const items = Array.isArray(args.p_items) ? args.p_items : [];
+      const inventory = this.rows("resofit_hub_inventory");
+      const sufficient = items.every((line: Row) => {
+        const row = inventory.find((r) => r.hub_code === args.p_hub_code && r.sku === line.sku);
+        return Boolean(row && Number(row.on_hand ?? 0) - Number(row.reserved ?? 0) >= Number(line.quantity ?? 0));
+      });
+      if (!sufficient) return Promise.resolve({ data: null, error: { code: "P0001", message: "Insufficient inventory" } });
+      for (const line of items) {
+        const row = inventory.find((r) => r.hub_code === args.p_hub_code && r.sku === line.sku)!;
+        row.reserved = Number(row.reserved ?? 0) + Number(line.quantity ?? 0);
+      }
+      const id = uuid();
+      this.rows("resofit_fulfillment_orders").push({
+        id, payment_id: args.p_payment_id, payment_reference: args.p_payment_reference,
+        customer_id: args.p_customer_id, customer_email: args.p_customer_email,
+        status: "allocated", currency: args.p_currency, total_amount: args.p_total_amount,
+        hub_code: args.p_hub_code, country_code: args.p_country,
+      });
+      for (const line of items) {
+        this.rows("resofit_fulfillment_items").push({ id: uuid(), fulfillment_order_id: id, sku: line.sku, quantity: line.quantity, product_id: line.productId ?? null });
+      }
+      this.rows("resofit_fulfillment_events").push({ id: uuid(), fulfillment_order_id: id, from_status: "pending", to_status: "allocated", detail: { hub_code: args.p_hub_code } });
+      return Promise.resolve({ data: id, error: null });
+    }
     return Promise.resolve({ data: null, error: null });
   }
 }
