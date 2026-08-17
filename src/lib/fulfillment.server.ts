@@ -110,44 +110,34 @@ export async function allocatePayment(paymentId: string, context: AllocationCont
     return { ok: false as const, error: "No hub has sufficient inventory", exception: true };
   }
 
-  const { data: created, error: createError } = await supabaseAdmin
-    .from("resofit_fulfillment_orders")
-    .insert({
-      payment_id: payment.id,
-      payment_reference: paymentReference,
-      customer_id: payment.user_id,
-      customer_email: context.customerEmail ?? payment.customer_email,
-      status: "allocated",
-      hub_code: chosen,
-      currency: payment.currency ?? "NGN",
-      total_amount: payment.amount,
-      metadata: { country, source: "chatb2k" },
-    })
-    .select("id")
-    .single();
-  if (createError || !created) return { ok: false as const, error: createError?.message ?? "Fulfillment creation failed" };
+  // Physical fulfillment is created and all inventory is reserved in one
+  // database transaction. If any SKU cannot be reserved, the whole operation
+  // rolls back, preventing partial fulfillment state.
+  const { data: fulfillmentId, error: allocationError } = await supabaseAdmin.rpc("create_resofit_fulfillment_atomic", {
+    p_payment_id: payment.id,
+    p_payment_reference: paymentReference,
+    p_customer_id: payment.user_id,
+    p_customer_email: context.customerEmail ?? payment.customer_email,
+    p_currency: payment.currency ?? "NGN",
+    p_total_amount: payment.amount,
+    p_hub_code: chosen,
+    p_country: country,
+    p_items: items,
+  });
 
-  for (const item of items) {
-    await supabaseAdmin.from("resofit_fulfillment_items").insert({
-      fulfillment_order_id: created.id, product_id: item.productId ?? null, sku: item.sku, quantity: item.quantity,
-    });
-    const { data: reserved } = await supabaseAdmin.rpc("reserve_resofit_hub_inventory", {
-      p_hub_code: chosen, p_sku: item.sku, p_quantity: item.quantity,
-    });
-    if (!reserved) {
-      await transitionFulfillment(created.id, "exception", null, { reason: "concurrent_inventory_gap", sku: item.sku });
-      return { ok: false as const, error: `Inventory reservation failed for ${item.sku}`, exception: true };
-    }
+  if (allocationError || !fulfillmentId) {
+    await raiseAlert("critical", "fulfillment", "Atomic fulfillment allocation failed", {
+      payment_id: payment.id, payment_reference: paymentReference, country, hub_code: chosen, items,
+      error: allocationError?.message,
+    }, "payment", payment.id);
+    return { ok: false as const, error: allocationError?.message ?? "Atomic fulfillment allocation failed", exception: true };
   }
 
-  await supabaseAdmin.from("resofit_fulfillment_events").insert({
-    fulfillment_order_id: created.id, from_status: "pending", to_status: "allocated", detail: { hub_code: chosen, country, items },
-  });
-  await publishEvent("InventoryReserved", "fulfillment_order", created.id, { hub_code: chosen, items, payment_id: payment.id, rsid: payment.rsid });
-  await publishEvent("FulfillmentAllocated", "payment", payment.id, { fulfillment_order_id: created.id, hub_code: chosen, rsid: payment.rsid });
-  await audit("fulfillment.allocated", "fulfillment_order", created.id, { hub_code: chosen, payment_reference: paymentReference });
+  await publishEvent("InventoryReserved", "fulfillment_order", fulfillmentId, { hub_code: chosen, items, payment_id: payment.id, rsid: payment.rsid });
+  await publishEvent("FulfillmentAllocated", "payment", payment.id, { fulfillment_order_id: fulfillmentId, hub_code: chosen, rsid: payment.rsid });
+  await audit("fulfillment.allocated", "fulfillment_order", fulfillmentId, { hub_code: chosen, payment_reference: paymentReference });
 
-  return { ok: true as const, fulfillmentId: created.id, hubCode: chosen, deduplicated: false };
+  return { ok: true as const, fulfillmentId, hubCode: chosen, deduplicated: false };
 }
 
 /** Backward-compatible entry point: order IDs are resolved through payments.order_id. */
