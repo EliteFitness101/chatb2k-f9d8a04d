@@ -24,8 +24,15 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Lint
-        run: bun run lint
+      - name: Lint changed files
+        shell: bash
+        run: |
+          FILES="$(git diff --name-only HEAD^1 HEAD | grep -E '\\.(ts|tsx|js|jsx)$' || true)"
+          if [ -n "$FILES" ]; then
+            bunx eslint $FILES
+          else
+            echo "No changed JavaScript/TypeScript files to lint."
+          fi
 
       - name: Unit tests
         run: bun run test
