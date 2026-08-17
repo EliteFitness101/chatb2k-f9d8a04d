@@ -75,16 +75,16 @@ export async function allocatePayment(paymentId: string, context: AllocationCont
   let chosen: string | null = context.hubCode ?? null;
 
   if (!chosen) {
-    for (const [code] of hubs) {
+    for (const [, hubCode] of hubs) {
       const { data: stock } = await supabaseAdmin
         .from("resofit_hub_inventory")
         .select("sku, on_hand, reserved")
-        .eq("hub_code", code);
+        .eq("hub_code", hubCode);
       const available = items.every((line) => {
         const row = (stock ?? []).find((s) => s.sku === line.sku);
         return Boolean(row && row.on_hand - row.reserved >= line.quantity);
       });
-      if (available) { chosen = code; break; }
+      if (available) { chosen = hubCode; break; }
     }
   }
 
