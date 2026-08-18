@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { ChatB2KStreamPanel } from "@/components/chat/ChatB2KStreamPanel";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { pageMeta } from "@/lib/site-meta";
@@ -150,6 +151,10 @@ function DashboardPage() {
               Browse the Arsenal →
             </Link>
           </form>
+        </div>
+
+        <div className="mt-8">
+          <ChatB2KStreamPanel />
         </div>
       </section>
     </SiteShell>
