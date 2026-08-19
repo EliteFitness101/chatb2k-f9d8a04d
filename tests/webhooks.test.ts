@@ -6,7 +6,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: supabas
 const { processWebhook, hmacMatches } = await import("@/lib/webhooks/framework.server");
 const SECRET = "test-secret";
 
-function makeAdapter() {
+function makeAdapter(currency = "NGN") {
   return {
     code: "paystack",
     verify: (raw: string, headers: Headers) => hmacMatches(raw, headers.get("x-paystack-signature"), SECRET, "sha512"),
@@ -15,7 +15,7 @@ function makeAdapter() {
       type: payload.event as "paid" | "failed" | "refunded" | "ignored",
       reference: payload.reference as string,
       amountMinor: payload.amount as number,
-      currency: "NGN",
+      currency,
       email: payload.email ?? null,
       metadata: payload.metadata ?? {},
     }),
@@ -41,22 +41,55 @@ describe("webhook processing", () => {
   });
 
   it("rejects a payload signed with the wrong secret", async () => {
-    const res = await processWebhook(makeAdapter(), signedRequest({ id: "e1", event: "paid", reference: "R1", amount: 1000 }, "wrong"));
+    const res = await processWebhook(makeAdapter(), signedRequest({ id: "e1", event: "paid", reference: "R1", amount: 250000 }, "wrong"));
     expect(res.status).toBe(401);
   });
 
-  it("processes a verified payment end to end", async () => {
-    mockDb.seed("payments", [{ id: "p1", paystack_ref: "R1", customer_email: "a@b.com", product_sku: "APEX", plan_type: "commerce", funnel_origin: "chatb2k", status: "pending" }]);
-    const res = await processWebhook(makeAdapter(), signedRequest({ id: "e2", event: "paid", reference: "R1", amount: 250_000, email: "a@b.com" }));
+  it("processes a verified digital payment and completes value delivery", async () => {
+    mockDb.seed("payments", [{ id: "p1", paystack_ref: "R1", amount: 2500, currency: "NGN", customer_email: "a@b.com", product_sku: "APEX", plan_type: "commerce", funnel_origin: "chatb2k", status: "pending" }]);
+    const res = await processWebhook(makeAdapter(), signedRequest({ id: "e2", event: "paid", reference: "R1", amount: 250000, email: "a@b.com" }));
     expect(res.status).toBe(200);
     expect(mockDb.rows("payments")[0].status).toBe("success");
     expect(mockDb.rows("revenue_events")).toHaveLength(1);
     expect(mockDb.rows("resofit_events").map((e) => e.event_name)).toContain("PaymentVerified");
+    expect(mockDb.rows("resofit_events").some((e) => e.event_name === "FulfillmentAllocated" && e.payload?.mode === "digital")).toBe(true);
+    expect(mockDb.rows("resofit_fulfillment_orders")).toHaveLength(0);
     expect(mockDb.rows("audit_logs").some((a) => a.action === "payment.verified")).toBe(true);
   });
 
+  it("processes a verified physical payment and reserves inventory atomically", async () => {
+    mockDb.seed("payments", [{ id: "p-physical", paystack_ref: "R-PHYS", amount: 22000, currency: "NGN", customer_email: "buyer@example.com", product_sku: "RES-IRON-15", plan_type: "commerce", funnel_origin: "chatb2k", status: "pending" }]);
+    mockDb.seed("resofit_hub_inventory", [{ hub_code: "Lagos,NG", sku: "RES-IRON-15", on_hand: 10, reserved: 0 }]);
+    const res = await processWebhook(makeAdapter(), signedRequest({ id: "e-physical", event: "paid", reference: "R-PHYS", amount: 2200000, email: "buyer@example.com", metadata: { country: "NG", sku: "RES-IRON-15" } }));
+    expect(res.status).toBe(200);
+    expect(mockDb.rows("resofit_hub_inventory")[0].reserved).toBe(1);
+    expect(mockDb.rows("resofit_fulfillment_orders")[0].status).toBe("allocated");
+    expect(mockDb.rows("resofit_fulfillment_items")[0].sku).toBe("RES-IRON-15");
+    expect(mockDb.rows("resofit_events").map((e) => e.event_name)).toContain("InventoryReserved");
+    expect(mockDb.rows("resofit_events").map((e) => e.event_name)).toContain("FulfillmentAllocated");
+  });
+
+  it("rejects a paid webhook when the amount does not match the canonical payment", async () => {
+    mockDb.seed("payments", [{ id: "p-amount", paystack_ref: "R-AMOUNT", amount: 2500, currency: "NGN", product_sku: "APEX", status: "pending" }]);
+    const res = await processWebhook(makeAdapter(), signedRequest({ id: "e-amount", event: "paid", reference: "R-AMOUNT", amount: 249900 }));
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("mismatch");
+    expect(mockDb.rows("payments")[0].status).toBe("pending");
+    expect(mockDb.rows("payment_event_processing")[0].status).toBe("failed");
+    expect(mockDb.rows("resofit_fulfillment_orders")).toHaveLength(0);
+  });
+
+  it("rejects a paid webhook when the currency does not match the canonical payment", async () => {
+    mockDb.seed("payments", [{ id: "p-currency", paystack_ref: "R-CURRENCY", amount: 2500, currency: "NGN", product_sku: "APEX", status: "pending" }]);
+    const res = await processWebhook(makeAdapter("USD"), signedRequest({ id: "e-currency", event: "paid", reference: "R-CURRENCY", amount: 250000 }));
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("mismatch");
+    expect(mockDb.rows("payments")[0].status).toBe("pending");
+    expect(mockDb.rows("resofit_fulfillment_orders")).toHaveLength(0);
+  });
+
   it("prevents duplicate transaction processing", async () => {
-    mockDb.seed("payments", [{ id: "p1", paystack_ref: "R2", status: "pending" }]);
+    mockDb.seed("payments", [{ id: "p-dupe", paystack_ref: "R2", amount: 10, currency: "NGN", product_sku: "APEX", status: "pending" }]);
     const body = { id: "dupe-1", event: "paid", reference: "R2", amount: 1000 };
     const first = await processWebhook(makeAdapter(), signedRequest(body));
     const second = await processWebhook(makeAdapter(), signedRequest(body));
@@ -79,11 +112,5 @@ describe("webhook processing", () => {
     await processWebhook(makeAdapter(), signedRequest({ id: "e4", event: "refunded", reference: "R4", amount: 1000 }));
     expect(mockDb.rows("payments")[0].status).toBe("refunded");
     expect(mockDb.rows("revenue_events")[0].status).toBe("refunded");
-  });
-
-  it("does not claim SLA completion unless the canonical payment workflow records it", async () => {
-    mockDb.seed("payments", [{ id: "p5", paystack_ref: "R5", status: "pending" }]);
-    await processWebhook(makeAdapter(), signedRequest({ id: "e5", event: "paid", reference: "R5", amount: 1000 }));
-    expect(mockDb.rows("payments")[0].status).toBe("success");
   });
 });
