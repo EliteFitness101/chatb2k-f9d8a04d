@@ -7,6 +7,7 @@ import {
   FX_TO_BASE,
 } from "@/lib/commerce/regions";
 import { recommend, ENGINE_VERSION, type AssessmentInput } from "@/lib/commerce/recommendation";
+import { discoverCommerceSolutions, selectTopSolutions } from "@/lib/commerce/discovery";
 import { productBySku } from "@/lib/catalog";
 
 const lean: AssessmentInput = {
@@ -26,7 +27,7 @@ describe("currency routing", () => {
   });
 
   it("evaluates the crypto threshold in base currency", () => {
-    const threshold = FALLBACK_ROUTE.cryptoThresholdMinor; // ₦380,000
+    const threshold = FALLBACK_ROUTE.cryptoThresholdMinor;
     expect(cryptoEligible(37_000_000, "NGN", threshold)).toBe(false);
     expect(cryptoEligible(38_000_000, "NGN", threshold)).toBe(true);
     expect(cryptoEligible(30_000, "USD", threshold)).toBe(true);
@@ -79,5 +80,52 @@ describe("ChatB2K recommendation engine", () => {
     expect(r.confidence_score).toBeGreaterThanOrEqual(0);
     expect(r.confidence_score).toBeLessThanOrEqual(1);
     expect(r.upsell_score).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("P2 multi-source commerce discovery", () => {
+  const intent = {
+    goal: "home gym setup",
+    budgetMinor: 500_000_00,
+    location: "Lagos",
+    urgency: "this_week" as const,
+  };
+
+  it("can rank Shop, external, fallback and human sources together", () => {
+    const result = discoverCommerceSolutions(intent, {
+      shop: [{ id: "shop-1", title: "ResoFit Bench", sourceType: "resofit_shop", sourceName: "shop.resofit.fit", priceMinor: 300_000_00, currency: "NGN", available: true, deliveryDays: 5, intentFit: 90, qualityScore: 90, trustScore: 95, locationFit: 80 }],
+      external: [{ id: "jumia-1", title: "Comparable Bench", sourceType: "external_commerce", sourceName: "Jumia", priceMinor: 220_000_00, currency: "NGN", available: true, deliveryDays: 2, intentFit: 92, qualityScore: 82, trustScore: 80, locationFit: 95 }],
+      fallback48Sku: [{ id: "sku-1", title: "48-SKU fallback", sourceType: "verified_48_sku", sourceName: "ResoFit verified catalog", priceMinor: 250_000_00, currency: "NGN", available: true, deliveryDays: 4, intentFit: 85, qualityScore: 88, trustScore: 95, locationFit: 80 }],
+      human: [{ id: "aba-1", name: "Verified Lagos/Aba supplier", location: "Lagos", available: true, deliveryDays: 1, specialties: ["commercial gym equipment"] }],
+    });
+
+    expect(result.sourceCount).toBe(4);
+    expect(result.usedResetFallback).toBe(false);
+    expect(result.recommendations.length).toBe(4);
+    expect(result.best.sourceType).toBe("external_commerce");
+  });
+
+  it("does not let Shop ownership automatically win", () => {
+    const result = discoverCommerceSolutions(intent, {
+      shop: [{ id: "shop-1", title: "Shop", sourceType: "resofit_shop", sourceName: "shop.resofit.fit", priceMinor: 900_000_00, available: true, deliveryDays: 10, intentFit: 60, qualityScore: 70, trustScore: 95, locationFit: 50 }],
+      external: [{ id: "external-1", title: "Better-value alternative", sourceType: "external_commerce", sourceName: "Jumia", priceMinor: 250_000_00, available: true, deliveryDays: 2, intentFit: 90, qualityScore: 85, trustScore: 85, locationFit: 95 }],
+    });
+    expect(result.best.sourceType).toBe("external_commerce");
+  });
+
+  it("uses the ₦1,000 Reset when no commerce candidate is available", () => {
+    const result = discoverCommerceSolutions({ goal: "wellness reset", location: "Port Harcourt" }, {});
+    expect(result.usedResetFallback).toBe(true);
+    expect(result.best.id).toBe("RES-RESET-1000");
+    expect(result.best.priceMinor).toBe(100_000);
+  });
+
+  it("returns a bounded shortlist", () => {
+    const top = selectTopSolutions(intent, {
+      external: Array.from({ length: 5 }, (_, i) => ({ id: `p-${i}`, title: `Product ${i}`, sourceType: "external_commerce" as const, sourceName: "Jumia", available: true, intentFit: 80 - i })),
+    }, 3);
+    expect(top).toHaveLength(3);
+    expect(top[0].score).toBeGreaterThanOrEqual(top[1].score);
+    expect(top[1].score).toBeGreaterThanOrEqual(top[2].score);
   });
 });
