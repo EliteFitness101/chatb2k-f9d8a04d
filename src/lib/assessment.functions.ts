@@ -5,6 +5,8 @@ import { recommend, type AssessmentInput } from "@/lib/commerce/recommendation";
 const InputSchema = z.object({
   rsid: z.string().max(64).nullable().optional(),
   email: z.string().email().max(255).nullable().optional(),
+  session_id: z.string().max(128).nullable().optional(),
+  anon_id: z.string().max(128).nullable().optional(),
   answers: z.object({
     primary_goal: z.enum(["cut", "recomp", "bulk", "longevity"]),
     experience: z.enum(["beginner", "intermediate", "advanced"]),
@@ -17,9 +19,9 @@ const InputSchema = z.object({
 });
 
 /**
- * Persists a normalized assessment (assessment + answers + health profile +
- * recommendation snapshot) and returns the recommendation for the UI.
- * Public by design — the funnel runs before sign-in.
+ * Persists the ChatB2K assessment into the canonical ResoFit customer and
+ * event model. This intentionally does not recreate the retired v3
+ * assessments/health_profiles/recommendation_results tables.
  */
 export const submitAssessment = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => InputSchema.parse(d))
@@ -30,60 +32,60 @@ export const submitAssessment = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { publishEvent } = await import("@/lib/events.server");
 
-    const { data: assessment, error } = await supabaseAdmin
-      .from("assessments")
+    const snapshot = {
+      answers,
+      recommendation: result,
+      captured_at: new Date().toISOString(),
+      email: data.email ?? null,
+      rsid: data.rsid ?? null,
+    };
+
+    // Canonical customer-intelligence store. Anonymous assessments are kept
+    // without a user_id and can later be joined through rsid/session events.
+    const { data: preference, error: preferenceError } = await supabaseAdmin
+      .from("customer_preferences")
       .insert({
-        rsid: data.rsid ?? null,
-        email: data.email ?? null,
-        status: "completed",
-        completed_at: new Date().toISOString(),
+        user_id: null,
+        goal: answers.primary_goal,
+        fitness_level: answers.experience,
+        activity_level: answers.time_availability,
+        nutrition_style: answers.nutrition,
+        assessment: snapshot as never,
       })
       .select("id")
       .single();
 
-    if (error || !assessment) {
-      console.error("[assessment] insert failed", error);
-      return { assessmentId: null, recommendation: result };
+    if (preferenceError) {
+      console.error("[assessment] customer_preferences insert failed", preferenceError);
     }
 
-    await supabaseAdmin.from("assessment_answers").insert(
-      Object.entries(answers).map(([question_key, answer_value]) => ({
-        assessment_id: assessment.id,
-        question_key,
-        answer_value: String(answer_value),
-      })),
-    );
+    const basePayload = {
+      rsid: data.rsid ?? null,
+      session_id: data.session_id ?? null,
+      anon_id: data.anon_id ?? null,
+      funnel_origin: "chatb2k",
+    };
 
-    await supabaseAdmin.from("health_profiles").insert({
-      assessment_id: assessment.id,
-      primary_goal: answers.primary_goal,
-      experience_level: answers.experience,
-      time_availability: answers.time_availability,
-      budget_band: answers.budget,
-      mobility_notes: answers.mobility,
-      equipment_access: answers.equipment,
-      nutrition_preference: answers.nutrition,
+    await publishEvent("AssessmentCompleted", "assessment", preference?.id ?? null, {
+      ...basePayload,
+      email: data.email ?? null,
+      answers,
     });
 
-    await supabaseAdmin.from("recommendation_results").insert({
-      assessment_id: assessment.id,
-      engine_version: result.engine_version,
+    await publishEvent("RecommendationGenerated", "assessment", preference?.id ?? null, {
+      ...basePayload,
       primary_program_sku: result.primary_program_sku,
       equipment_skus: result.equipment_skus,
       membership_sku: result.membership_sku,
       nutrition_sku: result.nutrition_sku,
+      ranked_skus: result.ranked_skus,
+      confidence_score: result.confidence_score,
       upsell_score: result.upsell_score,
-      confidence_score: result.confidence_score,
-      snapshot: result as never,
+      engine_version: result.engine_version,
     });
 
-    await publishEvent("AssessmentCompleted", "assessment", assessment.id, {
-      rsid: data.rsid ?? null,
-    });
-    await publishEvent("RecommendationGenerated", "assessment", assessment.id, {
-      primary_program_sku: result.primary_program_sku,
-      confidence_score: result.confidence_score,
-    });
-
-    return { assessmentId: assessment.id, recommendation: result };
+    return {
+      assessmentId: preference?.id ?? null,
+      recommendation: result,
+    };
   });

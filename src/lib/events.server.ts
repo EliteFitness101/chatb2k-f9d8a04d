@@ -33,7 +33,7 @@ export type DomainEventType =
   | "PaymentReconciled"
   | "CustomerSuccessTriggered";
 
-/** Publish a domain event. Never throws — observability must not break flows. */
+/** Canonical ResoFit event publisher. */
 export async function publishEvent(
   event_type: DomainEventType,
   aggregate: string,
@@ -41,18 +41,36 @@ export async function publishEvent(
   payload: Record<string, unknown> = {},
 ) {
   try {
-    await supabaseAdmin.from("domain_events").insert({
-      event_type,
-      aggregate,
-      aggregate_id,
-      payload: payload as never,
+    const rsid = typeof payload.rsid === "string" ? payload.rsid : null;
+    const session_id = typeof payload.session_id === "string" ? payload.session_id : null;
+    const anonymous_id = typeof payload.anon_id === "string" ? payload.anon_id : null;
+    const funnel_origin =
+      typeof payload.funnel_origin === "string" ? payload.funnel_origin : "chatb2k";
+    const utm =
+      payload.utm && typeof payload.utm === "object"
+        ? (payload.utm as Record<string, unknown>)
+        : {};
+
+    await supabaseAdmin.from("resofit_events").insert({
+      event_name: event_type,
+      source_system: "chatb2k",
+      payload: {
+        aggregate,
+        aggregate_id,
+        ...payload,
+      } as never,
+      rsid,
+      session_id,
+      anonymous_id,
+      funnel_origin,
+      utm: utm as never,
     });
   } catch (e) {
     console.error("[events] publish failed", event_type, e);
   }
 }
 
-/** Append an immutable audit record. */
+/** Append an immutable audit record using the canonical production schema. */
 export async function audit(
   action: string,
   entity: string,
@@ -63,10 +81,12 @@ export async function audit(
   try {
     await supabaseAdmin.from("audit_logs").insert({
       action,
-      entity,
-      entity_id,
-      actor_id,
-      detail: detail as never,
+      resource: entity,
+      user_id: actor_id,
+      metadata: {
+        entity_id,
+        ...detail,
+      } as never,
     });
   } catch (e) {
     console.error("[audit] write failed", action, e);

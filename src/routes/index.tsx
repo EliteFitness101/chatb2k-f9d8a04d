@@ -1,59 +1,46 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { SiteShell } from "@/components/site/SiteShell";
-import { SectionHeading } from "@/components/site/SectionHeading";
-import { ProductCard } from "@/components/site/ProductCard";
 import { CurrencyBadge } from "@/components/site/CurrencyBadge";
-import { products } from "@/lib/catalog";
-import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 import { NigerianEcommerceTrustCheck } from "@/components/site/NigerianEcommerceTrustCheck";
 import { FulfillmentEstimate } from "@/components/site/FulfillmentEstimate";
 import { getAttribution } from "@/lib/attribution";
+import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: pageMeta({
-      title: "Transform Your Body with ChatB2K Precision — Start for ₦1,000",
+      title: "Personalized Wellness, Orchestrated Around You",
       description:
-        "Get a personalized nutrition, fitness, and wellness roadmap designed around your goals, lifestyle, body type, and metabolic profile.",
+        "ResoFit connects your goals, lifestyle, wellness priorities and current ResoFit services into one personalized next step.",
       url: SITE_URL + "/",
       type: "website",
     }),
-    links: [
-      canonicalLink(SITE_URL + "/"),
-      { rel: "preload", as: "image", href: "/hero/product-1.webp" },
-      { rel: "preload", as: "image", href: "/hero/product-2.webp" },
-    ],
-    scripts: [
-      breadcrumbScript([{ name: "Home", url: SITE_URL + "/" }]),
-    ],
+    links: [canonicalLink(SITE_URL + "/")],
+    scripts: [breadcrumbScript([{ name: "Home", url: SITE_URL + "/" }])],
   }),
   component: Index,
 });
 
-const PRIMARY_CTA = "https://joy-funnel-ai.lovable.app";
-const ENROLLMENT = "https://reso-flex.lovable.app";
-const SHOP = "https://reso-flex.lovable.app";
-const WHATSAPP = "https://wa.me/2348132255842?text=" + encodeURIComponent(
-  "Hello Coach Buchi,\n\nI just started my Metabolic Reset on ResoFit and would like guidance on the next step."
-);
-const SECONDARY_CTA = "https://reso-fit.lovable.app"; // ChatB2K Assessment (secondary / fallback)
-// Community channels — single source of truth for the ResoFit Telegram community.
-const TELEGRAM = "https://t.me/resofitcommunity";
+const SHOP = "https://shop.resofit.fit";
+const WHATSAPP =
+  "https://wa.me/2348132255842?text=" +
+  encodeURIComponent(
+    "Hello ResoFit, I would like help choosing my best next wellness or commerce pathway.",
+  );
 
-type CtaVariant = "direct" | "pain" | "ai" | "trust";
+type CtaVariant = "direct" | "returning" | "guided";
 
-// Append RSID + UTM + funnel_origin to outbound funnel links (attribution enforcement).
 function withAttribution(url: string): string {
   if (typeof window === "undefined") return url;
   try {
     const { rsid, utm } = getAttribution();
-    const u = new URL(url);
+    const u = new URL(url, window.location.origin);
     if (rsid) u.searchParams.set("rsid", rsid);
     u.searchParams.set("funnel_origin", "resofit");
-    for (const [k, v] of Object.entries(utm)) {
-      if (v) u.searchParams.set(k, String(v));
+    for (const [key, value] of Object.entries(utm)) {
+      if (value) u.searchParams.set(key, String(value));
     }
     return u.toString();
   } catch {
@@ -61,29 +48,15 @@ function withAttribution(url: string): string {
   }
 }
 
-// CTA Intelligence — dynamic label only (no layout change).
-function ctaLabelForRsidValue(): string {
-  if (typeof window === "undefined") return "Start Your Metabolic Reset →";
-  try {
-    const tier = localStorage.getItem("rf_rsid_tier"); // "high" | "medium" | "low"
-    if (tier === "high") return "Buy Now (Priority Access) →";
-    if (tier === "medium") return "Continue Transformation →";
-  } catch {}
-  return "Start Your Metabolic Reset →";
-}
-
 function track(event: string, props: Record<string, unknown> = {}) {
-  // soft-track + revenue attribution. RSID + UTM merged into every event.
   try {
     const { rsid, utm } = getAttribution();
     const payload = { event, rsid, utm, ...props };
     (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push(payload);
-    const key = "rf_events";
-    const raw = localStorage.getItem(key);
-    const arr = raw ? JSON.parse(raw) : [];
-    arr.push({ event, props: { rsid, utm, ...props }, t: Date.now() });
-    localStorage.setItem(key, JSON.stringify(arr.slice(-200)));
-    // Fire-and-forget mirror to funnel_events table.
+    const raw = localStorage.getItem("rf_events");
+    const events = raw ? JSON.parse(raw) : [];
+    events.push({ event, props: { rsid, utm, ...props }, t: Date.now() });
+    localStorage.setItem("rf_events", JSON.stringify(events.slice(-200)));
     void fetch("/api/public/funnel-event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -93,436 +66,182 @@ function track(event: string, props: Record<string, unknown> = {}) {
   } catch {}
 }
 
-function pickCtaVariant(): CtaVariant {
-  if (typeof window === "undefined") return "direct";
-  try {
-    const ref = document.referrer || "";
-    const src = new URLSearchParams(window.location.search).get("utm_source") || "";
-    if (/tiktok/i.test(ref) || /tiktok/i.test(src)) return "pain";
-    const visits = Number(localStorage.getItem("rf_visits") || "0");
-    if (visits >= 3) return "direct"; // high-intent returning
-    const bounced = localStorage.getItem("rf_bounced") === "1";
-    if (bounced) return "trust";
-    return "ai";
-  } catch {
-    return "direct";
-  }
-}
-
 function Index() {
-  const featured = products.filter((p) => ["iron", "bench"].includes(p.category)).slice(0, 4);
-  const [ctaVariant, setCtaVariant] = useState<CtaVariant>("direct");
+  const [variant, setVariant] = useState<CtaVariant>("guided");
+
   useEffect(() => {
-    if (typeof window === "undefined") return;
     try {
       const visits = Number(localStorage.getItem("rf_visits") || "0") + 1;
       localStorage.setItem("rf_visits", String(visits));
-      // mark bounce if last visit had no cta_click
-      const lastClick = Number(localStorage.getItem("rf_last_cta_click") || "0");
-      const lastVisit = Number(localStorage.getItem("rf_last_visit") || "0");
-      if (lastVisit && lastClick < lastVisit) localStorage.setItem("rf_bounced", "1");
-      localStorage.setItem("rf_last_visit", String(Date.now()));
-    } catch {}
-    const v = pickCtaVariant();
-    setCtaVariant(v);
-    track("landing_view", { variant: v });
-
-    // scroll depth — fire once per threshold per page view
-    let d50 = false, d75 = false, d90 = false, d100 = false;
-    const onScroll = () => {
-      const h = document.documentElement;
-      const pct = (h.scrollTop + window.innerHeight) / h.scrollHeight;
-      if (!d50 && pct >= 0.5) { d50 = true; track("scroll_depth_50"); }
-      if (!d75 && pct >= 0.75) { d75 = true; track("scroll_depth_75"); }
-      if (!d90 && pct >= 0.9) { d90 = true; track("scroll_depth_90"); }
-      if (!d100 && pct >= 0.99) { d100 = true; track("scroll_depth_100"); }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+      const next: CtaVariant = visits >= 3 ? "returning" : visits === 1 ? "direct" : "guided";
+      setVariant(next);
+      track("landing_view", { variant: next });
+    } catch {
+      track("landing_view", { variant: "guided" });
+    }
   }, []);
-  const primaryHref = withAttribution(PRIMARY_CTA);
-  const secondaryHref = withAttribution(SECONDARY_CTA);
+
+  const personalizeHref = withAttribution("/quiz");
+  const chatHref = withAttribution("/chatb2k");
   const shopHref = withAttribution(SHOP);
-  const enrollHref = withAttribution(ENROLLMENT);
-  const primaryLabel = ctaLabelForRsidValue();
-  const onPrimaryCta = (surface: "primary" | "sticky" | "final" = "primary") => {
-    try { localStorage.setItem("rf_last_cta_click", String(Date.now())); } catch {}
-    // Fire exactly one funnel event per click. checkout_started is emitted by
-    // the /checkout route itself so we don't inflate the funnel from the hero.
-    track("assessment_started", { variant: ctaVariant, surface });
-  };
+  const primaryLabel =
+    variant === "returning"
+      ? "Continue My Pathway →"
+      : variant === "direct"
+        ? "Discover My Best Next Step →"
+        : "Build My Personalized Pathway →";
 
   return (
     <SiteShell>
-      {/* HERO */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 ember-bg pointer-events-none" />
-        <div className="absolute inset-0 [background:radial-gradient(circle_at_30%_40%,oklch(0.78_0.13_87/0.12),transparent_55%)] pointer-events-none" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-20 sm:pt-28 pb-24 sm:pb-32 pb-28 sm:pb-32">
+        <div className="absolute inset-0 pointer-events-none [background:radial-gradient(circle_at_30%_35%,oklch(0.78_0.13_87/0.14),transparent_52%),radial-gradient(circle_at_80%_70%,oklch(0.2_0.04_87/0.16),transparent_45%)]" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-20 sm:pt-28 pb-20 sm:pb-28">
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}
-            className="max-w-3xl"
+            className="max-w-4xl"
           >
             <CurrencyBadge />
-            <h1 className="mt-6 font-display text-5xl sm:text-6xl md:text-7xl leading-[1.05]">
-              Transform Your Body With <span className="text-gold-gradient">ChatB2K Precision</span>.
+            <p className="mt-8 text-xs tracking-[0.35em] uppercase text-gold">ResoFit OS™</p>
+            <h1 className="mt-4 font-display text-5xl sm:text-6xl md:text-7xl leading-[1.02]">
+              Your wellness journey should adapt to <span className="text-gold-gradient">you.</span>
             </h1>
-            <p className="mt-6 text-lg text-muted-foreground max-w-2xl leading-relaxed">
-              Get a personalized nutrition, fitness, and wellness roadmap designed around
-              your goals, lifestyle, body type, and metabolic profile.
+            <p className="mt-6 max-w-2xl text-lg sm:text-xl text-muted-foreground leading-relaxed">
+              ChatB2K™ intelligence connects your goals, lifestyle, context and intent to the
+              most relevant current ResoFit pathway — wellness, nutrition, training, coaching,
+              commerce or support.
             </p>
-            <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-foreground/80">
-              {[
-                "ChatB2K-Powered Recommendations",
-                "Coach Verified",
-                "Nigerian Meal Plans",
-                "Start for ₦1,000",
-              ].map((t) => (
-                <li key={t} className="inline-flex items-center gap-2">
-                  <span className="text-gold">✓</span>
-                  <span>{t}</span>
-                </li>
-              ))}
-            </ul>
-            {/* Nigerian E-Commerce Trust Badges — above the fold */}
-            <NigerianEcommerceTrustCheck className="mt-5" />
-            {/* Fulfillment estimate — above primary CTA */}
-            <FulfillmentEstimate className="mt-5" />
-            <div className="mt-10 flex flex-wrap gap-4">
+
+            <NigerianEcommerceTrustCheck className="mt-6" />
+            <FulfillmentEstimate className="mt-4" />
+
+            <div className="mt-9 flex flex-wrap gap-3">
               <a
-                href={primaryHref}
-                onClick={() => onPrimaryCta("primary")}
-                className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold tracking-wide shadow-gold hover:brightness-110 transition"
+                href={personalizeHref}
+                onClick={() => track("personalization_started", { surface: "hero" })}
+                className="px-7 py-4 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold tracking-wide shadow-gold hover:brightness-110 transition"
               >
                 {primaryLabel}
+              </a>
+              <a
+                href={chatHref}
+                onClick={() => track("chatb2k_open", { surface: "hero" })}
+                className="px-7 py-4 rounded-sm border border-[var(--glass-border)] text-foreground font-medium hover:border-[var(--gold)] transition"
+              >
+                Ask ChatB2K™
               </a>
               <a
                 href={WHATSAPP}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => track("whatsapp_click", { surface: "hero" })}
-                className="px-6 py-3.5 rounded-sm border border-[var(--glass-border)] text-foreground font-medium hover:border-[var(--gold)] transition"
+                className="px-7 py-4 rounded-sm border border-[var(--glass-border)] text-foreground/85 font-medium hover:border-[var(--gold)] transition"
               >
-                Chat With a Coach
-              </a>
-              <a
-                href={secondaryHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => track("assessment_secondary_click", { surface: "hero" })}
-                className="px-6 py-3.5 rounded-sm border border-[var(--glass-border)] text-foreground/80 hover:border-[var(--gold)] transition text-sm"
-              >
-                Take ChatB2K Assessment
-              </a>
-            </div>
-            <div className="mt-6">
-              <a
-                href={enrollHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs tracking-[0.3em] uppercase text-gold/90 hover:text-gold transition"
-              >
-                Already convinced? Shop the Arsenal →
+                Talk to a Coach
               </a>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* TRUST AUTHORITY */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-        <SectionHeading
-          eyebrow="Proof"
-          title="Trusted Transformation System"
-          sub="Real installations, real deployments, real deliveries — across Nigeria and beyond."
-        />
-        <div className="mt-10 grid sm:grid-cols-3 gap-5">
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-14 sm:py-20">
+        <div className="max-w-3xl">
+          <div className="text-xs tracking-[0.3em] uppercase text-gold mb-3">Intent first</div>
+          <h2 className="font-display text-3xl sm:text-4xl md:text-5xl">Tell us what you actually want.</h2>
+          <p className="mt-4 text-muted-foreground leading-relaxed">
+            You do not need to know which product, program or service is right. Start with your
+            intent; ChatB2K™ can route you to the current eligible option.
+          </p>
+        </div>
+
+        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { title: "Home Installations", caption: "Delivered across Nigeria", img: "/images/proof/home-installations.jpg" },
-            { title: "Boutique Gym Deployments", caption: "Trusted by private gyms", img: "/images/proof/boutique-gym.jpg" },
-            { title: "Nationwide Delivery Proof", caption: "Premium fitness installations", img: "/images/proof/nationwide-delivery.jpg" },
-          ].map((t) => (
-            <div key={t.title} className="glass rounded-md overflow-hidden">
-              <img
-                src={t.img}
-                alt={`${t.title} — ${t.caption}`}
-                loading="lazy"
-                width={1024}
-                height={768}
-                className="aspect-[4/3] w-full object-cover bg-[var(--ink)]"
-              />
-              <div className="p-5">
-                <div className="font-display text-xl">{t.title}</div>
-                <div className="text-xs tracking-widest uppercase text-gold/80 mt-2">{t.caption}</div>
+            ["Fitness & body", "I want training, strength or body-composition help.", "/chatb2k?intent=fitness"],
+            ["Food & nutrition", "I want meals, nutrition guidance or a meal plan.", "/chatb2k?intent=nutrition"],
+            ["Equipment", "I want the right fitness equipment for my goal.", "/chatb2k?intent=equipment"],
+            ["Coaching & support", "I want a coach, membership or personal guidance.", "/chatb2k?intent=coaching"],
+          ].map(([title, copy, href]) => (
+            <Link
+              key={title}
+              to={href}
+              onClick={() => track("intent_selected", { intent: title })}
+              className="group glass rounded-md p-6 min-h-44 flex flex-col hover:border-[var(--gold)] hover:shadow-gold transition-all"
+            >
+              <div className="text-xs tracking-[0.25em] uppercase text-gold/80">Explore</div>
+              <div className="mt-3 font-display text-2xl">{title}</div>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed flex-1">{copy}</p>
+              <div className="mt-5 text-xs tracking-widest uppercase text-gold group-hover:translate-x-1 transition-transform">
+                Let ChatB2K route me →
               </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-14 sm:py-20">
+        <div className="grid lg:grid-cols-3 gap-5">
+          {[
+            ["01", "Understand", "Your answers, context and intent become a persistent customer journey."],
+            ["02", "Personalize", "Current ResoFit data and eligible offers are evaluated at runtime."],
+            ["03", "Orchestrate", "The system routes you to the right next action, payment or fulfillment path."],
+          ].map(([n, title, copy]) => (
+            <div key={n} className="glass rounded-md p-7">
+              <div className="font-display text-4xl text-gold-gradient">{n}</div>
+              <div className="mt-4 font-display text-2xl">{title}</div>
+              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{copy}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* BENEFITS */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-        <SectionHeading
-          eyebrow="Why ResoFit"
-          title="Everything your body needs, in one system."
-          sub="ChatB2K-precision plans, coach-verified execution, and hardware built for the long game."
-        />
-        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {[
-            { t: "Personalized Blueprint", d: "Your metabolism, your goals, your schedule — mapped into one plan." },
-            { t: "Nigerian Meal Intelligence", d: "Local ingredients, real macros, no imported guesswork." },
-            { t: "Coach-Verified", d: "Every recommendation is reviewed before it reaches you." },
-            { t: "Built for Consistency", d: "Progress tracking, streaks, and rituals that compound weekly." },
-          ].map((b) => (
-            <div key={b.t} className="glass rounded-md p-6">
-              <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Benefit</div>
-              <div className="mt-2 font-display text-xl">{b.t}</div>
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{b.d}</p>
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-14 sm:py-20">
+        <div className="glass rounded-md p-7 sm:p-10 relative overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none [background:radial-gradient(circle_at_80%_20%,oklch(0.78_0.13_87/0.12),transparent_40%)]" />
+          <div className="relative grid lg:grid-cols-[1fr_auto] gap-8 items-center">
+            <div>
+              <div className="text-xs tracking-[0.3em] uppercase text-gold mb-3">Commerce, without the maze</div>
+              <h2 className="font-display text-3xl sm:text-4xl">Need equipment or another current ResoFit offer?</h2>
+              <p className="mt-4 text-muted-foreground max-w-2xl leading-relaxed">
+                ChatB2K™ can establish intent first. When you are ready to browse or purchase,
+                commerce stays on the dedicated ResoFit shop experience.
+              </p>
             </div>
-          ))}
+            <a
+              href={shopHref}
+              onClick={() => track("shop_click", { surface: "commerce_bridge" })}
+              className="inline-flex items-center justify-center px-7 py-4 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold whitespace-nowrap"
+            >
+              Open ResoFit Shop →
+            </a>
+          </div>
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-        <SectionHeading
-          eyebrow="How it works"
-          title="Three steps to your Metabolic Reset."
-          sub="Under 10 minutes to your first personalized plan."
-        />
-        <div className="mt-10 grid sm:grid-cols-3 gap-5">
-          {[
-            { n: "01", t: "Take the Assessment", d: "Answer a short intake about your goals, lifestyle, and body." },
-            { n: "02", t: "Get Your ChatB2K Plan", d: "Nutrition, training, and recovery tuned to your metabolic profile." },
-            { n: "03", t: "Execute With a Coach", d: "Verified guidance, weekly rituals, and hardware when you're ready." },
-          ].map((s) => (
-            <div key={s.n} className="glass rounded-md p-6">
-              <div className="font-display text-4xl text-gold-gradient">{s.n}</div>
-              <div className="mt-3 font-display text-xl">{s.t}</div>
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{s.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* TESTIMONIALS */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-        <SectionHeading
-          eyebrow="Transformations"
-          title="From ResoFit clients."
-          sub="Real people, real routines, real weeks of work."
-        />
-        <div className="mt-10 grid sm:grid-cols-3 gap-5">
-          {[
-            { name: "Chinaza O.", story: "Lagos · 12 weeks", quote: "The plan was made for my life — jollof included. I dropped 8kg without hating my food." },
-            { name: "Ibrahim A.", story: "Abuja · 8 weeks", quote: "Coach check-ins kept me honest. First time I've stayed consistent past week three." },
-            { name: "Adaeze N.", story: "Port Harcourt · 16 weeks", quote: "Home setup + ChatB2K plan replaced my gym membership and my nutritionist." },
-          ].map((c) => (
-            <div key={c.name} className="glass rounded-md p-6 flex flex-col">
-              <div className="text-gold text-3xl leading-none">“</div>
-              <p className="mt-3 text-sm text-foreground/90 leading-relaxed flex-1">{c.quote}</p>
-              <div className="mt-4 pt-4 border-t border-[var(--glass-border)]">
-                <div className="font-display text-base">{c.name}</div>
-                <div className="text-xs tracking-widest uppercase text-gold/80 mt-1">{c.story}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* MID ASSESSMENT CTA */}
-      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-16 text-center">
-        <SectionHeading
-          align="center"
-          eyebrow="Free"
-          title="Start your Free Assessment."
-          sub="Get your ChatB2K-precision plan in under 10 minutes. No card required."
-        />
-        <div className="mt-8 flex flex-wrap gap-3 justify-center">
+      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-16 sm:py-24 text-center">
+        <div className="text-xs tracking-[0.3em] uppercase text-gold mb-3">Your next move</div>
+        <h2 className="font-display text-4xl sm:text-5xl">Start with intent. Leave with clarity.</h2>
+        <p className="mt-5 text-muted-foreground leading-relaxed">
+          No product knowledge required. No forced storefront detour. Your pathway begins with you.
+        </p>
+        <div className="mt-9 flex flex-wrap gap-3 justify-center">
           <a
-            href={primaryHref}
-            onClick={() => onPrimaryCta("primary")}
-            className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
+            href={personalizeHref}
+            onClick={() => track("personalization_started", { surface: "final" })}
+            className="px-7 py-4 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
           >
-            Start Free Assessment →
+            Discover My Pathway →
           </a>
           <a
-            href={secondaryHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => track("assessment_secondary_click", { surface: "mid" })}
-            className="px-6 py-3.5 rounded-sm glass text-foreground/80 hover:border-[var(--gold)] transition text-sm"
+            href={chatHref}
+            onClick={() => track("chatb2k_open", { surface: "final" })}
+            className="px-7 py-4 rounded-sm glass text-foreground/85 hover:border-[var(--gold)] transition"
           >
-            Take ChatB2K Assessment
+            Ask ChatB2K™
           </a>
         </div>
       </section>
-
-      {/* FEATURED ARSENAL */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-12 opacity-90">
-        <SectionHeading
-          eyebrow="Catalog"
-          title="Equipment layer."
-          sub="Optional hardware for when your plan is dialed in. The Free Assessment is the fastest first step."
-        />
-        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {featured.map((p) => (
-            <ProductCard key={p.slug} product={p} />
-          ))}
-        </div>
-        <div className="mt-10 text-center">
-          <a
-            href={SHOP}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block px-6 py-3 rounded-sm glass hover:border-[var(--gold)] transition"
-          >
-            View full arsenal on reso-flex →
-          </a>
-        </div>
-      </section>
-
-      {/* Financial Router section soft-hidden per funnel patch. */}
-
-      {/* COMMUNITY */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-        <SectionHeading
-          eyebrow="Community"
-          title="Join the ResoFit circle."
-          sub="Coach access, member wins, and weekly rituals — where the transformation stays alive."
-        />
-        <div className="mt-10 grid sm:grid-cols-3 gap-5">
-          <a
-            href={WHATSAPP}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => track("whatsapp_click", { surface: "community" })}
-            className="glass rounded-md p-6 hover:border-[var(--gold)] transition"
-          >
-            <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Coach line</div>
-            <div className="mt-2 font-display text-xl">WhatsApp Coach</div>
-            <p className="mt-2 text-sm text-muted-foreground">Direct access to Coach Buchi for plan questions and check-ins.</p>
-            <div className="mt-4 text-xs tracking-widest uppercase text-gold">Open chat →</div>
-          </a>
-          <a
-            href={TELEGRAM}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => {
-              try {
-                const k = "rf_telegram_join_click";
-                if (sessionStorage.getItem(k)) return;
-                sessionStorage.setItem(k, "1");
-              } catch {}
-              track("telegram_join_click", { surface: "community" });
-            }}
-            className="glass rounded-md p-6 hover:border-[var(--gold)] transition"
-          >
-            <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Broadcast</div>
-            <div className="mt-2 font-display text-xl">Telegram Channel</div>
-            <p className="mt-2 text-sm text-muted-foreground">Daily wins, drops, and ChatB2K tips from the ResoFit floor.</p>
-            <div className="mt-4 text-xs tracking-widest uppercase text-gold">Join channel →</div>
-          </a>
-          <a
-            href={enrollHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => track("community_hub_click", { surface: "community" })}
-            className="glass rounded-md p-6 hover:border-[var(--gold)] transition"
-          >
-            <div className="text-xs tracking-[0.3em] uppercase text-gold/80">Hub</div>
-            <div className="mt-2 font-display text-xl">Community Hub</div>
-            <p className="mt-2 text-sm text-muted-foreground">Member portal, transformation logs, and coach-led rituals.</p>
-            <div className="mt-4 text-xs tracking-widest uppercase text-gold">Enter hub →</div>
-          </a>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-16">
-        <SectionHeading eyebrow="FAQ" title="Answers before you start." />
-        <div className="mt-10 divide-y divide-[var(--glass-border)] border-y border-[var(--glass-border)]">
-          {[
-            { q: "Is the Free Assessment really free?", a: "Yes. You get a ChatB2K-precision plan without paying. The ₦1,000 Metabolic Reset unlocks coach follow-up and full weekly execution." },
-            { q: "Do the meal plans work with Nigerian food?", a: "Every plan is built around locally-available ingredients, portioned to your metabolic profile — jollof, egusi, oats, plantain, all fair game." },
-            { q: "What if I need hardware later?", a: "The Equipment Layer above ships nationwide with verified delivery. Your plan works with zero equipment first." },
-            { q: "Can I talk to a real coach?", a: "Yes — Coach Buchi is one WhatsApp tap away, and coach review is baked into every paid tier." },
-            { q: "How is my data handled?", a: "Assessment data stays inside ResoFit. Payments run on Paystack. We never resell your inputs." },
-          ].map((f) => (
-            <details key={f.q} className="group py-5">
-              <summary className="flex cursor-pointer items-center justify-between gap-6 list-none">
-                <span className="font-display text-lg">{f.q}</span>
-                <span className="text-gold text-xl transition group-open:rotate-45">+</span>
-              </summary>
-              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{f.a}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      {/* FINAL CTA */}
-      <section className="mx-auto max-w-4xl px-4 sm:px-6 py-20 text-center">
-        <SectionHeading
-          align="center"
-          eyebrow="Your move"
-          title="Start Free. Transform for real."
-          sub="Your ChatB2K-precision plan is one assessment away."
-        />
-        <div className="mt-10 flex flex-wrap gap-4 justify-center">
-          <a
-            href={primaryHref}
-            onClick={() => onPrimaryCta("final")}
-            className="px-6 py-3.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold"
-          >
-            Start Free Assessment →
-          </a>
-          <a
-            href={secondaryHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => track("assessment_secondary_click", { surface: "final" })}
-            className="px-6 py-3.5 rounded-sm glass text-foreground/80 hover:border-[var(--gold)] transition text-sm"
-          >
-            Take ChatB2K Assessment
-          </a>
-        </div>
-        <div className="mt-6">
-          <a
-            href={shopHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => track("enroll_click", { surface: "final" })}
-            className="text-xs tracking-[0.3em] uppercase text-gold/80 hover:text-gold transition"
-          >
-            Or shop the arsenal →
-          </a>
-        </div>
-      </section>
-
-      {/* MOBILE STICKY CTA */}
-      <div className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-[var(--glass-border)] bg-[var(--ink)]/95 backdrop-blur px-3 py-3 flex gap-2 items-center">
-        <a
-          href={primaryHref}
-          onClick={() => onPrimaryCta("sticky")}
-          className="flex-1 text-center px-4 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
-        >
-          Start Free Assessment →
-        </a>
-        <a
-          href={WHATSAPP}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => track("whatsapp_click", { surface: "sticky" })}
-          aria-label="WhatsApp coach"
-          className="h-11 w-11 grid place-items-center rounded-sm border border-[var(--glass-border)] text-gold"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path d="M20.5 3.5A11 11 0 0 0 3.2 17l-1.2 4.4 4.5-1.2A11 11 0 1 0 20.5 3.5Zm-8.5 18a9 9 0 0 1-4.6-1.3l-.3-.2-2.7.7.7-2.6-.2-.3A9 9 0 1 1 12 21.5Zm5-6.7c-.3-.1-1.6-.8-1.8-.9s-.4-.1-.6.1-.7.9-.8 1-.3.2-.5.1a7.4 7.4 0 0 1-3.7-3.2c-.3-.5.3-.5.8-1.5a.5.5 0 0 0 0-.5l-.8-2c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-1 2.3c0 1.4 1 2.7 1.2 2.9s2.1 3.2 5.1 4.5a17 17 0 0 0 1.7.6 4 4 0 0 0 1.8.1c.6-.1 1.6-.7 1.8-1.3s.2-1.2.1-1.3-.2-.2-.5-.4Z"/>
-          </svg>
-        </a>
-      </div>
     </SiteShell>
   );
 }

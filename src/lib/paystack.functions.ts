@@ -3,6 +3,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { productBySku } from "@/lib/catalog";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { publishEvent } from "@/lib/events.server";
 
 const InitSchema = z.object({
   email: z.string().email(),
@@ -16,91 +17,61 @@ const InitSchema = z.object({
   variant: z.string().max(64).optional(),
 });
 
-// Initialize a Paystack transaction. Returns reference + access_code.
 export const initPaystackTransaction = createServerFn({ method: "POST" })
   .inputValidator((data) => InitSchema.parse(data))
   .handler(async ({ data }) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
-    if (!secret) {
-      return { ok: false as const, error: "Paystack not configured" };
-    }
+    if (!secret) return { ok: false as const, error: "Paystack not configured" };
 
-    // Compute amount server-side from canonical catalog (never trust client)
     let amountKobo = 0;
     const lines: { sku: string; title: string; quantity: number; unit: number; category: string }[] = [];
     for (const item of data.items) {
       const p = productBySku(item.sku);
       if (!p) return { ok: false as const, error: `Unknown SKU ${item.sku}` };
       amountKobo += p.ngnMinor * item.quantity;
-      lines.push({
-        sku: p.sku,
-        title: p.title,
-        quantity: item.quantity,
-        unit: p.ngnMinor,
-        category: p.category,
-      });
+      lines.push({ sku: p.sku, title: p.title, quantity: item.quantity, unit: p.ngnMinor, category: p.category });
     }
 
     const reference = `RES-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const amountMajor = amountKobo / 100;
+    const first = lines[0];
 
-    // Geo-routed hub assignment. NG→global_hq, US→Jersey City, CA→Ottawa, else→global_hq.
-    const country = (data.utm?.country ?? "NG").toUpperCase();
-    let hubQuery = supabaseAdmin.from("hubs").select("id");
-    if (country === "US") hubQuery = hubQuery.eq("country_code", "US").eq("tier", "international");
-    else if (country === "CA") hubQuery = hubQuery.eq("country_code", "CA").eq("tier", "international");
-    else hubQuery = hubQuery.eq("tier", "global_hq");
-    let { data: hub } = await hubQuery.maybeSingle();
-    if (!hub) {
-      const fallback = await supabaseAdmin
-        .from("hubs")
-        .select("id")
-        .eq("tier", "global_hq")
-        .maybeSingle();
-      hub = fallback.data;
+    // Canonical production financial ledger. Do not create retired `orders`
+    // rows: the live ResoFit database uses payments + revenue_events and the
+    // finalize_payment_success RPC as the authoritative settlement path.
+    const { error: paymentError } = await supabaseAdmin.from("payments").insert({
+      amount: amountMajor,
+      gross_amount: amountMajor,
+      currency: "NGN",
+      customer_email: data.email,
+      funnel_origin: "chatb2k",
+      paystack_ref: reference,
+      product_sku: first?.sku ?? null,
+      rsid: data.rsid ?? null,
+      status: "pending",
+      gateway_response: null,
+      plan_type: first?.category ?? "commerce",
+    });
+
+    if (paymentError) {
+      console.error("[paystack] canonical payment insert failed", paymentError);
+      return { ok: false as const, error: "Could not create payment record" };
     }
 
-    // Persist pending order
-    const { data: order, error: orderErr } = await supabaseAdmin
-      .from("orders")
-      .insert({
-        reference,
-        rail: "paystack",
-        currency: "NGN",
-        amount_minor: amountKobo,
-        status: "pending",
-        customer_email: data.email,
-        customer_name: data.name,
-        customer_country: country,
-        assigned_hub_id: hub?.id ?? null,
-      })
-      .select()
-      .single();
+    await publishEvent("OrderCreated", reference, reference, {
+      reference,
+      amount_minor: amountKobo,
+      amount: amountMajor,
+      currency: "NGN",
+      email: data.email,
+      name: data.name,
+      rsid: data.rsid ?? null,
+      utm: data.utm ?? {},
+      sku: first?.sku ?? null,
+      items: lines,
+      high_ticket: amountKobo >= 38_000_000,
+    });
 
-    if (orderErr || !order) {
-      console.error("Order insert failed:", orderErr);
-      return { ok: false as const, error: "Could not create order" };
-    }
-
-    await supabaseAdmin.from("order_items").insert(
-      lines.map((l) => ({
-        order_id: order.id,
-        sku: l.sku,
-        title: l.title,
-        quantity: l.quantity,
-        unit_amount_minor: l.unit,
-        category: l.category,
-      })),
-    );
-
-    // SLA pipeline: payment verification starts the moment an order exists;
-    // hub assignment is pending until fulfillment allocates the order.
-    {
-      const { startSla } = await import("@/lib/ops/sla.server");
-      await startSla("payment_verification", "order", order.id, { reference });
-      await startSla("hub_assignment", "order", order.id, { reference });
-    }
-
-    // Initialize with Paystack
     const res = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: {
@@ -113,16 +84,14 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
         currency: "NGN",
         reference,
         metadata: {
-          order_id: order.id,
           name: data.name,
           rsid: data.rsid ?? null,
           utm: data.utm ?? {},
           source: data.source ?? null,
           variant: data.variant ?? null,
-          sku: data.items[0]?.sku ?? null,
-          assigned_hub_id: hub?.id ?? null,
-          country,
-          funnel_origin: "resofit",
+          sku: first?.sku ?? null,
+          funnel_origin: "chatb2k",
+          high_ticket: amountKobo >= 38_000_000,
         },
       }),
     });
@@ -134,7 +103,10 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
     };
 
     if (!res.ok || !json.status || !json.data) {
-      console.error("Paystack init failed:", json);
+      await supabaseAdmin
+        .from("payments")
+        .update({ status: "failed", gateway_response: json.message || "Paystack init failed" })
+        .eq("paystack_ref", reference);
       return { ok: false as const, error: json.message || "Paystack init failed" };
     }
 
@@ -148,7 +120,6 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
     };
   });
 
-// Verify a transaction by reference and update order status.
 export const verifyPaystackTransaction = createServerFn({ method: "POST" })
   .inputValidator((data) => z.object({ reference: z.string() }).parse(data))
   .handler(async ({ data }) => {
@@ -159,17 +130,9 @@ export const verifyPaystackTransaction = createServerFn({ method: "POST" })
       `https://api.paystack.co/transaction/verify/${encodeURIComponent(data.reference)}`,
       { headers: { Authorization: `Bearer ${secret}` } },
     );
-    const json = (await res.json()) as {
-      status: boolean;
-      data?: { status: string; amount: number };
-    };
+    const json = (await res.json()) as { status: boolean; data?: { status: string; amount: number } };
+    if (!json.status || !json.data) return { ok: false as const, error: "Verify failed" };
 
-    if (!json.status || !json.data) {
-      return { ok: false as const, error: "Verify failed" };
-    }
-
-    // Read-only: authoritative order status is written by the Paystack webhook
-    // (HMAC-verified). This endpoint is unauthenticated so it must never mutate.
     const paystackStatus = json.data.status;
     const mapped =
       paystackStatus === "success"
@@ -184,20 +147,16 @@ export const getOrderByReference = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ reference: z.string() }).parse(data))
   .handler(async ({ data, context }) => {
-    // Admin-only: this returns full customer PII. Require an authenticated
-    // caller with the 'admin' role. Order owners see their own reference on
-    // the success page but do not need PII readback here.
     const { data: isAdmin } = await context.supabase.rpc("has_role", {
       _user_id: context.userId,
       _role: "admin",
     });
-    if (!isAdmin) {
-      throw new Response("Forbidden", { status: 403 });
-    }
-    const { data: order } = await supabaseAdmin
-      .from("orders")
-      .select("*, order_items(*), hubs(*)")
-      .eq("reference", data.reference)
+    if (!isAdmin) throw new Response("Forbidden", { status: 403 });
+
+    const { data: payment } = await supabaseAdmin
+      .from("payments")
+      .select("*")
+      .eq("paystack_ref", data.reference)
       .maybeSingle();
-    return { order };
+    return { order: payment };
   });

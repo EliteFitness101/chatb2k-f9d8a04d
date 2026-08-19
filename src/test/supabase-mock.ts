@@ -16,18 +16,12 @@ interface Filter {
 function matches(row: Row, f: Filter): boolean {
   const v = row[f.col];
   switch (f.op) {
-    case "eq":
-      return v === f.val;
-    case "neq":
-      return v !== f.val;
-    case "in":
-      return (f.val as any[]).includes(v);
-    case "is":
-      return f.val === null ? v === null || v === undefined : v === f.val;
-    case "gte":
-      return String(v) >= String(f.val);
-    case "lte":
-      return String(v) <= String(f.val);
+    case "eq": return v === f.val;
+    case "neq": return v !== f.val;
+    case "in": return (f.val as any[]).includes(v);
+    case "is": return f.val === null ? v === null || v === undefined : v === f.val;
+    case "gte": return String(v) >= String(f.val);
+    case "lte": return String(v) <= String(f.val);
   }
 }
 
@@ -39,9 +33,9 @@ export function uuid() {
 
 export class MockDb {
   tables: Record<string, Row[]> = {};
-  /** Columns treated as unique per table, used to emulate 23505. */
   unique: Record<string, string[][]> = {
-    payment_events: [["provider", "event_key"]],
+    payment_events: [["paystack_ref", "event"]],
+    payment_event_processing: [["paystack_ref"]],
     ops_tasks: [["dedupe_key"]],
     recovery_workflows: [["dedupe_key"]],
     sla_timers: [["sla_type", "entity", "entity_id"]],
@@ -56,15 +50,51 @@ export class MockDb {
     return this.tables[table];
   }
 
-  reset() {
-    this.tables = {};
-  }
+  reset() { this.tables = {}; }
+  from(table: string) { return new MockQuery(this, table); }
 
-  from(table: string) {
-    return new MockQuery(this, table);
-  }
-
-  rpc(_fn: string, _args: Row) {
+  rpc(fn: string, args: Row) {
+    if (fn === "finalize_payment_success") {
+      const ref = args.p_paystack_ref;
+      const payment = this.rows("payments").find((p) => p.paystack_ref === ref);
+      if (!payment) {
+        this.rows("payments").push({
+          id: uuid(), paystack_ref: ref, product_sku: args.p_product_sku,
+          plan_type: args.p_plan_type, rsid: args.p_rsid, customer_email: args.p_email,
+          funnel_origin: args.p_funnel_origin, status: "success",
+        });
+      } else {
+        payment.status = "success";
+        payment.product_sku ??= args.p_product_sku;
+        payment.customer_email ??= args.p_email;
+        payment.funnel_origin ??= args.p_funnel_origin;
+      }
+    }
+    if (fn === "create_resofit_fulfillment_atomic") {
+      const items = Array.isArray(args.p_items) ? args.p_items : [];
+      const inventory = this.rows("resofit_hub_inventory");
+      const sufficient = items.every((line: Row) => {
+        const row = inventory.find((r) => r.hub_code === args.p_hub_code && r.sku === line.sku);
+        return Boolean(row && Number(row.on_hand ?? 0) - Number(row.reserved ?? 0) >= Number(line.quantity ?? 0));
+      });
+      if (!sufficient) return Promise.resolve({ data: null, error: { code: "P0001", message: "Insufficient inventory" } });
+      for (const line of items) {
+        const row = inventory.find((r) => r.hub_code === args.p_hub_code && r.sku === line.sku)!;
+        row.reserved = Number(row.reserved ?? 0) + Number(line.quantity ?? 0);
+      }
+      const id = uuid();
+      this.rows("resofit_fulfillment_orders").push({
+        id, payment_id: args.p_payment_id, payment_reference: args.p_payment_reference,
+        customer_id: args.p_customer_id, customer_email: args.p_customer_email,
+        status: "allocated", currency: args.p_currency, total_amount: args.p_total_amount,
+        hub_code: args.p_hub_code, country_code: args.p_country,
+      });
+      for (const line of items) {
+        this.rows("resofit_fulfillment_items").push({ id: uuid(), fulfillment_order_id: id, sku: line.sku, quantity: line.quantity, product_id: line.productId ?? null });
+      }
+      this.rows("resofit_fulfillment_events").push({ id: uuid(), fulfillment_order_id: id, from_status: "pending", to_status: "allocated", detail: { hub_code: args.p_hub_code } });
+      return Promise.resolve({ data: id, error: null });
+    }
     return Promise.resolve({ data: null, error: null });
   }
 }
@@ -80,91 +110,41 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
   private orderCol: string | null = null;
   private orderAsc = true;
 
-  constructor(
-    private db: MockDb,
-    private table: string,
-  ) {}
-
+  constructor(private db: MockDb, private table: string) {}
   select(_cols?: string, opts?: { count?: string; head?: boolean }) {
-    if (this.mode === "select") this.mode = "select";
     if (opts?.head) this.headOnly = true;
     if (opts?.count) this.wantCount = true;
     return this;
   }
-  eq(col: string, val: any) {
-    this.filters.push({ op: "eq", col, val });
-    return this;
-  }
-  neq(col: string, val: any) {
-    this.filters.push({ op: "neq", col, val });
-    return this;
-  }
-  in(col: string, val: any[]) {
-    this.filters.push({ op: "in", col, val });
-    return this;
-  }
-  is(col: string, val: any) {
-    this.filters.push({ op: "is", col, val });
-    return this;
-  }
-  gte(col: string, val: any) {
-    this.filters.push({ op: "gte", col, val });
-    return this;
-  }
-  lte(col: string, val: any) {
-    this.filters.push({ op: "lte", col, val });
-    return this;
-  }
-  order(col: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) {
-    this.orderCol = col;
-    this.orderAsc = opts?.ascending !== false;
-    return this;
-  }
-  limit(n: number) {
-    this.limitN = n;
-    return this;
-  }
-  insert(payload: Row | Row[]) {
-    this.mode = "insert";
-    this.payload = payload;
-    return this;
-  }
-  update(payload: Row) {
-    this.mode = "update";
-    this.payload = payload;
-    return this;
-  }
-  upsert(payload: Row | Row[], opts?: { onConflict?: string }) {
-    this.mode = "upsert";
-    this.payload = payload;
-    this.conflict = opts?.onConflict?.split(",").map((s) => s.trim()) ?? ["id"];
-    return this;
-  }
-  delete() {
-    this.mode = "delete";
-    return this;
-  }
+  eq(col: string, val: any) { this.filters.push({ op: "eq", col, val }); return this; }
+  neq(col: string, val: any) { this.filters.push({ op: "neq", col, val }); return this; }
+  in(col: string, val: any[]) { this.filters.push({ op: "in", col, val }); return this; }
+  is(col: string, val: any) { this.filters.push({ op: "is", col, val }); return this; }
+  gte(col: string, val: any) { this.filters.push({ op: "gte", col, val }); return this; }
+  lte(col: string, val: any) { this.filters.push({ op: "lte", col, val }); return this; }
+  order(col: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) { this.orderCol = col; this.orderAsc = opts?.ascending !== false; return this; }
+  limit(n: number) { this.limitN = n; return this; }
+  insert(payload: Row | Row[]) { this.mode = "insert"; this.payload = payload; return this; }
+  update(payload: Row) { this.mode = "update"; this.payload = payload; return this; }
+  upsert(payload: Row | Row[], opts?: { onConflict?: string }) { this.mode = "upsert"; this.payload = payload; this.conflict = opts?.onConflict?.split(",").map((s) => s.trim()) ?? ["id"]; return this; }
+  delete() { this.mode = "delete"; return this; }
 
   private filtered(): Row[] {
     let rows = this.db.rows(this.table).filter((r) => this.filters.every((f) => matches(r, f)));
     if (this.orderCol) {
       const col = this.orderCol;
       rows = [...rows].sort((a, b) => {
-        const x = a[col] ?? "";
-        const y = b[col] ?? "";
+        const x = a[col] ?? "", y = b[col] ?? "";
         return this.orderAsc ? (x > y ? 1 : x < y ? -1 : 0) : x > y ? -1 : x < y ? 1 : 0;
       });
     }
-    if (this.limitN !== null) rows = rows.slice(0, this.limitN);
-    return rows;
+    return this.limitN === null ? rows : rows.slice(0, this.limitN);
   }
 
   private uniqueViolation(row: Row): boolean {
-    const sets = this.db.unique[this.table] ?? [];
-    return sets.some(
-      (cols) =>
-        cols.every((c) => row[c] !== undefined && row[c] !== null) &&
-        this.db.rows(this.table).some((r) => cols.every((c) => r[c] === row[c])),
+    return (this.db.unique[this.table] ?? []).some((cols) =>
+      cols.every((c) => row[c] !== undefined && row[c] !== null) &&
+      this.db.rows(this.table).some((r) => cols.every((c) => r[c] === row[c])),
     );
   }
 
@@ -173,12 +153,9 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
       const list = Array.isArray(this.payload) ? this.payload : [this.payload!];
       const created: Row[] = [];
       for (const p of list) {
-        const row = { id: p['id'] ?? uuid(), created_at: new Date().toISOString(), ...p };
-        if (this.uniqueViolation(row)) {
-          return { data: null, error: { code: "23505", message: "duplicate key" } };
-        }
-        this.db.rows(this.table).push(row);
-        created.push(row);
+        const row = { id: p.id ?? uuid(), created_at: new Date().toISOString(), ...p };
+        if (this.uniqueViolation(row)) return { data: null, error: { code: "23505", message: "duplicate key" } };
+        this.db.rows(this.table).push(row); created.push(row);
       }
       return { data: created, error: null };
     }
@@ -186,58 +163,25 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
       const list = Array.isArray(this.payload) ? this.payload : [this.payload!];
       const out: Row[] = [];
       for (const p of list) {
-        const existing = this.db
-          .rows(this.table)
-          .find((r) => this.conflict.every((c) => r[c] === p[c]));
-        if (existing) {
-          Object.assign(existing, p);
-          out.push(existing);
-        } else {
-          const row = { id: p['id'] ?? uuid(), created_at: new Date().toISOString(), ...p };
-          this.db.rows(this.table).push(row);
-          out.push(row);
-        }
+        const existing = this.db.rows(this.table).find((r) => this.conflict.every((c) => r[c] === p[c]));
+        if (existing) { Object.assign(existing, p); out.push(existing); }
+        else { const row = { id: p.id ?? uuid(), created_at: new Date().toISOString(), ...p }; this.db.rows(this.table).push(row); out.push(row); }
       }
       return { data: out, error: null };
     }
     if (this.mode === "update") {
-      const rows = this.filtered();
-      rows.forEach((r) => Object.assign(r, this.payload));
-      return { data: rows, error: null };
+      const rows = this.filtered(); rows.forEach((r) => Object.assign(r, this.payload)); return { data: rows, error: null };
     }
     if (this.mode === "delete") {
-      const rows = this.filtered();
-      this.db.tables[this.table] = this.db.rows(this.table).filter((r) => !rows.includes(r));
-      return { data: rows, error: null };
+      const rows = this.filtered(); this.db.tables[this.table] = this.db.rows(this.table).filter((r) => !rows.includes(r)); return { data: rows, error: null };
     }
     const rows = this.filtered();
-    if (this.headOnly) return { data: null, error: null, count: rows.length };
-    return { data: rows, error: null, count: this.wantCount ? rows.length : undefined };
+    return this.headOnly ? { data: null, error: null, count: rows.length } : { data: rows, error: null, count: this.wantCount ? rows.length : undefined };
   }
-
-  async maybeSingle() {
-    const res = this.run();
-    const rows = (res.data as Row[]) ?? [];
-    return { data: rows[0] ?? null, error: res.error };
-  }
-  async single() {
-    const res = this.run();
-    const rows = (res.data as Row[]) ?? [];
-    if (res.error) return { data: null, error: res.error };
-    if (rows.length === 0) return { data: null, error: { code: "PGRST116", message: "no rows" } };
-    return { data: rows[0], error: null };
-  }
-
-  then<TResult1 = any, TResult2 = never>(
-    onfulfilled?: ((value: { data: any; error: any; count?: number }) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    return Promise.resolve(this.run()).then(onfulfilled, onrejected);
-  }
+  async maybeSingle() { const r = this.run(); const rows = (r.data as Row[]) ?? []; return { data: rows[0] ?? null, error: r.error }; }
+  async single() { const r = this.run(); const rows = (r.data as Row[]) ?? []; if (r.error) return { data: null, error: r.error }; if (!rows.length) return { data: null, error: { code: "PGRST116", message: "no rows" } }; return { data: rows[0], error: null }; }
+  then<TResult1 = any, TResult2 = never>(onfulfilled?: ((value: { data: any; error: any; count?: number }) => TResult1 | PromiseLike<TResult1>) | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null): PromiseLike<TResult1 | TResult2> { return Promise.resolve(this.run()).then(onfulfilled, onrejected); }
 }
 
 export const mockDb = new MockDb();
-export const supabaseAdminMock = {
-  from: (t: string) => mockDb.from(t),
-  rpc: (fn: string, args: Row) => mockDb.rpc(fn, args),
-};
+export const supabaseAdminMock = { from: (t: string) => mockDb.from(t), rpc: (fn: string, args: Row) => mockDb.rpc(fn, args) };

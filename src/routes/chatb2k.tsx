@@ -48,6 +48,23 @@ const JOURNEY = [
 
 type Answers = Partial<AssessmentInput>;
 
+function getSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const key = "rf_session";
+    let id = sessionStorage.getItem(key);
+    if (!id) {
+      id = typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `sess-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      sessionStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
 function ChatB2KPage() {
   const [stage, setStage] = useState<"landing" | "assessment" | "result">("landing");
   const [answers, setAnswers] = useState<Answers>({});
@@ -56,7 +73,6 @@ function ChatB2KPage() {
   const [saving, setSaving] = useState(false);
   const submit = useServerFn(submitAssessment);
 
-  // Hydrate a prior session so the journey survives refreshes.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -91,7 +107,14 @@ function ChatB2KPage() {
     setSaving(true);
     try {
       const { rsid } = getAttribution();
-      const res = await submit({ data: { rsid, answers: input } });
+      const res = await submit({
+        data: {
+          rsid,
+          anon_id: rsid || null,
+          session_id: getSessionId() || null,
+          answers: input,
+        },
+      });
       if (res?.recommendation) setResult(res.recommendation);
     } catch {
       /* recommendation already computed client-side */
@@ -124,9 +147,7 @@ function ChatB2KPage() {
           title="ChatB2K."
           sub="One continuous journey: assessment → health profile → recommendation → checkout → fulfilment."
         />
-
         <JourneyTimeline activeIndex={stageIndex} />
-
         {stage === "landing" && (
           <div className="mt-8 glass rounded-md p-8">
             <h2 className="font-display text-2xl">Your personal wellness intelligence.</h2>
@@ -135,35 +156,20 @@ function ChatB2KPage() {
               programme, the equipment that fits your space, a nutrition protocol and — where it is
               warranted — a coaching membership. Every recommendation carries a confidence score.
             </p>
-            <button
-              type="button"
-              onClick={() => setStage("assessment")}
-              className="mt-8 px-6 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold"
-            >
+            <button type="button" onClick={() => setStage("assessment")} className="mt-8 px-6 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold">
               Begin assessment →
             </button>
           </div>
         )}
-
         {stage === "assessment" && current && (
           <div className="mt-8 glass rounded-md p-6 sm:p-8">
             <div className="flex items-center justify-between text-xs tracking-[0.25em] uppercase text-muted-foreground">
-              <span>
-                Step {step + 1} / {total}
-              </span>
-              {complete && (
-                <button type="button" className="text-gold" onClick={() => void finish(answers)}>
-                  Jump to result
-                </button>
-              )}
+              <span>Step {step + 1} / {total}</span>
+              {complete && <button type="button" className="text-gold" onClick={() => void finish(answers)}>Jump to result</button>}
             </div>
             <div className="mt-3 h-1 w-full rounded-full bg-[var(--glass-border)]">
-              <div
-                className="h-1 rounded-full bg-gold-gradient transition-all"
-                style={{ width: `${((step + 1) / total) * 100}%` }}
-              />
+              <div className="h-1 rounded-full bg-gold-gradient transition-all" style={{ width: `${((step + 1) / total) * 100}%` }} />
             </div>
-
             <div className="mt-8">
               <Question
                 label={current.label}
@@ -172,27 +178,10 @@ function ChatB2KPage() {
                 onChange={choose}
               />
             </div>
-
-            {step > 0 && (
-              <button
-                type="button"
-                onClick={() => setStep(step - 1)}
-                className="mt-8 text-sm text-muted-foreground hover:text-gold"
-              >
-                ← Back
-              </button>
-            )}
+            {step > 0 && <button type="button" onClick={() => setStep(step - 1)} className="mt-8 text-sm text-muted-foreground hover:text-gold">← Back</button>}
           </div>
         )}
-
-        {stage === "result" && result && (
-          <ResultPanel
-            result={result}
-            answers={answers as AssessmentInput}
-            saving={saving}
-            onRestart={restart}
-          />
-        )}
+        {stage === "result" && result && <ResultPanel result={result} answers={answers as AssessmentInput} saving={saving} onRestart={restart} />}
       </section>
     </SiteShell>
   );
@@ -202,14 +191,7 @@ function JourneyTimeline({ activeIndex }: { activeIndex: number }) {
   return (
     <ol className="mt-8 flex flex-wrap gap-2 text-[10px] tracking-[0.2em] uppercase">
       {JOURNEY.map((label, i) => (
-        <li
-          key={label}
-          className={
-            i <= activeIndex
-              ? "px-3 py-1.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold"
-              : "px-3 py-1.5 rounded-sm border border-[var(--glass-border)] text-muted-foreground"
-          }
-        >
+        <li key={label} className={i <= activeIndex ? "px-3 py-1.5 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold" : "px-3 py-1.5 rounded-sm border border-[var(--glass-border)] text-muted-foreground"}>
           {label}
         </li>
       ))}
@@ -217,24 +199,10 @@ function JourneyTimeline({ activeIndex }: { activeIndex: number }) {
   );
 }
 
-function ResultPanel({
-  result,
-  answers,
-  saving,
-  onRestart,
-}: {
-  result: Recommendation;
-  answers: AssessmentInput;
-  saving: boolean;
-  onRestart: () => void;
-}) {
+function ResultPanel({ result, answers, saving, onRestart }: { result: Recommendation; answers: AssessmentInput; saving: boolean; onRestart: () => void }) {
   const primary = productBySku(result.primary_program_sku);
   const cart = result.ranked_skus.map((sku) => productBySku(sku)).filter(Boolean);
-  const crypto = cryptoEligible(
-    result.subtotal_ngn_minor,
-    "NGN",
-    FALLBACK_ROUTE.cryptoThresholdMinor,
-  );
+  const crypto = cryptoEligible(result.subtotal_ngn_minor, "NGN", FALLBACK_ROUTE.cryptoThresholdMinor);
 
   return (
     <div className="mt-8 space-y-6">
@@ -242,14 +210,9 @@ function ResultPanel({
         <div className="text-xs tracking-[0.3em] uppercase text-gold">Health profile</div>
         <dl className="mt-4 grid sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
           {ASSESSMENT_QUESTIONS.map((q) => (
-            <div
-              key={q.key}
-              className="flex justify-between gap-4 border-b border-[var(--glass-border)] pb-2"
-            >
+            <div key={q.key} className="flex justify-between gap-4 border-b border-[var(--glass-border)] pb-2">
               <dt className="text-muted-foreground">{q.label.replace(/^\d+ · /, "")}</dt>
-              <dd className="text-foreground/90">
-                {q.options.find((o) => o.value === answers[q.key])?.label ?? "—"}
-              </dd>
+              <dd className="text-foreground/90">{q.options.find((o) => o.value === answers[q.key])?.label ?? "—"}</dd>
             </div>
           ))}
         </dl>
@@ -257,142 +220,39 @@ function ResultPanel({
 
       <div className="glass rounded-md p-8 border-2 border-[var(--gold)] shadow-gold">
         <div className="flex items-center justify-between">
-          <div className="text-xs tracking-[0.3em] uppercase text-gold">
-            ChatB2K recommendation {saving && <span className="opacity-60">· saving…</span>}
-          </div>
-          <div className="text-[10px] tracking-widest uppercase text-muted-foreground">
-            {result.engine_version}
-          </div>
+          <div className="text-xs tracking-[0.3em] uppercase text-gold">Recommendation</div>
+          <div className="text-xs text-muted-foreground">Confidence {Math.round(result.confidence_score * 100)}%</div>
         </div>
-
-        {primary && (
-          <>
-            <h2 className="font-display text-2xl mt-3">{primary.title}</h2>
-            <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
-              {primary.description}
-            </p>
-          </>
-        )}
-
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          <Score label="Confidence" value={result.confidence_score} />
-          <Score label="Upsell propensity" value={result.upsell_score} />
-        </div>
-
-        <ul className="mt-6 space-y-1.5 text-xs text-muted-foreground">
-          {result.rationale.map((r) => (
-            <li key={r}>· {r}</li>
-          ))}
-        </ul>
-
-        <div className="mt-8 space-y-3">
-          <div className="text-xs tracking-[0.25em] uppercase text-gold">Recommended stack</div>
-          {cart.map(
-            (p) =>
-              p && (
-                <div
-                  key={p.sku}
-                  className="flex items-center justify-between gap-4 border-b border-[var(--glass-border)] pb-2"
-                >
-                  <div>
-                    <div className="text-sm">{p.title}</div>
-                    <div className="text-[10px] tracking-widest uppercase text-muted-foreground">
-                      {p.sku}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-sm text-gold">{formatNGN(p.ngnMinor)}</span>
-                    <Link
-                      to="/checkout"
-                      search={{ sku: p.sku }}
-                      className="text-[10px] tracking-widest uppercase border border-[var(--glass-border)] rounded-sm px-2 py-1 hover:border-[var(--gold)]"
-                    >
-                      Checkout
-                    </Link>
-                  </div>
-                </div>
-              ),
-          )}
-        </div>
-
-        <div className="mt-6 flex items-center justify-between gap-4">
-          <div>
-            <div className="text-[10px] tracking-widest uppercase text-muted-foreground">
-              Stack subtotal
-            </div>
-            <div className="font-display text-2xl text-gold-gradient">
-              {formatNGN(result.subtotal_ngn_minor)}
-            </div>
-          </div>
-          {primary && (
-            <Link
-              to="/checkout"
-              search={{ sku: primary.sku }}
-              className="shrink-0 px-5 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
-            >
-              Proceed to checkout
+        <h2 className="font-display text-2xl mt-3">{primary?.title ?? result.primary_program_sku}</h2>
+        <p className="text-sm text-muted-foreground mt-2">{primary?.description ?? "Your primary protocol."}</p>
+        <div className="mt-6 grid sm:grid-cols-2 gap-3">
+          {cart.map((p) => p && (
+            <Link key={p.sku} to="/checkout" search={{ sku: p.sku }} className="glass rounded-sm p-4 hover:border-[var(--gold)] transition">
+              <div className="text-xs tracking-widest uppercase text-gold">{p.category}</div>
+              <div className="font-display mt-1">{p.title}</div>
+              <div className="text-sm mt-2">{formatNGN(p.ngnMinor)}</div>
+              <div className="text-xs text-muted-foreground mt-2">Continue to checkout →</div>
             </Link>
-          )}
+          ))}
         </div>
-
         {crypto && (
-          <div className="mt-5 text-xs tracking-widest uppercase text-gold">
-            High-ticket stack · USDT / BTC settlement and concierge fulfilment unlocked
-          </div>
+          <div className="mt-5 text-xs text-gold tracking-widest uppercase">Apex threshold reached · crypto settlement available</div>
         )}
+        <button type="button" onClick={onRestart} className="mt-6 text-sm text-muted-foreground hover:text-gold">Retake assessment</button>
       </div>
-
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <button type="button" onClick={onRestart} className="hover:text-gold">
-          ↺ Retake assessment
-        </button>
-        <Link to="/programs" className="text-gold">
-          Browse programmes →
-        </Link>
-      </div>
+      {saving && <div className="text-xs text-muted-foreground text-center">Saving your intelligence profile…</div>}
     </div>
   );
 }
 
-function Score({ label, value }: { label: string; value: number }) {
+function Question({ label, options, value, onChange }: { label: string; options: { v: string; l: string }[]; value: string | null; onChange: (value: string) => void }) {
   return (
     <div>
-      <div className="text-[10px] tracking-widest uppercase text-muted-foreground">{label}</div>
-      <div className="mt-2 h-1.5 w-full rounded-full bg-[var(--glass-border)]">
-        <div className="h-1.5 rounded-full bg-gold-gradient" style={{ width: `${value * 100}%` }} />
-      </div>
-      <div className="mt-1 text-xs text-gold">{Math.round(value * 100)}%</div>
-    </div>
-  );
-}
-
-function Question({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: { v: string; l: string }[];
-  value: string | null;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div>
-      <div className="text-xs tracking-[0.25em] uppercase text-gold">{label}</div>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <h2 className="font-display text-xl">{label}</h2>
+      <div className="mt-5 grid gap-3">
         {options.map((o) => (
-          <button
-            key={o.v}
-            type="button"
-            onClick={() => onChange(o.v)}
-            className={
-              value === o.v
-                ? "px-4 py-2 rounded-sm text-sm bg-gold-gradient text-[var(--ink)] font-semibold"
-                : "px-4 py-2 rounded-sm text-sm border border-[var(--glass-border)] text-foreground/85 hover:border-[var(--gold)] transition"
-            }
-          >
-            {o.l}
+          <button key={o.v} type="button" onClick={() => onChange(o.v)} className={value === o.v ? "w-full text-left glass rounded-sm p-4 border-2 border-[var(--gold)]" : "w-full text-left glass rounded-sm p-4 hover:border-[var(--gold)] transition"}>
+            <span className="text-sm">{o.l}</span>
           </button>
         ))}
       </div>
