@@ -31,8 +31,8 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
     const amountMajor = amountKobo / 100;
     const first = lines[0];
 
-    // Canonical Supabase RPC owns pending-payment creation. This avoids relying
-    // on direct application table privileges and keeps the financial boundary centralized.
+    // Canonical Supabase RPC owns pending-payment creation. This keeps the
+    // financial boundary centralized and avoids public table privileges.
     const { data: paymentResult, error: paymentError } = await supabaseAdmin.rpc("create_chatb2k_pending_payment", {
       p_amount: amountMajor,
       p_currency: "NGN",
@@ -45,8 +45,42 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
     });
 
     if (paymentError || !paymentResult?.ok) {
-      console.error("[paystack] canonical pending payment creation failed", paymentError ?? paymentResult?.error);
-      return { ok: false as const, error: "Could not create payment record" };
+      // Compatibility path for a stale PostgREST/RPC deployment. This remains
+      // server-only and uses the service-role client, so the hardened public
+      // table permissions are unchanged. The reference remains unique to keep
+      // retries idempotent at the payment-record boundary.
+      console.error("[paystack] canonical pending payment RPC failed", {
+        code: paymentError?.code ?? null,
+        message: paymentError?.message ?? paymentResult?.error ?? null,
+        details: paymentError?.details ?? null,
+        hint: paymentError?.hint ?? null,
+        reference,
+      });
+
+      const { error: fallbackError } = await supabaseAdmin.from("payments").insert({
+        amount: amountMajor,
+        gross_amount: amountMajor,
+        currency: "NGN",
+        customer_email: data.email,
+        funnel_origin: "chatb2k",
+        paystack_ref: reference,
+        product_sku: first?.sku ?? null,
+        rsid: data.rsid ?? null,
+        status: "pending",
+        gateway_response: null,
+        plan_type: first?.category ?? "commerce",
+      });
+
+      if (fallbackError) {
+        console.error("[paystack] fallback pending payment creation failed", {
+          code: fallbackError.code,
+          message: fallbackError.message,
+          details: fallbackError.details,
+          hint: fallbackError.hint,
+          reference,
+        });
+        return { ok: false as const, error: "Could not create payment record" };
+      }
     }
 
     await publishEvent("OrderCreated", reference, reference, {
