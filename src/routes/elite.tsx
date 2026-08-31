@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { productBySku, formatNGN } from "@/lib/catalog";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
-import { productBySku, formatNGN } from "@/lib/catalog";
 import { pageMeta, breadcrumbScript, canonicalLink, SITE_URL } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/elite")({
@@ -25,14 +25,7 @@ export const Route = createFileRoute("/elite")({
 
 const TIERS = [
   {
-    name: "Reset",
-    price: "₦1,000",
-    note: "Entry protocol",
-    perks: ["Metabolic Reset assessment", "Starter meal architecture", "Community access"],
-  },
-  {
     name: "Elite",
-    price: "₦250,000",
     note: "Lifetime · Sovereign vault",
     perks: ["Blueprint vault (lifetime)", "Apex protocols", "Member-only drops", "Priority hub routing"],
     featured: true,
@@ -40,7 +33,6 @@ const TIERS = [
   },
   {
     name: "LuxeGold",
-    price: "₦399,000",
     note: "1-on-1 coaching · monthly",
     perks: ["Weekly 1-on-1 check-ins", "Custom programming", "Direct coach chat", "White-glove delivery"],
     sku: "RES-COACH-01",
@@ -56,10 +48,10 @@ function ElitePage() {
         <SectionHeading
           eyebrow="Layer · Elite"
           title="Premium membership."
-          sub="Three tiers of access. One standard of execution."
+          sub="Premium access, personalized execution, and one standard of service."
         />
 
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
+        <div className="mt-10 grid gap-4 md:grid-cols-2">
           {TIERS.map((t) => (
             <div
               key={t.name}
@@ -76,7 +68,6 @@ function ElitePage() {
               )}
               <div className="font-display text-2xl mt-3">{t.name}</div>
               <div className="text-xs tracking-widest uppercase text-muted-foreground mt-1">{t.note}</div>
-              <div className="font-display text-3xl text-gold-gradient mt-5">{t.price}</div>
               <ul className="mt-6 space-y-2 flex-1">
                 {t.perks.map((p) => (
                   <li key={p} className="text-sm text-foreground/85 flex gap-2">
@@ -85,22 +76,13 @@ function ElitePage() {
                   </li>
                 ))}
               </ul>
-              {t.sku ? (
-                <Link
-                  to="/checkout"
-                  search={{ sku: t.sku }}
-                  className="mt-7 text-center px-4 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
-                >
-                  Claim {t.name}
-                </Link>
-              ) : (
-                <Link
-                  to="/quiz"
-                  className="mt-7 text-center px-4 py-3 rounded-sm border border-[var(--gold)] text-gold text-sm"
-                >
-                  Start Reset
-                </Link>
-              )}
+              <Link
+                to="/checkout"
+                search={{ sku: t.sku }}
+                className="mt-7 text-center px-4 py-3 rounded-sm bg-gold-gradient text-[var(--ink)] font-semibold text-sm"
+              >
+                Claim {t.name}
+              </Link>
             </div>
           ))}
         </div>
