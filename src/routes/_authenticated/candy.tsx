@@ -8,7 +8,7 @@ export const Route = createFileRoute("/_authenticated/candy")({
   head: () => ({
     meta: pageMeta({
       title: "Candy Generator — ResoFlex",
-      description: "Coach Buchi's ₦1,000 Candy meal & workout protocol generator.",
+      description: "Coach Buchi's personalized meal & workout protocol generator.",
     }),
   }),
   component: CandyPage,
@@ -20,7 +20,6 @@ function CandyPage() {
       <AppSidebar />
       <main className="flex-1 min-w-0">
         <div className="mx-auto max-w-4xl px-4 sm:px-8 py-10 lg:py-14">
-          {/* Coach Buchi authority header */}
           <div className="glass rounded-md p-6 sm:p-8 relative overflow-hidden">
             <div
               className="absolute -top-24 -right-24 h-64 w-64 rounded-full opacity-30 blur-3xl"
@@ -38,19 +37,18 @@ function CandyPage() {
                   The Candy Generator.
                 </h1>
                 <p className="text-sm text-muted-foreground mt-2 max-w-xl">
-                  Three declarations. One ₦1,000 protocol. A meal map and workout sequence engineered for your mass, your goal, your tempo.
+                  Three declarations. One personalized protocol. A meal map and workout sequence engineered for your mass, your goal, your tempo.
                 </p>
               </div>
             </div>
 
             <div className="relative mt-6 grid grid-cols-3 gap-3 text-center">
-              <Pill icon={<Flame className="h-3 w-3" />} label="₦1,000 Reset" />
+              <Pill icon={<Flame className="h-3 w-3" />} label="Personalized" />
               <Pill icon={<Trophy className="h-3 w-3" />} label="Mavia Tier System" />
               <Pill icon={<ShieldCheck className="h-3 w-3" />} label="Coach Verified" />
             </div>
           </div>
 
-          {/* Multi-step form */}
           <div className="mt-8">
             <CandyGeneratorForm />
           </div>
