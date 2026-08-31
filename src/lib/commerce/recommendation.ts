@@ -2,9 +2,10 @@
 // Every assessment produces a reproducible snapshot that is persisted
 // alongside the assessment so recommendations can be replayed.
 //
-// P2 commerce policy: customer value first. ResoFit Shop is primary,
-// but ChatB2K may recommend legitimate external commerce, verified 48-SKU
-// fallback inventory, or trusted human fulfillment when those better satisfy intent.
+// Commerce policy: customer value first. ResoFit Shop is primary,
+// but ChatB2K may recommend legitimate external commerce, verified inventory,
+// or trusted human fulfillment when those better satisfy intent.
+// The Reset funnel is external-only and is never a commerce recommendation.
 
 import { productBySku, type Product } from "@/lib/catalog";
 
@@ -126,7 +127,7 @@ export function recommend(a: AssessmentInput): Recommendation {
   return { engine_version: ENGINE_VERSION, primary_program_sku, equipment_skus, membership_sku, nutrition_sku, upsell_score: Number(upsell_score.toFixed(2)), confidence_score: Number(Math.max(0, confidence_score).toFixed(2)), rationale, ranked_skus, subtotal_ngn_minor };
 }
 
-export type RecommendationSourceType = "resofit_shop" | "external_commerce" | "verified_48_sku" | "human_fulfillment" | "reset_1000";
+export type RecommendationSourceType = "resofit_shop" | "external_commerce" | "verified_48_sku" | "human_fulfillment";
 
 export interface CustomerIntent {
   goal: string;
@@ -176,7 +177,6 @@ const SOURCE_WEIGHT: Record<RecommendationSourceType, number> = {
   external_commerce: 3,
   verified_48_sku: 2,
   human_fulfillment: 2,
-  reset_1000: 1,
 };
 
 function clamp(value: number, min = 0, max = 100) { return Math.max(min, Math.min(max, value)); }
@@ -210,30 +210,24 @@ export function rankCommerceCandidates(intent: CustomerIntent, candidates: Comme
       ...candidate,
       score: Math.round(clamp(score)),
       reason: reasonParts.join(" · ") || "best available value match",
-      fallbackLevel: candidate.sourceType === "resofit_shop" ? 1 : candidate.sourceType === "external_commerce" ? 2 : candidate.sourceType === "verified_48_sku" ? 3 : candidate.sourceType === "human_fulfillment" ? 4 : 5,
+      fallbackLevel: candidate.sourceType === "resofit_shop" ? 1 : candidate.sourceType === "external_commerce" ? 2 : candidate.sourceType === "verified_48_sku" ? 3 : 4,
     };
   }).filter((candidate) => candidate.available !== false).sort((a, b) => b.score - a.score);
 }
 
-export function createReset1000Fallback(url = "/reset?offer=1000"): RankedRecommendation {
-  return {
-    id: "RES-RESET-1000", title: "Start Your ₦1,000 Reset", sourceType: "reset_1000", sourceName: "ResoFit", url,
-    priceMinor: 100_000, currency: "NGN", available: true, intentFit: 75, qualityScore: 90, trustScore: 95, locationFit: 100,
-    score: 80, reason: "low-friction ResoFit wellness entry when no suitable commerce solution is available", fallbackLevel: 5,
-  };
-}
-
-export function resolveBestRecommendation(intent: CustomerIntent, candidates: CommerceCandidate[], resetUrl?: string): RankedRecommendation {
-  return rankCommerceCandidates(intent, candidates)[0] ?? createReset1000Fallback(resetUrl);
+export function resolveBestRecommendation(intent: CustomerIntent, candidates: CommerceCandidate[]): RankedRecommendation {
+  const best = rankCommerceCandidates(intent, candidates)[0];
+  if (!best) throw new Error("No eligible commerce recommendation is available for this intent.");
+  return best;
 }
 
 export const CHATB2K_COMMERCE_POLICY = {
   primary: "shop.resofit.fit",
-  fallbackCatalog: "verified_48_sku",
-  resetOffer: "RES-RESET-1000",
+  fallbackCatalog: "verified_inventory",
   externalCommerceAllowed: true,
   humanFulfillmentAllowed: true,
   ownershipMustNotOverrideCustomerValue: true,
+  externalResetHandling: "reset.resofit.fit",
   supportedExternalSourceExamples: ["shopify", "jumia", "konga"],
   localFulfillmentNetwork: ["Aba", "Onitsha", "Lagos"],
 } as const;
