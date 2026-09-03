@@ -3,13 +3,12 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const InputSchema = z.object({ query: z.string().trim().min(3).max(500) });
-
 type FirecrawlSearchResult = { title?: string; url?: string; description?: string; markdown?: string };
 
 const LIVE_WEB_HINTS = [
-  "latest", "today", "current", "now", "recent", "price", "pricing", "available",
-  "availability", "location", "near", "nearby", "address", "contact", "website", "email",
-  "spa", "gym", "wellness hub", "clinic", "competitor", "partner", "brand deal", "news",
+  "latest", "today", "current", "now", "recent", "price", "pricing", "available", "availability",
+  "location", "near", "nearby", "address", "contact", "website", "email", "spa", "gym", "wellness hub",
+  "clinic", "competitor", "partner", "brand deal", "news",
 ];
 
 function shouldUseLiveWeb(query: string) {
@@ -19,7 +18,7 @@ function shouldUseLiveWeb(query: string) {
 
 function cleanMarkdown(value: unknown) {
   if (typeof value !== "string") return "";
-  return value.replace(/\u0000/g, "").slice(0, 7000);
+  return value.replace(/\u0000/g, "").slice(0, 3000);
 }
 
 /** ChatB2K live-web sensing layer. Firecrawl stays server-side. */
