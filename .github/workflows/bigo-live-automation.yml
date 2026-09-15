@@ -32,6 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          echo "OIDC_TOKEN=${OIDC_TOKEN}" >> "$GITHUB_ENV"
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d '{"limit":10}'
 
       - name: Install capture and Blob tools
@@ -116,7 +117,6 @@ jobs:
           print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','imagekit_url':os.environ['IMAGEKIT_URL'],'blob_url':os.environ['BLOB_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'imagekit_url':os.environ['IMAGEKIT_URL']}}))
           PY
           )"
-            OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
             curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d "$(python3 - <<'PY'
           import json,os
           h=json.loads(os.environ['PAYLOAD'])
@@ -129,7 +129,6 @@ jobs:
       - name: Transform and auto-post BIGO content
         run: |
           set -euo pipefail
-          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d '{"limit":10}'
 
-      # Production verification trigger: canonical Reset SKU fix + BIGO OIDC pipeline v6.
+      # Production verification trigger: reuse the OIDC token already proven by the pipeline auth step.
