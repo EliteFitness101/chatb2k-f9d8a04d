@@ -31,6 +31,15 @@ function assertIngestKey(provided?: string) {
   }
 }
 
+// The repository's generated Supabase Database type predates the additive
+// ingestion table. Keep the staging-table boundary typed locally until the
+// next normal database-type regeneration; canonical content tables remain typed.
+type LiveHighlightAdmin = typeof supabaseAdmin & {
+  from(table: "resofit_live_highlights"): any;
+};
+
+const liveDb = supabaseAdmin as LiveHighlightAdmin;
+
 /**
  * Server-only bridge for BIGO/live-stream scrapers.
  * It writes to the staging catalog and then registers the same asset in the
@@ -45,7 +54,7 @@ export const ingestLiveHighlight = createServerFn({ method: "POST" })
     const h = data.highlight;
     const fingerprint = h.fingerprint ?? `${h.host_id}:${h.original_url}:${h.imagekit_url}`;
 
-    const { data: existing, error: existingError } = await supabaseAdmin
+    const { data: existing, error: existingError } = await liveDb
       .from("resofit_live_highlights")
       .select("id,status,content_asset_id,content_queue_id")
       .eq("fingerprint", fingerprint)
@@ -60,7 +69,7 @@ export const ingestLiveHighlight = createServerFn({ method: "POST" })
       return { ok: true as const, duplicate: true as const, highlight: existing };
     }
 
-    const { data: highlight, error: insertError } = await supabaseAdmin
+    const { data: highlight, error: insertError } = await liveDb
       .from("resofit_live_highlights")
       .insert({
         host_id: h.host_id,
@@ -145,7 +154,7 @@ export const ingestLiveHighlight = createServerFn({ method: "POST" })
 
       if (queueError || !queue) throw queueError ?? new Error("Content queue insert failed");
 
-      const { error: updateError } = await supabaseAdmin
+      const { error: updateError } = await liveDb
         .from("resofit_live_highlights")
         .update({
           status: "posted",
@@ -161,7 +170,7 @@ export const ingestLiveHighlight = createServerFn({ method: "POST" })
       return { ok: true as const, duplicate: false as const, highlight_id: highlight.id, content_asset_id: asset.id, content_queue_id: queue.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown processing error";
-      await supabaseAdmin
+      await liveDb
         .from("resofit_live_highlights")
         .update({ status: "failed", error_message: message, updated_at: new Date().toISOString() })
         .eq("id", highlight.id);
