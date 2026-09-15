@@ -28,12 +28,6 @@ jobs:
       IMAGEKIT_AUTH_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/imagekit-auth
       PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
     steps:
-      - name: Publish existing live highlight queue immediately
-        run: |
-          set -euo pipefail
-          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d '{"limit":10}'
-
       - name: Install capture and Blob tools
         run: |
           sudo apt-get update -qq
@@ -41,7 +35,7 @@ jobs:
           python3 -m pip install --disable-pip-version-check -q streamlink requests
           npm install --no-save --no-package-lock @vercel/blob
 
-      - name: Capture live BIGO segments and send through ChatB2K
+      - name: Capture live BIGO segments and prepare ChatB2K batch
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +49,7 @@ jobs:
           for k in ('token','expire','signature','publicKey'):
               if not d.get(k): raise SystemExit(f'missing ImageKit auth field: {k}')
           PY
+          echo '{"highlights":[],"limit":10}' > /tmp/bigo-batch.json
           IFS=', ' read -r -a HOST_ARRAY <<< "$HOSTS"
           for HOST in "${HOST_ARRAY[@]}"; do
             [ -z "$HOST" ] && continue
@@ -116,20 +111,19 @@ jobs:
           print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','imagekit_url':os.environ['IMAGEKIT_URL'],'blob_url':os.environ['BLOB_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'imagekit_url':os.environ['IMAGEKIT_URL']}}))
           PY
           )"
-            OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d "$(python3 - <<'PY'
-          import json,os
-          h=json.loads(os.environ['PAYLOAD'])
-          print(json.dumps({'highlights':[h],'limit':10}))
+            python3 - "$PAYLOAD" <<'PY'
+          import json,sys
+          path='/tmp/bigo-batch.json'
+          d=json.load(open(path)); d['highlights'].append(json.loads(sys.argv[1])); json.dump(d,open(path,'w'))
           PY
-          )"
             rm -f "${FILE}"
           done
+          echo "Prepared $(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))') BIGO highlight(s)"
 
-      - name: Transform and auto-post BIGO content
+      - name: Ingest, enrich and auto-post BIGO batch
         run: |
           set -euo pipefail
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d '{"limit":10}'
+          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
 
-      # Production verification: deterministic BIGO fallback + fresh OIDC capture.
+      # Production verification: one authenticated pipeline call per run.
