@@ -8,7 +8,11 @@
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/health",
+      "destination": "chatb2k_github_orchestrator.py"
+    },
+    {
+      "src": "/webhook/github",
       "destination": "chatb2k_github_orchestrator.py"
     }
   ]
