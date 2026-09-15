@@ -24,6 +24,11 @@ jobs:
       LIVE_INGEST_URL: https://chatb2k.resofit.fit/api/public/live-highlights
       PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
     steps:
+      - name: Publish existing live highlight queue immediately
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
+
       - name: Install capture tools
         run: |
           sudo apt-get update -qq
@@ -104,3 +109,5 @@ jobs:
       - name: Transform and auto-post BIGO content
         run: |
           curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
+
+      # Production trigger: this workflow change intentionally causes an immediate GitHub Actions run.
