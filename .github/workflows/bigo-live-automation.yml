@@ -25,7 +25,6 @@ jobs:
       BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
       CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-      IMAGEKIT_AUTH_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/imagekit-auth
       PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
     steps:
       - name: Install capture and Blob tools
@@ -41,14 +40,6 @@ jobs:
           set -euo pipefail
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
           HOSTS="${BIGO_HOST_IDS:-748833040}"
-          AUTH_JSON="$(curl -fsS -H "x-resofit-upload-secret: ${CHATB2K_LIVE_INGEST_KEY}" "${IMAGEKIT_AUTH_URL}")"
-          export AUTH_JSON
-          python3 - <<'PY'
-          import json, os
-          d=json.loads(os.environ['AUTH_JSON'])
-          for k in ('token','expire','signature','publicKey'):
-              if not d.get(k): raise SystemExit(f'missing ImageKit auth field: {k}')
-          PY
           echo '{"highlights":[],"limit":10}' > /tmp/bigo-batch.json
           IFS=', ' read -r -a HOST_ARRAY <<< "$HOSTS"
           for HOST in "${HOST_ARRAY[@]}"; do
@@ -95,20 +86,12 @@ jobs:
             BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`bigo_highlights/${file}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
             echo "Vercel Blob: ${BLOB_URL}"
             export BLOB_URL
-            UPLOAD="$(python3 - <<'PY'
-          import json,os,subprocess
-          a=json.loads(os.environ['AUTH_JSON'])
-          cmd=['curl','-fsS','-X','POST','https://upload.imagekit.io/api/v1/files/upload','-F',f'file=@{os.environ["FILE"]}','-F',f'fileName={os.environ["FILE"]}','-F',f'publicKey={a["publicKey"]}','-F',f'signature={a["signature"]}','-F',f'expire={a["expire"]}','-F',f'token={a["token"]}','-F','folder=/bigo_highlights','-F','useUniqueFileName=true']
-          print(subprocess.check_output(cmd,text=True))
-          PY
-          )"
-            export UPLOAD
-            IMAGEKIT_URL="$(python3 -c 'import json,os; print(json.loads(os.environ["UPLOAD"])["url"])')"
             FP="${HOST}:${TS}:${BLOB_URL}"
-            export IMAGEKIT_URL FP
+            export FP
             PAYLOAD="$(python3 - <<'PY'
           import json,os
-          print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','imagekit_url':os.environ['IMAGEKIT_URL'],'blob_url':os.environ['BLOB_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'imagekit_url':os.environ['IMAGEKIT_URL']}}))
+          blob=os.environ['BLOB_URL']
+          print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','blob_url':blob,'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS'],'blob_url':blob}}))
           PY
           )"
             python3 - "$PAYLOAD" <<'PY'
@@ -126,4 +109,4 @@ jobs:
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
 
-      # Production verification: one authenticated pipeline call per run.
+      # Production verification: Blob is the canonical media path; ImageKit is optional and non-blocking.
