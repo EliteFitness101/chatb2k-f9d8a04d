@@ -52,56 +52,79 @@ export const Route = createFileRoute("/api/public/live-highlights")({
           const h = parsed.data;
           const fingerprint =
             h.fingerprint ?? `${h.host_id}:${h.original_url}:${h.imagekit_url}`;
+          const platforms = h.target_channels.length
+            ? h.target_channels
+            : ["tiktok", "youtube", "google_business"];
+          const sourceAssetId = h.source_asset_id ?? fingerprint;
 
           const { data: existing, error: existingError } = await liveDb
             .from("resofit_live_highlights")
-            .select("id,status,content_asset_id,content_queue_id")
+            .select("*")
             .eq("fingerprint", fingerprint)
             .maybeSingle();
 
           if (existingError) throw existingError;
 
-          if (existing) {
+          if (existing?.status === "posted" && existing.content_asset_id && existing.content_queue_id) {
             return Response.json({
               success: true,
               duplicate: true,
               message: "Highlight already ingested",
-              data: existing,
+              data: {
+                id: existing.id,
+                status: existing.status,
+                content_asset_id: existing.content_asset_id,
+                content_queue_id: existing.content_queue_id,
+              },
             });
           }
 
-          const { data: highlight, error: insertError } = await liveDb
-            .from("resofit_live_highlights")
-            .insert({
-              host_id: h.host_id,
-              host_name: h.host_name ?? "BIGO Live Host",
-              original_url: h.original_url,
-              imagekit_url: h.imagekit_url,
-              title: h.title ?? "Live Performance Highlight",
-              caption: h.caption ?? "",
-              target_channels: h.target_channels.length
-                ? h.target_channels
-                : ["tiktok", "youtube", "google_business"],
-              fingerprint,
-              source_asset_id: h.source_asset_id ?? fingerprint,
-              metadata: h.metadata,
-              status: "processing",
-              processing_started_at: new Date().toISOString(),
-            })
-            .select("*")
-            .single();
+          let highlight: any;
 
-          if (insertError || !highlight) {
-            throw insertError ?? new Error("Could not stage live highlight");
+          if (existing) {
+            const { data: retried, error: retryError } = await liveDb
+              .from("resofit_live_highlights")
+              .update({
+                status: "processing",
+                error_message: null,
+                processing_started_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existing.id)
+              .select("*")
+              .single();
+
+            if (retryError || !retried) {
+              throw retryError ?? new Error("Could not resume staged live highlight");
+            }
+            highlight = retried;
+          } else {
+            const { data: inserted, error: insertError } = await liveDb
+              .from("resofit_live_highlights")
+              .insert({
+                host_id: h.host_id,
+                host_name: h.host_name ?? "BIGO Live Host",
+                original_url: h.original_url,
+                imagekit_url: h.imagekit_url,
+                title: h.title ?? "Live Performance Highlight",
+                caption: h.caption ?? "",
+                target_channels: platforms,
+                fingerprint,
+                source_asset_id: sourceAssetId,
+                metadata: h.metadata,
+                status: "processing",
+                processing_started_at: new Date().toISOString(),
+              })
+              .select("*")
+              .single();
+
+            if (insertError || !inserted) {
+              throw insertError ?? new Error("Could not stage live highlight");
+            }
+            highlight = inserted;
           }
 
           try {
-            const platforms = h.target_channels.length
-              ? h.target_channels
-              : ["tiktok", "youtube", "google_business"];
-
-            const sourceAssetId = h.source_asset_id ?? fingerprint;
-
             const { data: asset, error: assetError } = await supabaseAdmin
               .from("content_asset_registry")
               .upsert(
@@ -135,35 +158,49 @@ export const Route = createFileRoute("/api/public/live-highlights")({
               throw assetError ?? new Error("Asset registration failed");
             }
 
-            const { data: queue, error: queueError } = await supabaseAdmin
+            let queue: { id: string } | null = null;
+            const { data: existingQueue, error: existingQueueError } = await supabaseAdmin
               .from("content_queue")
-              .insert({
-                title: h.title ?? `ResoFit Live Highlight — ${h.host_name ?? h.host_id}`,
-                asset_url: h.imagekit_url,
-                public_id: sourceAssetId,
-                caption: h.caption ?? h.title ?? "Live from the ResoFit movement.",
-                platforms,
-                status: "draft",
-                metadata: {
-                  source: "bigo_live",
-                  live_highlight_id: highlight.id,
-                  content_asset_id: asset.id,
-                  host_id: h.host_id,
-                  host_name: h.host_name ?? null,
-                  original_url: h.original_url,
-                  fingerprint,
-                  ...h.metadata,
-                },
-                campaign_key: "live_stream_highlights",
-                platform: platforms[0] ?? null,
-                destination: "https://resofit.fit",
-                safety_checked: false,
-              })
               .select("id")
-              .single();
+              .eq("campaign_key", "live_stream_highlights")
+              .contains("metadata", { live_highlight_id: highlight.id })
+              .maybeSingle();
 
-            if (queueError || !queue) {
-              throw queueError ?? new Error("Content queue insert failed");
+            if (existingQueueError) throw existingQueueError;
+            queue = existingQueue;
+
+            if (!queue) {
+              const { data: insertedQueue, error: queueError } = await supabaseAdmin
+                .from("content_queue")
+                .insert({
+                  title: h.title ?? `ResoFit Live Highlight — ${h.host_name ?? h.host_id}`,
+                  asset_url: h.imagekit_url,
+                  public_id: sourceAssetId,
+                  caption: h.caption ?? h.title ?? "Live from the ResoFit movement.",
+                  platforms,
+                  status: "draft",
+                  metadata: {
+                    source: "bigo_live",
+                    live_highlight_id: highlight.id,
+                    content_asset_id: asset.id,
+                    host_id: h.host_id,
+                    host_name: h.host_name ?? null,
+                    original_url: h.original_url,
+                    fingerprint,
+                    ...h.metadata,
+                  },
+                  campaign_key: "live_stream_highlights",
+                  platform: platforms[0] ?? null,
+                  destination: "https://resofit.fit",
+                  safety_checked: false,
+                })
+                .select("id")
+                .single();
+
+              if (queueError || !insertedQueue) {
+                throw queueError ?? new Error("Content queue insert failed");
+              }
+              queue = insertedQueue;
             }
 
             const { error: updateError } = await liveDb
@@ -173,6 +210,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                 content_asset_id: asset.id,
                 content_queue_id: queue.id,
                 processed_at: new Date().toISOString(),
+                error_message: null,
                 updated_at: new Date().toISOString(),
               })
               .eq("id", highlight.id);
@@ -181,8 +219,10 @@ export const Route = createFileRoute("/api/public/live-highlights")({
 
             return Response.json({
               success: true,
-              duplicate: false,
-              message: "Highlight successfully ingested into the ResoFit content pipeline",
+              duplicate: Boolean(existing),
+              message: existing
+                ? "Highlight retry successfully completed into the ResoFit content pipeline"
+                : "Highlight successfully ingested into the ResoFit content pipeline",
               data: {
                 highlight_id: highlight.id,
                 content_asset_id: asset.id,
