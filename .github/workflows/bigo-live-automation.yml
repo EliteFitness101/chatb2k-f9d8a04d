@@ -60,9 +60,9 @@ jobs:
             TS="$(date -u +%Y%m%dT%H%M%SZ)"
             FILE="bigo-${HOST}-${TS}.mp4"
             export FILE
-            echo "Capturing ${HOST} for 35 seconds"
+            echo "Capturing ${HOST} for 25 seconds"
             set +e
-            timeout 55s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>/tmp/streamlink.log | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 35 -c:v libx264 -preset veryfast -crf 26 -c:a aac -movflags +faststart "${FILE}"
+            timeout 45s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>/tmp/streamlink.log | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 26 -c:a aac -movflags +faststart "${FILE}"
             RC=$?
             set -e
             if [ "$RC" -ne 0 ] || [ ! -s "$FILE" ]; then cat /tmp/streamlink.log || true; echo "No capture for ${HOST}"; rm -f "${FILE}"; continue; fi
@@ -97,6 +97,6 @@ jobs:
             rm -f "${FILE}"
           done
 
-      - name: Transform and auto-post due content
+      - name: Transform and auto-post due BIGO content
         run: |
           curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
