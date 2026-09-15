@@ -2,6 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 
+type LiveHighlightAdmin = typeof supabaseAdmin & {
+  from(table: "resofit_live_highlights"): any;
+};
+
+const liveDb = supabaseAdmin as LiveHighlightAdmin;
+
 const HighlightSchema = z.object({
   host_id: z.string().min(1).max(256),
   host_name: z.string().max(256).optional().nullable(),
@@ -28,7 +34,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
       POST: async ({ request }) => {
         const expectedKey = process.env.CHATB2K_LIVE_INGEST_KEY;
         const authHeader = request.headers.get("authorization");
-        const token = authHeader?.match(/^Bearer\\s+(.+)$/i)?.[1];
+        const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
 
         if (!expectedKey || !token || token !== expectedKey) {
           return unauthorized();
@@ -47,7 +53,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
           const fingerprint =
             h.fingerprint ?? `${h.host_id}:${h.original_url}:${h.imagekit_url}`;
 
-          const { data: existing, error: existingError } = await supabaseAdmin
+          const { data: existing, error: existingError } = await liveDb
             .from("resofit_live_highlights")
             .select("id,status,content_asset_id,content_queue_id")
             .eq("fingerprint", fingerprint)
@@ -64,7 +70,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
             });
           }
 
-          const { data: highlight, error: insertError } = await supabaseAdmin
+          const { data: highlight, error: insertError } = await liveDb
             .from("resofit_live_highlights")
             .insert({
               host_id: h.host_id,
@@ -158,7 +164,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
               throw queueError ?? new Error("Content queue insert failed");
             }
 
-            const { error: updateError } = await supabaseAdmin
+            const { error: updateError } = await liveDb
               .from("resofit_live_highlights")
               .update({
                 status: "posted",
@@ -183,7 +189,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : "Unknown processing error";
-            await supabaseAdmin
+            await liveDb
               .from("resofit_live_highlights")
               .update({
                 status: "failed",
