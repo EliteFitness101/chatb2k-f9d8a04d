@@ -100,12 +100,14 @@ export const Route = createFileRoute("/api/public/live-highlights")({
               ? h.target_channels
               : ["tiktok", "youtube", "google_business"];
 
+            const sourceAssetId = h.source_asset_id ?? fingerprint;
+
             const { data: asset, error: assetError } = await supabaseAdmin
               .from("content_asset_registry")
               .upsert(
                 {
                   source_provider: "bigo_live",
-                  source_asset_id: h.source_asset_id ?? fingerprint,
+                  source_asset_id: sourceAssetId,
                   source_url: h.original_url,
                   canonical_url: h.imagekit_url,
                   brand: "Resonance Fitness",
@@ -124,7 +126,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                   fingerprint,
                   intelligence: h.metadata,
                 },
-                { onConflict: "fingerprint" },
+                { onConflict: "source_provider,source_asset_id" },
               )
               .select("id")
               .single();
@@ -138,7 +140,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
               .insert({
                 title: h.title ?? `ResoFit Live Highlight — ${h.host_name ?? h.host_id}`,
                 asset_url: h.imagekit_url,
-                public_id: h.source_asset_id ?? fingerprint,
+                public_id: sourceAssetId,
                 caption: h.caption ?? h.title ?? "Live from the ResoFit movement.",
                 platforms,
                 status: "draft",
