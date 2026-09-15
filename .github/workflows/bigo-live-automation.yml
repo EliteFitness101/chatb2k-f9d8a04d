@@ -9,6 +9,10 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: bigo-live-automation
   cancel-in-progress: false
@@ -28,7 +32,11 @@ jobs:
       - name: Publish existing live highlight queue immediately
         run: |
           set -euo pipefail
-          curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
+          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          curl -fsS -X POST "${PIPELINE_URL}" \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d '{"limit":10}'
 
       - name: Install capture and Blob tools
         run: |
@@ -89,12 +97,10 @@ jobs:
             ASPECT="$(python3 -c "print(float('${WIDTH}')/float('${HEIGHT}') if float('${HEIGHT}') else 0)")"
             export WIDTH HEIGHT DURATION AUDIO ASPECT HOST NAME TITLE TS
 
-            # Persist every verified 25-second MP4 to Vercel Blob before any downstream publish attempt.
             BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`bigo_highlights/${file}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
             echo "Vercel Blob: ${BLOB_URL}"
             export BLOB_URL
 
-            # Keep ImageKit as the alternate media copy.
             UPLOAD="$(python3 - <<'PY'
           import json,os,subprocess
           a=json.loads(os.environ['AUTH_JSON'])
@@ -117,6 +123,11 @@ jobs:
 
       - name: Transform and auto-post BIGO content
         run: |
-          curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
+          set -euo pipefail
+          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          curl -fsS -X POST "${PIPELINE_URL}" \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d '{"limit":10}'
 
       # Production trigger: this workflow change intentionally causes an immediate GitHub Actions run.
