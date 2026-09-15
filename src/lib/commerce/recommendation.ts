@@ -215,6 +215,27 @@ export function rankCommerceCandidates(intent: CustomerIntent, candidates: Comme
   }).filter((candidate) => candidate.available !== false).sort((a, b) => b.score - a.score);
 }
 
+/** Stable ₦1,000 Reset escape hatch when no eligible commerce source exists. */
+export function createReset1000Fallback(resetUrl = "https://reset.resofit.fit"): RankedRecommendation {
+  return {
+    id: "reset-1000",
+    title: "ResoFit Reset",
+    sourceType: "external_commerce",
+    sourceName: "ResoFit Reset",
+    url: resetUrl,
+    priceMinor: 100_000,
+    currency: "NGN",
+    available: true,
+    intentFit: 70,
+    qualityScore: 80,
+    trustScore: 90,
+    locationFit: 70,
+    score: 82,
+    reason: "₦1,000 Reset fallback — no eligible commerce candidate was available.",
+    fallbackLevel: 2,
+  };
+}
+
 export function resolveBestRecommendation(intent: CustomerIntent, candidates: CommerceCandidate[]): RankedRecommendation {
   const best = rankCommerceCandidates(intent, candidates)[0];
   if (!best) throw new Error("No eligible commerce recommendation is available for this intent.");
