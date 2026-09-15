@@ -20,6 +20,7 @@ jobs:
     env:
       BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
       CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
       IMAGEKIT_AUTH_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/imagekit-auth
       LIVE_INGEST_URL: https://chatb2k.resofit.fit/api/public/live-highlights
       PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
@@ -29,11 +30,12 @@ jobs:
           set -euo pipefail
           curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
 
-      - name: Install capture tools
+      - name: Install capture and Blob tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           python3 -m pip install --disable-pip-version-check -q streamlink requests
+          npm install --no-save --no-package-lock @vercel/blob
 
       - name: Capture live BIGO segments and send through ChatB2K
         shell: bash
@@ -86,6 +88,12 @@ jobs:
             ASPECT="$(python3 -c "print(float('${WIDTH}')/float('${HEIGHT}') if float('${HEIGHT}') else 0)")"
             export WIDTH HEIGHT DURATION AUDIO ASPECT HOST NAME TITLE TS
 
+            # Persist every verified 25-second MP4 to Vercel Blob as a second durable CDN copy.
+            BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; if(!process.env.BLOB_READ_WRITE_TOKEN) throw new Error("BLOB_READ_WRITE_TOKEN is not configured"); const body=fs.readFileSync(file); const r=await put(`bigo_highlights/${file}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
+            echo "Vercel Blob: ${BLOB_URL}"
+            export BLOB_URL
+
+            # Keep ImageKit as the existing media path too; Blob is the durable fallback if either provider is unavailable.
             UPLOAD="$(python3 - <<'PY'
           import json,os,subprocess
           a=json.loads(os.environ['AUTH_JSON'])
@@ -99,7 +107,7 @@ jobs:
             export IMAGEKIT_URL FP
             PAYLOAD="$(python3 - <<'PY'
           import json,os
-          print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','imagekit_url':os.environ['IMAGEKIT_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS']}}))
+          print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','imagekit_url':os.environ['IMAGEKIT_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'imagekit_url':os.environ['IMAGEKIT_URL']}}))
           PY
           )"
             curl -fsS -X POST "${LIVE_INGEST_URL}" -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d "${PAYLOAD}"
