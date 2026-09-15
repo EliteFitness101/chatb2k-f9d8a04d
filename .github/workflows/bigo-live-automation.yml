@@ -132,4 +132,4 @@ jobs:
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d '{"limit":10}'
 
-      # Production verification trigger: fresh OIDC token per authenticated pipeline request.
+      # Production verification: deterministic BIGO fallback + fresh OIDC capture.
