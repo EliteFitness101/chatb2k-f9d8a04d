@@ -131,4 +131,4 @@ jobs:
           set -euo pipefail
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d '{"limit":10}'
 
-      # Production verification trigger: reuse the OIDC token already proven by the pipeline auth step.
+      # Production verification trigger: BIGO pipeline v7 uses repository-scoped GitHub OIDC.
