@@ -1,6 +1,10 @@
 name: BIGO Live → ChatB2K → Buffer
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bigo-live-automation.yml'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -97,6 +101,6 @@ jobs:
             rm -f "${FILE}"
           done
 
-      - name: Transform and auto-post due BIGO content
+      - name: Transform and auto-post BIGO content
         run: |
           curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
