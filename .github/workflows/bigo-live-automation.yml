@@ -1,0 +1,102 @@
+name: BIGO Live → ChatB2K → Buffer
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: bigo-live-automation
+  cancel-in-progress: false
+
+jobs:
+  capture-transform-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
+      CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
+      SUPABASE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co
+      IMAGEKIT_AUTH_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/imagekit-auth
+      LIVE_INGEST_URL: https://chatb2k.resofit.fit/api/public/live-highlights
+      PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
+    steps:
+      - name: Install capture tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python3 -m pip install --disable-pip-version-check -q streamlink
+
+      - name: Capture live BIGO segments and send through ChatB2K
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOSTS="${BIGO_HOST_IDS:-748833040}"
+          AUTH_JSON="$(curl -fsS -H "x-resofit-upload-secret: ${CHATB2K_LIVE_INGEST_KEY}" "${IMAGEKIT_AUTH_URL}")"
+          export AUTH_JSON
+          python3 - <<'PY'
+          import json, os
+          d=json.loads(os.environ['AUTH_JSON'])
+          for k in ('token','expire','signature','publicKey'):
+              if not d.get(k): raise SystemExit(f'missing ImageKit auth field: {k}')
+          PY
+
+          IFS=', ' read -r -a HOST_ARRAY <<< "$HOSTS"
+          for HOST in "${HOST_ARRAY[@]}"; do
+            [ -z "$HOST" ] && continue
+            echo "Checking BIGO host ${HOST}"
+            INFO="$(python3 - "$HOST" <<'PY'
+          import json,sys,requests
+          host=sys.argv[1]
+          r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=15)
+          r.raise_for_status(); d=r.json().get('data') or {}
+          print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'snapshot':d.get('snapshot') or ''}))
+          PY
+          )"
+            export INFO
+            LIVE="$(python3 -c 'import json,os; print(str(json.loads(os.environ["INFO"]).get("alive",False)).lower())')"
+            if [ "$LIVE" != "true" ]; then echo "${HOST} offline; skipping"; continue; fi
+            NAME="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("name", "BIGO Host"))')"
+            TITLE="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("title", "BIGO Live Highlight"))')"
+            TS="$(date -u +%Y%m%dT%H%M%SZ)"
+            FILE="bigo-${HOST}-${TS}.mp4"
+            echo "Capturing ${HOST} for 35 seconds"
+            set +e
+            timeout 55s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>/tmp/streamlink.log | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 35 -c:v libx264 -preset veryfast -crf 26 -c:a aac -movflags +faststart "${FILE}"
+            RC=$?
+            set -e
+            if [ "$RC" -ne 0 ] || [ ! -s "$FILE" ]; then cat /tmp/streamlink.log || true; echo "No capture for ${HOST}"; rm -f "$FILE"; continue; fi
+
+            META="$(ffprobe -v error -show_entries stream=width,height,codec_type -show_entries format=duration -of json "${FILE}")"
+            export META
+            read -r WIDTH HEIGHT DURATION AUDIO <<< "$(python3 - <<'PY'
+          import json,os
+          d=json.loads(os.environ['META']); streams=d.get('streams',[]); v=next((s for s in streams if s.get('codec_type')=='video'),{}); a=any(s.get('codec_type')=='audio' for s in streams); print(v.get('width',0),v.get('height',0),d.get('format',{}).get('duration',0),str(a).lower())
+          PY
+          )"
+            ASPECT="$(python3 -c "print(float('${WIDTH}')/float('${HEIGHT}') if float('${HEIGHT}') else 0)")"
+
+            export AUTH_JSON WIDTH HEIGHT DURATION AUDIO ASPECT HOST NAME TITLE TS
+            UPLOAD="$(python3 - <<'PY'
+          import json,os,subprocess
+          a=json.loads(os.environ['AUTH_JSON'])
+          cmd=['curl','-fsS','-X','POST','https://upload.imagekit.io/api/v1/files/upload','-F',f'file=@{os.environ["FILE"]}','-F',f'fileName={os.environ["FILE"]}','-F',f'publicKey={a["publicKey"]}','-F',f'signature={a["signature"]}','-F',f'expire={a["expire"]}','-F',f'token={a["token"]}','-F','folder=/bigo_highlights','-F','useUniqueFileName=true']
+          print(subprocess.check_output(cmd,text=True))
+          PY
+          )"
+            export UPLOAD
+            IMAGEKIT_URL="$(python3 -c 'import json,os; print(json.loads(os.environ["UPLOAD"])["url"])')"
+            FP="${HOST}:${TS}:${IMAGEKIT_URL}"
+            export IMAGEKIT_URL FP
+            PAYLOAD="$(python3 - <<'PY'
+          import json,os
+          print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','imagekit_url':os.environ['IMAGEKIT_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS']}}))
+          PY
+          )"
+            curl -fsS -X POST "${LIVE_INGEST_URL}" -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d "${PAYLOAD}"
+            rm -f "${FILE}"
+          done
+
+      - name: Transform and auto-post due content
+        run: |
+          curl -fsS -X POST "${PIPELINE_URL}" -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d '{"limit":10}'
