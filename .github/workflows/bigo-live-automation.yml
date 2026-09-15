@@ -69,7 +69,7 @@ jobs:
           host=sys.argv[1]
           r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=15)
           r.raise_for_status(); d=r.json().get('data') or {}
-          print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host}))
+          print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'hls_src':d.get('hls_src') or d.get('hlsSrc') or d.get('hls') or ''}))
           PY
           )"
             export INFO
@@ -77,15 +77,22 @@ jobs:
             if [ "$LIVE" != "true" ]; then echo "${HOST} offline; skipping"; continue; fi
             NAME="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("name", "BIGO Host"))')"
             TITLE="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("title", "BIGO Live Highlight"))')"
+            STREAM_URL="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("hls_src", ""))')"
             TS="$(date -u +%Y%m%dT%H%M%SZ)"
             FILE="bigo-${HOST}-${TS}.mp4"
             export FILE
             echo "Capturing ${HOST} for 25 seconds"
             set +e
-            timeout 45s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>/tmp/streamlink.log | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 26 -c:a aac -movflags +faststart "${FILE}"
+            if [ -n "$STREAM_URL" ]; then
+              echo "Using BIGO resolved HLS source"
+              timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 26 -c:a aac -movflags +faststart "${FILE}"
+            else
+              echo "No resolved HLS source; falling back to Streamlink"
+              timeout 45s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>/tmp/streamlink.log | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 26 -c:a aac -movflags +faststart "${FILE}"
+            fi
             RC=$?
             set -e
-            if [ "$RC" -ne 0 ] || [ ! -s "$FILE" ]; then cat /tmp/streamlink.log || true; echo "No capture for ${HOST}"; rm -f "${FILE}"; continue; fi
+            if [ "$RC" -ne 0 ] || [ ! -s "$FILE" ]; then cat /tmp/streamlink.log 2>/dev/null || true; echo "No capture for ${HOST}"; rm -f "${FILE}"; continue; fi
 
             META="$(ffprobe -v error -show_entries stream=width,height,codec_type -show_entries format=duration -of json "${FILE}")"
             export META
