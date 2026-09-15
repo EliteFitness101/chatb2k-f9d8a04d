@@ -13,6 +13,7 @@ const HighlightSchema = z.object({
   host_name: z.string().max(256).optional().nullable(),
   original_url: z.string().url(),
   imagekit_url: z.string().url(),
+  blob_url: z.string().url().optional().nullable(),
   title: z.string().max(500).optional().nullable(),
   caption: z.string().max(5000).optional().nullable(),
   target_channels: z.array(z.string().min(1).max(64)).default([]),
@@ -50,8 +51,8 @@ export const Route = createFileRoute("/api/public/live-highlights")({
           }
 
           const h = parsed.data;
-          const fingerprint =
-            h.fingerprint ?? `${h.host_id}:${h.original_url}:${h.imagekit_url}`;
+          const mediaUrl = h.blob_url ?? h.imagekit_url;
+          const fingerprint = h.fingerprint ?? `${h.host_id}:${h.original_url}:${mediaUrl}`;
           const platforms = h.target_channels.length
             ? h.target_channels
             : ["tiktok", "youtube", "google_business"];
@@ -111,7 +112,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                 target_channels: platforms,
                 fingerprint,
                 source_asset_id: sourceAssetId,
-                metadata: h.metadata,
+                metadata: { ...h.metadata, media_url: mediaUrl, blob_url: h.blob_url ?? null },
                 status: "processing",
                 processing_started_at: new Date().toISOString(),
               })
@@ -132,7 +133,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                   source_provider: "bigo_live",
                   source_asset_id: sourceAssetId,
                   source_url: h.original_url,
-                  canonical_url: h.imagekit_url,
+                  canonical_url: mediaUrl,
                   brand: "Resonance Fitness",
                   campaign: "live_stream_highlights",
                   asset_type: "video",
@@ -147,7 +148,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                   alt_text: h.title ?? h.host_name ?? "ResoFit live-stream highlight",
                   content_pillar: "live_stream",
                   fingerprint,
-                  intelligence: h.metadata,
+                  intelligence: { ...h.metadata, media_url: mediaUrl, blob_url: h.blob_url ?? null },
                 },
                 { onConflict: "source_provider,source_asset_id" },
               )
@@ -174,7 +175,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                 .from("content_queue")
                 .insert({
                   title: h.title ?? `ResoFit Live Highlight — ${h.host_name ?? h.host_id}`,
-                  asset_url: h.imagekit_url,
+                  asset_url: mediaUrl,
                   public_id: sourceAssetId,
                   caption: h.caption ?? h.title ?? "Live from the ResoFit movement.",
                   platforms,
@@ -186,6 +187,9 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                     host_id: h.host_id,
                     host_name: h.host_name ?? null,
                     original_url: h.original_url,
+                    imagekit_url: h.imagekit_url,
+                    blob_url: h.blob_url ?? null,
+                    media_url: mediaUrl,
                     fingerprint,
                     ...h.metadata,
                   },
@@ -227,6 +231,9 @@ export const Route = createFileRoute("/api/public/live-highlights")({
                 highlight_id: highlight.id,
                 content_asset_id: asset.id,
                 content_queue_id: queue.id,
+                media_url: mediaUrl,
+                imagekit_url: h.imagekit_url,
+                blob_url: h.blob_url ?? null,
               },
             });
           } catch (error) {
