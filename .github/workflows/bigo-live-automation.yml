@@ -16,7 +16,6 @@ jobs:
     env:
       BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
       CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
-      SUPABASE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co
       IMAGEKIT_AUTH_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/imagekit-auth
       LIVE_INGEST_URL: https://chatb2k.resofit.fit/api/public/live-highlights
       PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
@@ -25,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
-          python3 -m pip install --disable-pip-version-check -q streamlink
+          python3 -m pip install --disable-pip-version-check -q streamlink requests
 
       - name: Capture live BIGO segments and send through ChatB2K
         shell: bash
@@ -50,7 +49,7 @@ jobs:
           host=sys.argv[1]
           r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=15)
           r.raise_for_status(); d=r.json().get('data') or {}
-          print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'snapshot':d.get('snapshot') or ''}))
+          print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host}))
           PY
           )"
             export INFO
@@ -60,12 +59,13 @@ jobs:
             TITLE="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("title", "BIGO Live Highlight"))')"
             TS="$(date -u +%Y%m%dT%H%M%SZ)"
             FILE="bigo-${HOST}-${TS}.mp4"
+            export FILE
             echo "Capturing ${HOST} for 35 seconds"
             set +e
             timeout 55s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>/tmp/streamlink.log | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 35 -c:v libx264 -preset veryfast -crf 26 -c:a aac -movflags +faststart "${FILE}"
             RC=$?
             set -e
-            if [ "$RC" -ne 0 ] || [ ! -s "$FILE" ]; then cat /tmp/streamlink.log || true; echo "No capture for ${HOST}"; rm -f "$FILE"; continue; fi
+            if [ "$RC" -ne 0 ] || [ ! -s "$FILE" ]; then cat /tmp/streamlink.log || true; echo "No capture for ${HOST}"; rm -f "${FILE}"; continue; fi
 
             META="$(ffprobe -v error -show_entries stream=width,height,codec_type -show_entries format=duration -of json "${FILE}")"
             export META
@@ -75,8 +75,8 @@ jobs:
           PY
           )"
             ASPECT="$(python3 -c "print(float('${WIDTH}')/float('${HEIGHT}') if float('${HEIGHT}') else 0)")"
+            export WIDTH HEIGHT DURATION AUDIO ASPECT HOST NAME TITLE TS
 
-            export AUTH_JSON WIDTH HEIGHT DURATION AUDIO ASPECT HOST NAME TITLE TS
             UPLOAD="$(python3 - <<'PY'
           import json,os,subprocess
           a=json.loads(os.environ['AUTH_JSON'])
