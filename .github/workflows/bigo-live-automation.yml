@@ -26,7 +26,7 @@ jobs:
       CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
       IMAGEKIT_AUTH_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/imagekit-auth
-      LIVE_INGEST_URL: https://chatb2k.resofit.fit/api/public/live-highlights
+      LIVE_INGEST_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-ingest
       PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
     steps:
       - name: Publish existing live highlight queue immediately
@@ -124,7 +124,8 @@ jobs:
           print(json.dumps({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','imagekit_url':os.environ['IMAGEKIT_URL'],'blob_url':os.environ['BLOB_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['ASPECT']),'audio_present':os.environ['AUDIO']=='true','captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'imagekit_url':os.environ['IMAGEKIT_URL']}}))
           PY
           )"
-            curl -fsS -X POST "${LIVE_INGEST_URL}" -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY}" -H 'Content-Type: application/json' -d "${PAYLOAD}"
+            OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+            curl -fsS -X POST "${LIVE_INGEST_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' -d "${PAYLOAD}"
             rm -f "${FILE}"
           done
 
