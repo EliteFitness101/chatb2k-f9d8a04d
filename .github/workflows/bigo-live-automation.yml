@@ -32,7 +32,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
-          python3 -m pip install --disable-pip-version-check -q streamlink requests
+          python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.0,<9' requests
           npm install --no-save --no-package-lock @vercel/blob
 
       - name: Capture, normalize and prepare ChatB2K batch
@@ -46,30 +46,39 @@ jobs:
           IFS=', ' read -r -a HOST_ARRAY <<< "$HOSTS"
           for HOST in "${HOST_ARRAY[@]}"; do
             [ -z "$HOST" ] && continue
-            INFO="$(python3 - "$HOST" <<'PY'
+            TS="$(date -u +%Y%m%dT%H%M%SZ)"
+            RAW="bigo-${HOST}-${TS}-raw.mp4"
+            FILE="bigo-${HOST}-${TS}.mp4"
+            COVER="bigo-${HOST}-${TS}.jpg"
+            STREAMLINK_LOG="/tmp/streamlink-${HOST}.log"
+
+            set +e
+            timeout 55s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>"$STREAMLINK_LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+            CAPTURE_RC=${PIPESTATUS[0]}
+            FFMPEG_RC=${PIPESTATUS[1]}
+            set -e
+
+            if [ "$CAPTURE_RC" -ne 0 ] || [ "$FFMPEG_RC" -ne 0 ] || [ ! -s "$RAW" ]; then
+              echo "Streamlink capture failed for ${HOST}; trying direct HLS discovery fallback"
+              INFO="$(python3 - "$HOST" <<'PY'
           import json,sys,requests
           host=sys.argv[1]
           r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=15)
           r.raise_for_status(); d=r.json().get('data') or {}
           print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'hls_src':d.get('hls_src') or d.get('hlsSrc') or d.get('hls') or ''}))
           PY
-          )"
+              )"
+              export INFO
+              STREAM_URL="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("hls_src", ""))')"
+              if [ -n "$STREAM_URL" ]; then
+                timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW" || true
+              fi
+            fi
+
+            [ -s "$RAW" ] || { cat "$STREAMLINK_LOG" 2>/dev/null || true; rm -f "$RAW"; continue; }
             export INFO
-            LIVE="$(python3 -c 'import json,os; print(str(json.loads(os.environ["INFO"]).get("alive",False)).lower())')"
-            if [ "$LIVE" != "true" ]; then echo "${HOST} offline; skipping"; continue; fi
             NAME="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("name", "BIGO Host"))')"
             TITLE="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("title", "BIGO Live Highlight"))')"
-            STREAM_URL="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("hls_src", ""))')"
-            TS="$(date -u +%Y%m%dT%H%M%SZ)"
-            RAW="bigo-${HOST}-${TS}-raw.mp4"
-            FILE="bigo-${HOST}-${TS}.mp4"
-            COVER="bigo-${HOST}-${TS}.jpg"
-            if [ -n "$STREAM_URL" ]; then
-              timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-            else
-              timeout 45s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>/tmp/streamlink.log | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-            fi
-            [ -s "$RAW" ] || { cat /tmp/streamlink.log 2>/dev/null || true; rm -f "$RAW"; continue; }
             ffmpeg -hide_banner -loglevel error -i "$RAW" -map 0:v:0 -frames:v 1 -q:v 3 "$COVER"
             ffmpeg -hide_banner -loglevel error -i "$RAW" -c copy -movflags +faststart "$FILE"
             META="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,avg_frame_rate,pix_fmt -show_entries format=duration -of json "$FILE")"
@@ -82,7 +91,7 @@ jobs:
               except:return 0.0
           print(s.get('width',0),s.get('height',0),rate(s.get('r_frame_rate','0/1')),rate(s.get('avg_frame_rate','0/1')),float((d.get('format') or {}).get('duration') or 0),s.get('pix_fmt',''))
           PY
-          )"
+            )"
             python3 - "$FPS" "$AVG_FPS" "$WIDTH" "$HEIGHT" "$DURATION" "$PIX_FMT" <<'PY'
           import sys
           fps,avg,w,h,d,p=sys.argv[1:]
@@ -93,16 +102,17 @@ jobs:
           if not (1 <= d <= 180): raise SystemExit('FAIL: duration outside production short-form range')
           if p != 'yuv420p': raise SystemExit('FAIL: unsupported pixel format')
           PY
-            export FILE COVER
+            export FILE COVER WIDTH HEIGHT DURATION FPS AVG_FPS PIX_FMT HOST NAME TITLE TS
             BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`bigo_highlights/${file}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
             COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`bigo_highlights/covers/${file}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
-            export BLOB_URL COVER_URL WIDTH HEIGHT DURATION FPS AVG_FPS PIX_FMT HOST NAME TITLE TS
+            export BLOB_URL COVER_URL
             FP="${HOST}:${TS}:${BLOB_URL}"
             export FP
             python3 - <<'PY'
           import json,os
           d=json.load(open('/tmp/bigo-batch.json'))
-          d['highlights'].append({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','blob_url':os.environ['BLOB_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':json.loads(os.environ['INFO']).get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['WIDTH'])/float(os.environ['HEIGHT']),'audio_present':True,'fps':float(os.environ['FPS']),'avg_fps':float(os.environ['AVG_FPS']),'frame_rate_verified':True,'codec':'h264','pixel_format':os.environ['PIX_FMT'],'cfr':True,'captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'cover_url':os.environ['COVER_URL']}})
+          info=json.loads(os.environ['INFO'])
+          d['highlights'].append({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','blob_url':os.environ['BLOB_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','target_channels':['tiktok','youtube','google_business'],'fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['WIDTH'])/float(os.environ['HEIGHT']),'audio_present':True,'fps':float(os.environ['FPS']),'avg_fps':float(os.environ['AVG_FPS']),'frame_rate_verified':True,'codec':'h264','pixel_format':os.environ['PIX_FMT'],'cfr':True,'captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'cover_url':os.environ['COVER_URL']}})
           json.dump(d,open('/tmp/bigo-batch.json','w'))
           PY
             rm -f "$RAW" "$FILE" "$COVER"
