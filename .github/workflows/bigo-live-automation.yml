@@ -54,8 +54,9 @@ jobs:
 
             set +e
             timeout 55s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>"$STREAMLINK_LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-            CAPTURE_RC=${PIPESTATUS[0]}
-            FFMPEG_RC=${PIPESTATUS[1]}
+            PIPE_RC=( "${PIPESTATUS[@]}" )
+            CAPTURE_RC="${PIPE_RC[0]:-1}"
+            FFMPEG_RC="${PIPE_RC[1]:-1}"
             set -e
 
             if [ "$CAPTURE_RC" -ne 0 ] || [ "$FFMPEG_RC" -ne 0 ] || [ ! -s "$RAW" ]; then
