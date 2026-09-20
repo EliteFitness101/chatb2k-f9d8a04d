@@ -52,7 +52,7 @@ jobs:
             FILE="bigo-${HOST}-${TS}.mp4"
             COVER="bigo-${HOST}-${TS}.jpg"
             STREAMLINK_LOG="/tmp/streamlink-${HOST}.log"
-            INFO="{\"alive\":false,\"name\":\"BIGO Host\",\"title\":\"BIGO Live Highlight\",\"room_id\":\"${HOST}\",\"hls_src\":\"\"}"
+            INFO="{\"alive\":false,\"name\":\"BIGO Host\",\"title\":\"BIGO Live Highlight\",\"room_id\":\"$HOST\",\"hls_src\":\"\"}"
 
             set +e
             timeout 55s streamlink --stdout "https://www.bigo.tv/${HOST}" best 2>"$STREAMLINK_LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
@@ -79,9 +79,17 @@ jobs:
             fi
 
             if [ ! -s "$RAW" ]; then
-              echo "::error::BIGO host ${HOST} produced no media; capture failed."
+              export INFO
+              LIVE="$(python3 -c 'import json,os; print("1" if json.loads(os.environ["INFO"]).get("alive") else "0")')"
+              if [ "$LIVE" = "1" ]; then
+                echo "::error::BIGO host ${HOST} is live but produced no media; capture failed."
+                cat "$STREAMLINK_LOG" 2>/dev/null || true
+                exit 1
+              fi
+              echo "BIGO host ${HOST} is not live; no capture required."
               cat "$STREAMLINK_LOG" 2>/dev/null || true
-              exit 1
+              rm -f "$RAW"
+              continue
             fi
             export INFO
             NAME="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("name", "BIGO Host"))')"
