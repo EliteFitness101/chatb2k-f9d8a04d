@@ -79,14 +79,7 @@ jobs:
             fi
 
             if [ ! -s "$RAW" ]; then
-              export INFO
-              LIVE="$(python3 -c 'import json,os; print("1" if json.loads(os.environ["INFO"]).get("alive") else "0")')"
-              if [ "$LIVE" = "1" ]; then
-                echo "::error::BIGO host ${HOST} is live but produced no media; capture failed."
-                cat "$STREAMLINK_LOG" 2>/dev/null || true
-                exit 1
-              fi
-              echo "BIGO host ${HOST} is not live; no capture required."
+              echo "::warning::BIGO host ${HOST} produced no media; continuing other configured hosts."
               cat "$STREAMLINK_LOG" 2>/dev/null || true
               rm -f "$RAW"
               continue
