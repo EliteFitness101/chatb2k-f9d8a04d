@@ -1,4 +1,5 @@
 name: BIGO Live → ChatB2K → Buffer
+# Canonical public media contract: /buffer/assets/
 
 on:
   push:
