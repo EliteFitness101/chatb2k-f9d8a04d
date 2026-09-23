@@ -18,7 +18,8 @@ const liveDb = supabaseAdmin as LiveHighlightAdmin;
 export const ingestLiveHighlight = createServerFn({ method: "POST" }).inputValidator((data) => IngestSchema.parse(data)).handler(async ({ data }) => {
   assertIngestKey(data.ingest_key);
   const h = data.highlight;
-  const fingerprint = h.fingerprint ?? `${h.host_id}:${h.original_url}:${h.imagekit_url}`;
+  const mediaUrl = h.imagekit_url;
+  const fingerprint = h.fingerprint ?? `${h.host_id}:${h.original_url}:${mediaUrl}`;
   const { data: existing, error: existingError } = await liveDb.from("resofit_live_highlights").select("id,status,content_asset_id,content_queue_id").eq("fingerprint", fingerprint).maybeSingle();
   if (existingError) throw new Error("Live highlight lookup failed");
   if (existing?.status === "posted" && existing.content_asset_id && existing.content_queue_id) return { ok: true as const, duplicate: true as const, highlight: existing };
@@ -30,7 +31,7 @@ export const ingestLiveHighlight = createServerFn({ method: "POST" }).inputValid
     const num = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v : null;
     const width = num(meta.width), height = num(meta.height), duration_seconds = num(meta.duration_seconds), aspect_ratio = num(meta.aspect_ratio) ?? (width && height ? width / height : null);
     const assetPayload = {
-      source_provider: "bigo_live", source_asset_id: h.source_asset_id ?? fingerprint, source_url: h.original_url, canonical_url: h.imagekit_url,
+      source_provider: "bigo_live", source_asset_id: h.source_asset_id ?? fingerprint, source_url: h.original_url, canonical_url: mediaUrl,
       brand: "Resonance Fitness", campaign: "live_stream_highlights", asset_type: "video", mime_type: "video/mp4",
       width, height, duration_seconds, aspect_ratio, audio_present: typeof meta.audio_present === "boolean" ? meta.audio_present : null,
       rights_status: "pending_review", commercial_status: "pending_review",
@@ -40,7 +41,7 @@ export const ingestLiveHighlight = createServerFn({ method: "POST" }).inputValid
     const { data: asset, error: assetError } = await supabaseAdmin.from("content_asset_registry").upsert(assetPayload, { onConflict: "source_provider,source_asset_id" }).select("id").single();
     if (assetError || !asset) throw assetError ?? new Error("Asset registration failed");
     const platforms = h.target_channels.length ? h.target_channels : ["tiktok", "youtube", "google_business"];
-    const { data: queue, error: queueError } = await supabaseAdmin.from("content_queue").insert({ title: h.title ?? `ResoFit Live Highlight — ${h.host_name ?? h.host_id}`, asset_url: h.imagekit_url, public_id: h.source_asset_id ?? fingerprint, caption: h.caption ?? h.title ?? "Live from the ResoFit movement.", platforms, status: "draft", metadata: { source: "bigo_live", live_highlight_id: highlight.id, content_asset_id: asset.id, host_id: h.host_id, host_name: h.host_name ?? null, original_url: h.original_url, fingerprint, ...h.metadata }, campaign_key: "live_stream_highlights", platform: platforms[0] ?? null, destination: "https://resofit.fit", safety_checked: false }).select("id").single();
+    const { data: queue, error: queueError } = await supabaseAdmin.from("content_queue").insert({ title: h.title ?? `ResoFit Live Highlight — ${h.host_name ?? h.host_id}`, asset_url: mediaUrl, public_id: h.source_asset_id ?? fingerprint, caption: h.caption ?? h.title ?? "Live from the ResoFit movement.", platforms, status: "draft", metadata: { source: "bigo_live", live_highlight_id: highlight.id, content_asset_id: asset.id, host_id: h.host_id, host_name: h.host_name ?? null, original_url: h.original_url, fingerprint, ...h.metadata }, campaign_key: "live_stream_highlights", platform: platforms[0] ?? null, destination: "https://resofit.fit", safety_checked: false }).select("id").single();
     if (queueError || !queue) throw queueError ?? new Error("Content queue insert failed");
     const { error: updateError } = await liveDb.from("resofit_live_highlights").update({ status: "posted", content_asset_id: asset.id, content_queue_id: queue.id, processed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", highlight.id);
     if (updateError) throw updateError;
