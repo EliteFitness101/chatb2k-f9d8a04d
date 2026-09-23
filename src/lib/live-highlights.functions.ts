@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const HighlightSchema = z.object({
   host_id: z.string().min(1).max(256), host_name: z.string().max(256).optional().nullable(),
-  original_url: z.string().url(), imagekit_url: z.string().url(), title: z.string().max(500).optional().nullable(),
+  original_url: z.string().url(), imagekit_url: z.string().url().optional().nullable(), blob_url: z.string().url().optional().nullable(), title: z.string().max(500).optional().nullable(),
   caption: z.string().max(5000).optional().nullable(), target_channels: z.array(z.string().min(1).max(64)).default([]),
   fingerprint: z.string().min(8).max(512).optional().nullable(), source_asset_id: z.string().max(512).optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).default({}),
@@ -18,13 +18,14 @@ const liveDb = supabaseAdmin as LiveHighlightAdmin;
 export const ingestLiveHighlight = createServerFn({ method: "POST" }).inputValidator((data) => IngestSchema.parse(data)).handler(async ({ data }) => {
   assertIngestKey(data.ingest_key);
   const h = data.highlight;
-  const mediaUrl = h.imagekit_url;
+  const mediaUrl = h.blob_url ?? h.imagekit_url;
+  if (!mediaUrl) throw new Error("Live highlight requires a public media URL");
   const fingerprint = h.fingerprint ?? `${h.host_id}:${h.original_url}:${mediaUrl}`;
   const { data: existing, error: existingError } = await liveDb.from("resofit_live_highlights").select("id,status,content_asset_id,content_queue_id").eq("fingerprint", fingerprint).maybeSingle();
   if (existingError) throw new Error("Live highlight lookup failed");
   if (existing?.status === "posted" && existing.content_asset_id && existing.content_queue_id) return { ok: true as const, duplicate: true as const, highlight: existing };
   if (existing) await liveDb.from("resofit_live_highlights").update({ status: "processing", error_message: null, processing_started_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", existing.id);
-  const { data: highlight, error: insertError } = existing ? { data: existing, error: null } : await liveDb.from("resofit_live_highlights").insert({ host_id: h.host_id, host_name: h.host_name ?? null, original_url: h.original_url, imagekit_url: h.imagekit_url, title: h.title ?? null, caption: h.caption ?? null, target_channels: h.target_channels, fingerprint, source_asset_id: h.source_asset_id ?? fingerprint, metadata: h.metadata, status: "processing", processing_started_at: new Date().toISOString() }).select("*").single();
+  const { data: highlight, error: insertError } = existing ? { data: existing, error: null } : await liveDb.from("resofit_live_highlights").insert({ host_id: h.host_id, host_name: h.host_name ?? null, original_url: h.original_url, imagekit_url: mediaUrl, title: h.title ?? null, caption: h.caption ?? null, target_channels: h.target_channels, fingerprint, source_asset_id: h.source_asset_id ?? fingerprint, metadata: h.metadata, status: "processing", processing_started_at: new Date().toISOString() }).select("*").single();
   if (insertError || !highlight) throw new Error("Could not stage live highlight");
   try {
     const meta = h.metadata as Record<string, unknown>;
