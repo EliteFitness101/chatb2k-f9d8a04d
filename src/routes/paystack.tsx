@@ -5,6 +5,7 @@ import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { products, productBySku, formatNGN } from "@/lib/catalog";
 import { initPaystackTransaction } from "@/lib/paystack.functions";
+import { getAttribution } from "@/lib/attribution";
 import { pageMeta } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/paystack")({
@@ -44,7 +45,8 @@ function PaystackPage() {
     if (!name || !email) { setErr("Name and email are required."); return; }
     setLoading(true);
     try {
-      const res = await initPaystackTransaction({ data: { email, name, items: [{ sku: product.sku, quantity: 1 }] } });
+      const { rsid, utm } = getAttribution();
+      const res = await initPaystackTransaction({ data: { email, name, items: [{ sku: product.sku, quantity: 1 }], rsid: rsid || undefined, utm, source: "chatb2k" } });
       if (!res.ok) { setErr(res.error); setLoading(false); return; }
       await loadPaystackScript();
       if (!window.PaystackPop || !res.publicKey) {
