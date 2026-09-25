@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import { SiteShell } from "@/components/site/SiteShell";
 import { initPaystackTransaction } from "@/lib/paystack.functions";
+import { getAttribution } from "@/lib/attribution";
 import { productBySku, formatNGN } from "@/lib/catalog";
 import { pageMeta } from "@/lib/site-meta";
 
@@ -41,7 +42,7 @@ function EliteCheckout() {
     setLoading(true);
     try {
       const res = await initPaystackTransaction({
-        data: { email: parsed.data.email, name: parsed.data.name, items: [{ sku: SKU, quantity: 1 }] },
+        data: { email: parsed.data.email, name: parsed.data.name, items: [{ sku: SKU, quantity: 1 }], rsid: (getAttribution().rsid || undefined), utm: getAttribution().utm, source: "chatb2k", variant: "elite-access" },
       });
       if (!res.ok) {
         toast.error(res.error || "Could not initialize transaction");
