@@ -21,33 +21,33 @@ export interface Product {
 export const products: Product[] = [
   {
     slug: "cast-iron-15kg",
-    sku: "RES-IRON-15",
+    sku: "res-iron-15",
     title: "Cast Iron Set — 15 kg",
     tagline: "Foundation set. Buchi-Approved.",
     description:
       "Solid cast iron plates with chrome-finished spinlock bar. Engineered for the home sanctuary. The starting weight that initiates a lifetime of mechanical authority.",
     category: "iron",
     weightKg: 15,
-    ngnMinor: 8500000, // ₦85,000
+    ngnMinor: 6000000, // ₦85,000
     usdMinor: 13900,
     highlights: ["Solid cast iron", "Chrome spinlock bar", "Lifetime warranty"],
   },
   {
     slug: "cast-iron-30kg",
-    sku: "RES-IRON-30",
+    sku: "res-iron-30",
     title: "Cast Iron Set — 30 kg",
     tagline: "The intermediate authority.",
     description:
       "Doubled load. Same uncompromised iron. The 30 kg set unlocks compound lifts and serves as the gateway to the Apex programme.",
     category: "iron",
     weightKg: 30,
-    ngnMinor: 14500000,
+    ngnMinor: 12000000,
     usdMinor: 23900,
     highlights: ["6 × 5 kg plates", "Twin spinlock bars", "Hub-delivered"],
   },
   {
     slug: "cast-iron-50kg",
-    sku: "RES-IRON-50",
+    sku: "res-iron-50",
     title: "Cast Iron Set — 50 kg",
     tagline: "Full ancestral load.",
     description:
@@ -61,55 +61,55 @@ export const products: Product[] = [
   },
   {
     slug: "elite-bench",
-    sku: "RES-BENCH-01",
+    sku: "RF-BENCH-01",
     title: "Elite Adjustable Bench",
     tagline: "3 mm industrial steel.",
     description:
       "Seven-position adjustable bench cut from 3 mm industrial steel. Marine-grade leather. Engineered for two centuries of pressing.",
     category: "bench",
-    ngnMinor: 18500000,
+    ngnMinor: 8500000,
     usdMinor: 29900,
     highlights: ["3 mm steel frame", "7 positions", "Marine leather"],
   },
   {
     slug: "ancestral-nutrition",
-    sku: "RES-DIG-NUT",
+    sku: "res-dig-nut",
     title: "Ancestral Nutrition Protocol",
     tagline: "Digital. Lifetime access.",
     description:
       "Our complete nutritional doctrine — meal architecture, macronutrient sequencing, and the ancestral fuel framework. Delivered instantly.",
     category: "digital",
-    ngnMinor: 1490000, // ₦14,900
+    ngnMinor: 1500000, // ₦14,900
     usdMinor: 4900,
     highlights: ["PDF + video", "Lifetime updates", "Instant delivery"],
   },
   {
     slug: "90-day-protocol",
-    sku: "RES-DIG-90D",
+    sku: "RF-PROG-90",
     title: "90-Day Mechanical Protocol",
     tagline: "Digital training doctrine.",
     description:
       "Twelve weeks of programmed mechanical work. Periodised, audited, and delivered as a digital programme paired with form-check video.",
     category: "digital",
-    ngnMinor: 1990000, // ₦19,900
+    ngnMinor: 999900, // ₦19,900
     usdMinor: 6900,
     highlights: ["12-week structured plan", "Video form library", "Digital download"],
   },
   {
     slug: "app-plus-coaching",
-    sku: "RES-COACH-01",
+    sku: "res-coach-01",
     title: "App Plus — 1-on-1 Coaching",
     tagline: "Monthly subscription.",
     description:
       "The ResoFlex App with personalised 1-on-1 coaching. Weekly check-ins, programme adjustment, and direct access to your assigned coach.",
     category: "coaching",
-    ngnMinor: 39900000, // ₦399,000 — Elite Coaching
+    ngnMinor: 10000000, // ₦399,000 — Elite Coaching
     usdMinor: 11900,
     highlights: ["Weekly check-ins", "Custom programming", "Direct chat"],
   },
   {
     slug: "buchi-power-apex",
-    sku: "RES-BUNDLE-APEX",
+    sku: "res-bundle-apex",
     title: "The Buchi Power Apex Bundle",
     tagline: "The complete sanctuary.",
     description:
