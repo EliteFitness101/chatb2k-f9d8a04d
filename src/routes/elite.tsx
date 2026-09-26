@@ -35,7 +35,7 @@ const TIERS = [
     name: "LuxeGold",
     note: "1-on-1 coaching · monthly",
     perks: ["Weekly 1-on-1 check-ins", "Custom programming", "Direct coach chat", "White-glove delivery"],
-    sku: "RES-COACH-01",
+    sku: "res-coach-01",
   },
 ];
 
