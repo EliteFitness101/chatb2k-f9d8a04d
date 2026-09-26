@@ -21,10 +21,30 @@ export const initPaystackTransaction = createServerFn({ method: "POST" })
     let amountKobo = 0;
     const lines: { sku: string; title: string; quantity: number; unit: number; category: string }[] = [];
     for (const item of data.items) {
-      const p = productBySku(item.sku);
-      if (!p) return { ok: false as const, error: `Unknown SKU ${item.sku}` };
-      amountKobo += p.ngnMinor * item.quantity;
-      lines.push({ sku: p.sku, title: p.title, quantity: item.quantity, unit: p.ngnMinor, category: p.category });
+      const uiProduct = productBySku(item.sku);
+      const { data: canonical, error: canonicalError } = await supabaseAdmin
+        .from("products")
+        .select("sku,title,variant_price,product_type,published")
+        .eq("sku", item.sku)
+        .eq("published", true)
+        .maybeSingle();
+      if (canonicalError || !canonical || canonical.variant_price == null) {
+        console.error("[paystack] canonical product resolution failed", item.sku, canonicalError);
+        return { ok: false as const, error: `Product ${item.sku} is not currently available for secure checkout` };
+      }
+      const unitMinor = Number(canonical.variant_price) * 100;
+      if (!Number.isFinite(unitMinor) || unitMinor <= 0) {
+        return { ok: false as const, error: `Product ${item.sku} has no valid production price` };
+      }
+      const category = uiProduct?.category ?? "digital";
+      amountKobo += unitMinor * item.quantity;
+      lines.push({
+        sku: canonical.sku,
+        title: canonical.title,
+        quantity: item.quantity,
+        unit: unitMinor,
+        category,
+      });
     }
 
     const reference = `RES-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
