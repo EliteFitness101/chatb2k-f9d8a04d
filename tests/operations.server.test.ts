@@ -106,14 +106,14 @@ describe("recovery workflows", () => {
 
 describe("canonical fulfillment + inventory reservation", () => {
   function seedPayment(country = "NG", qty = 1) {
-    mockDb.seed("payments", [{ id: "p1", paystack_ref: "PS-1", order_id: "o1", user_id: "u1", customer_email: "a@b.com", amount: 100000, currency: "NGN", status: "success", product_sku: "RES-IRON-15", rsid: "rsid-1" }]);
-    mockDb.seed("resofit_hub_inventory", [{ hub_code: "Lagos,NG", sku: "RES-IRON-15", on_hand: 10, reserved: 0 }]);
+    mockDb.seed("payments", [{ id: "p1", paystack_ref: "PS-1", order_id: "o1", user_id: "u1", customer_email: "a@b.com", amount: 100000, currency: "NGN", status: "success", product_sku: "res-iron-15", rsid: "rsid-1" }]);
+    mockDb.seed("resofit_hub_inventory", [{ hub_code: "Lagos,NG", sku: "res-iron-15", on_hand: 10, reserved: 0 }]);
     return { country, qty };
   }
 
   it("allocates a verified physical payment to the in-country hub and reserves inventory", async () => {
     seedPayment("NG", 2);
-    const res = await allocatePayment("p1", { countryCode: "NG", items: [{ sku: "RES-IRON-15", quantity: 2 }] });
+    const res = await allocatePayment("p1", { countryCode: "NG", items: [{ sku: "res-iron-15", quantity: 2 }] });
     expect(res.ok).toBe(true); expect(res.fulfillmentId).toBeTruthy();
     expect(mockDb.rows("resofit_hub_inventory")[0]["reserved"]).toBe(2);
     expect(mockDb.rows("resofit_fulfillment_orders")[0]["status"]).toBe("allocated");
@@ -122,7 +122,7 @@ describe("canonical fulfillment + inventory reservation", () => {
 
   it("emits allocation events and audit records", async () => {
     seedPayment();
-    const res = await allocatePayment("p1", { countryCode: "NG", items: [{ sku: "RES-IRON-15", quantity: 1 }] });
+    const res = await allocatePayment("p1", { countryCode: "NG", items: [{ sku: "res-iron-15", quantity: 1 }] });
     expect(res.ok).toBe(true);
     const types = mockDb.rows("resofit_events").map((e) => e["event_name"]);
     expect(types).toContain("InventoryReserved"); expect(types).toContain("FulfillmentAllocated");
@@ -130,8 +130,8 @@ describe("canonical fulfillment + inventory reservation", () => {
   });
 
   it("returns a controlled exception when no hub has stock", async () => {
-    mockDb.seed("payments", [{ id: "p2", paystack_ref: "PS-2", user_id: "u1", customer_email: "a@b.com", amount: 100000, currency: "NGN", status: "success", product_sku: "RES-IRON-15" }]);
-    const res = await allocatePayment("p2", { countryCode: "NG", items: [{ sku: "RES-IRON-15", quantity: 1 }] });
+    mockDb.seed("payments", [{ id: "p2", paystack_ref: "PS-2", user_id: "u1", customer_email: "a@b.com", amount: 100000, currency: "NGN", status: "success", product_sku: "res-iron-15" }]);
+    const res = await allocatePayment("p2", { countryCode: "NG", items: [{ sku: "res-iron-15", quantity: 1 }] });
     expect(res.ok).toBe(false); expect(res.exception).toBe(true);
     expect(mockDb.rows("ops_alerts").some((a) => a["category"] === "fulfillment")).toBe(true);
   });
