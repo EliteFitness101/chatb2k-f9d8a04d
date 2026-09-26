@@ -26,7 +26,7 @@ const PHYSICAL_SKU = /^(RES-IRON|RES-BENCH|RES-BUNDLE)/i;
 function candidateHubs(countryCode: string) {
   const cc = countryCode.toUpperCase();
   const configured = [
-    ["NG", process.env.HUB_GLOBAL_HQ ?? process.env.HUB_LAGOS ?? "Lagos,NG"],
+    ["NG", process.env.HUB_GLOBAL_HQ ?? process.env.HUB_LAGOS ?? "NG-LAGOS"],
     ["US", process.env.HUB_NEW_YORK ?? "New York,US"],
     ["CA", process.env.HUB_OTTAWA ?? "Ottawa,CA"],
     ["GB", process.env.HUB_LONDON ?? "London,GB"],
