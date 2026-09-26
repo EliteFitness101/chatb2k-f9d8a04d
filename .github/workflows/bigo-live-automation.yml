@@ -27,7 +27,7 @@ env:
 jobs:
   capture-transform-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Install capture and Blob tools
         run: |
@@ -44,7 +44,9 @@ jobs:
           : "${BIGO_HOST_IDS:?BIGO_HOST_IDS must contain the configured BIGO host IDs}"
           HOSTS="${BIGO_HOST_IDS}"
           echo '{"highlights":[],"limit":10}' > /tmp/bigo-batch.json
-          IFS=', ' read -r -a HOST_ARRAY <<< "$HOSTS"
+          # Accept comma-, space-, or newline-separated BIGO IDs; normalize and deduplicate safely.
+          mapfile -t HOST_ARRAY < <(printf '%s' "$HOSTS" | tr ', ' '\n' | awk 'NF' | awk '!seen[$0]++')
+          echo "Configured BIGO host IDs discovered: ${#HOST_ARRAY[@]}"
           CAPTURED_COUNT=0
           for HOST in "${HOST_ARRAY[@]}"; do
             [ -z "$HOST" ] && continue
