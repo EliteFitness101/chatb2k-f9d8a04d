@@ -145,5 +145,23 @@ jobs:
       - name: Ingest, enrich and auto-post BIGO batch
         run: |
           set -euo pipefail
-          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
+          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer \${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "\${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          rm -rf /tmp/bigo-items && mkdir -p /tmp/bigo-items
+          python3 - <<'PY'
+          import json, pathlib
+          batch=json.load(open('/tmp/bigo-batch.json'))
+          items=batch.get('highlights') or []
+          if not items:
+              raise SystemExit('FAIL: no captured BIGO highlights to ingest')
+          for i,item in enumerate(items,1):
+              pathlib.Path(f'/tmp/bigo-items/{i:04d}.json').write_text(json.dumps({'highlights':[item],'limit':1}))
+          print(f'Prepared {len(items)} individual BIGO pipeline payload(s)')
+          PY
+          for PAYLOAD in /tmp/bigo-items/*.json; do
+            echo "Ingesting BIGO payload \${PAYLOAD}"
+            curl -fsS -X POST "\${PIPELINE_URL}" \
+              -H "Authorization: Bearer \${OIDC_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data-binary @"\${PAYLOAD}"
+            echo
+          done
