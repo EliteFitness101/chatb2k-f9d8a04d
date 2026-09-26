@@ -4,12 +4,21 @@ import { z } from "zod";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { products, productBySku, formatNGN } from "@/lib/catalog";
+import { listProducts } from "@/lib/products.functions";
 import { initPaystackTransaction } from "@/lib/paystack.functions";
 import { getAttribution } from "@/lib/attribution";
 import { pageMeta } from "@/lib/site-meta";
 
 export const Route = createFileRoute("/paystack")({
   validateSearch: (s) => z.object({ sku: z.string().optional() }).parse(s),
+  loader: async () => {
+    try {
+      const { products: canonical } = await listProducts();
+      return { canonicalProducts: canonical.filter((p) => p.active && p.price_ngn > 0) };
+    } catch {
+      return { canonicalProducts: [] };
+    }
+  },
   head: () => ({
     meta: pageMeta({ title: "Paystack Checkout", description: "Pay in Nigerian Naira via Paystack." }),
   }),
@@ -32,13 +41,24 @@ function loadPaystackScript(): Promise<void> {
 
 function PaystackPage() {
   const { sku } = Route.useSearch();
+  const { canonicalProducts } = Route.useLoaderData();
   const navigate = useNavigate();
-  const [selectedSku, setSelectedSku] = useState(sku ?? products[0].sku);
+  const canonicalBySku = new Map(canonicalProducts.map((p) => [p.slug, p]));
+  const defaultSku = sku ?? canonicalProducts[0]?.slug ?? products[0].sku;
+  const [selectedSku, setSelectedSku] = useState(defaultSku);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const product = productBySku(selectedSku) ?? products[0];
+  const canonicalProduct = canonicalBySku.get(selectedSku);
+  const staticProduct = productBySku(selectedSku) ?? products[0];
+  const product = canonicalProduct
+    ? {
+        sku: canonicalProduct.slug,
+        title: canonicalProduct.name,
+        ngnMinor: Math.round(canonicalProduct.price_ngn * 100),
+      }
+    : staticProduct;
 
   async function pay() {
     setErr(null);
@@ -80,8 +100,12 @@ function PaystackPage() {
           <div>
             <label className="text-xs tracking-widest uppercase text-muted-foreground">Product</label>
             <select value={selectedSku} onChange={(e) => setSelectedSku(e.target.value)} className="mt-2 w-full bg-[var(--ink)] border border-[var(--glass-border)] rounded-sm px-4 py-3 text-foreground">
-              {products.map((p) => (
-                <option key={p.sku} value={p.sku}>{p.title} — {formatNGN(p.ngnMinor)}</option>
+              {(canonicalProducts.length ? canonicalProducts : products.map((p) => ({
+                slug: p.sku,
+                name: p.title,
+                price_ngn: p.ngnMinor / 100,
+              }))).map((p) => (
+                <option key={p.slug} value={p.slug}>{p.name} — {formatNGN(Math.round(p.price_ngn * 100))}</option>
               ))}
             </select>
           </div>
