@@ -18,8 +18,8 @@ beforeEach(() => {
 describe("inventory reconciliation", () => {
   it("creates restock tasks and out-of-stock alerts, idempotently", async () => {
     mockDb.seed("inventory_items", [
-      { id: "i1", sku: "RES-IRON-15", on_hand: 2, reserved: 2, reorder_level: 1, hub_id: "h1" },
-      { id: "i2", sku: "RES-BENCH-01", on_hand: 50, reserved: 0, reorder_level: 5, hub_id: "h1" },
+      { id: "i1", sku: "res-iron-15", on_hand: 2, reserved: 2, reorder_level: 1, hub_id: "h1" },
+      { id: "i2", sku: "RF-BENCH-01", on_hand: 50, reserved: 0, reorder_level: 5, hub_id: "h1" },
     ]);
     const first = await inventoryHealthCheck();
     const second = await inventoryHealthCheck();
@@ -34,7 +34,7 @@ describe("hub capacity refresh", () => {
   beforeEach(() => {
     mockDb.seed("hubs", [{ id: "h1", name: "Lagos HQ", tier: "global_hq", country_code: "NG" }]);
     mockDb.seed("inventory_items", [
-      { id: "i1", hub_id: "h1", sku: "RES-IRON-15", on_hand: 10, reserved: 2, reorder_level: 1 },
+      { id: "i1", hub_id: "h1", sku: "res-iron-15", on_hand: 10, reserved: 2, reorder_level: 1 },
     ]);
   });
 
