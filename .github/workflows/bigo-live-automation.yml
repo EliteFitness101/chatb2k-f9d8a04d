@@ -27,7 +27,7 @@ env:
 jobs:
   capture-transform-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Install capture and Blob tools
         run: |
@@ -44,7 +44,9 @@ jobs:
           : "${BIGO_HOST_IDS:?BIGO_HOST_IDS must contain the configured BIGO host IDs}"
           HOSTS="${BIGO_HOST_IDS}"
           echo '{"highlights":[],"limit":10}' > /tmp/bigo-batch.json
-          IFS=', ' read -r -a HOST_ARRAY <<< "$HOSTS"
+          # Accept comma-, space-, or newline-separated BIGO IDs; normalize and deduplicate safely.
+          mapfile -t HOST_ARRAY < <(printf '%s' "$HOSTS" | tr ', ' '\n' | awk 'NF' | awk '!seen[$0]++')
+          echo "Configured BIGO host IDs discovered: ${#HOST_ARRAY[@]}"
           CAPTURED_COUNT=0
           for HOST in "${HOST_ARRAY[@]}"; do
             [ -z "$HOST" ] && continue
@@ -143,5 +145,23 @@ jobs:
       - name: Ingest, enrich and auto-post BIGO batch
         run: |
           set -euo pipefail
-          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
+          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer \${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "\${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          rm -rf /tmp/bigo-items && mkdir -p /tmp/bigo-items
+          python3 - <<'PY'
+          import json, pathlib
+          batch=json.load(open('/tmp/bigo-batch.json'))
+          items=batch.get('highlights') or []
+          if not items:
+              raise SystemExit('FAIL: no captured BIGO highlights to ingest')
+          for i,item in enumerate(items,1):
+              pathlib.Path(f'/tmp/bigo-items/{i:04d}.json').write_text(json.dumps({'highlights':[item],'limit':1}))
+          print(f'Prepared {len(items)} individual BIGO pipeline payload(s)')
+          PY
+          for PAYLOAD in /tmp/bigo-items/*.json; do
+            echo "Ingesting BIGO payload \${PAYLOAD}"
+            curl -fsS -X POST "\${PIPELINE_URL}" \
+              -H "Authorization: Bearer \${OIDC_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data-binary @"\${PAYLOAD}"
+            echo
+          done
