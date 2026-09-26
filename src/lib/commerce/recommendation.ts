@@ -53,19 +53,19 @@ function scoreProduct(p: Product, a: AssessmentInput): number {
   if (a.time_availability === "lt3" && p.category === "coaching") s -= 1;
   return s;
 }
-const PROGRAM_BY_GOAL: Record<PrimaryGoal, string> = { cut: "RES-DIG-90D", recomp: "RES-DIG-90D", bulk: "RES-DIG-90D", longevity: "RES-DIG-NUT" };
-const EQUIPMENT_LADDER: Record<Equipment, string[]> = { none: ["RES-IRON-15"], home_basic: ["RES-IRON-30", "RES-BENCH-01"], home_full: ["RES-IRON-50", "RES-BENCH-01"], gym: [] };
+const PROGRAM_BY_GOAL: Record<PrimaryGoal, string> = { cut: "RF-PROG-90", recomp: "RF-PROG-90", bulk: "RF-PROG-90", longevity: "res-dig-nut" };
+const EQUIPMENT_LADDER: Record<Equipment, string[]> = { none: ["res-iron-15"], home_basic: ["res-iron-30", "RF-BENCH-01"], home_full: ["res-iron-50", "RF-BENCH-01"], gym: [] };
 
 export function recommend(a: AssessmentInput): Recommendation {
   const rationale: string[] = [], primary_program_sku = PROGRAM_BY_GOAL[a.primary_goal];
   rationale.push(`Programme selected for a ${a.primary_goal} objective.`);
   let equipment_skus = [...EQUIPMENT_LADDER[a.equipment]];
   if (a.budget === "lean") equipment_skus = equipment_skus.slice(0, 1);
-  if (a.budget === "apex") equipment_skus = ["RES-BUNDLE-APEX"];
+  if (a.budget === "apex") equipment_skus = ["res-bundle-apex"];
   if (equipment_skus.length === 0) rationale.push("Commercial gym access detected — no equipment required."); else rationale.push(`Equipment matched to your ${a.equipment.replace("_", " ")} setup.`);
-  const membership_sku = a.budget === "apex" || (a.budget === "committed" && a.experience === "beginner") ? "RES-COACH-01" : null;
+  const membership_sku = a.budget === "apex" || (a.budget === "committed" && a.experience === "beginner") ? "res-coach-01" : null;
   if (membership_sku) rationale.push("1-on-1 coaching added for accountability.");
-  const nutrition_sku = "RES-DIG-NUT";
+  const nutrition_sku = "res-dig-nut";
   rationale.push(`Nutrition protocol adapted to a ${a.nutrition} preference.`);
   if (a.mobility !== "none") rationale.push(`Programming will regress loading around your ${a.mobility} history.`);
   const upsell_score = Math.min(1, (a.budget === "apex" ? 0.5 : a.budget === "committed" ? 0.3 : 0.1) + (a.time_availability === "five_plus" ? 0.25 : 0.1) + (a.experience === "advanced" ? 0.2 : 0.05));
