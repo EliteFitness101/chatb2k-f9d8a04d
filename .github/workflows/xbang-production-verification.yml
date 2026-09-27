@@ -1,0 +1,43 @@
+name: XBang production verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'feat/xbang-resoflex-cloud-media']
+    paths:
+      - 'src/lib/client-runtime.ts'
+      - 'src/lib/media-delivery.ts'
+      - 'src/lib/live-highlights.functions.ts'
+      - 'src/routes/api/public/live-highlights.ts'
+      - 'tests/unit/xbang-media-delivery.test.ts'
+      - 'supabase/migrations/**'
+      - '.github/workflows/xbang-production-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  xbang:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: XBang targeted tests
+        run: bun run test tests/unit/xbang-media-delivery.test.ts
+      - name: XBang legacy isolation gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'resofit_live_highlights|content_asset_registry|from\("content_queue"\)|resofit\.fit|ResoFit|Resonance Fitness' \\
+            src/lib/client-runtime.ts src/lib/media-delivery.ts src/lib/live-highlights.functions.ts src/routes/api/public/live-highlights.ts .github/workflows/bigo-live-automation.yml; then
+            echo 'FAIL: XBang runtime still contains legacy ResoFit dependencies'
+            exit 1
+          fi
+      - name: Production build
+        run: bun run build
