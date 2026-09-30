@@ -81,7 +81,6 @@ jobs:
           fi
 
       - name: Ingest, enrich and auto-post BIGO batch
-        if: hashFiles('/tmp/bigo-batch.json') != ''
         run: |
           set -euo pipefail
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
