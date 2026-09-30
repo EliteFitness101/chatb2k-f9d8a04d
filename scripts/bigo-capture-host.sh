@@ -2,6 +2,7 @@
 set -euo pipefail
 
 HOST="${1:-}"
+SOURCE_OVERRIDE="${2:-}"
 if [ -z "$HOST" ]; then exit 2; fi
 
 RESULT="/tmp/bigo-results/${HOST}.json"
@@ -12,7 +13,7 @@ COVER="/tmp/bigo-${HOST}-${TS}.jpg"
 LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
-SOURCE_URL="https://www.bigo.tv/${HOST}"
+SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
 if [ "$HOST" = "1043719016" ]; then
   SOURCE_URL="https://www.bigo.tv/sid/2831697474_1950671439_1790805082?c=0&p=2&t=0&b=891792825&h=1043719016&mk=v2.lPaAcaEEDHZVKsRkGqdxhQpxSNApelrPzdCADpDsMHAE1yJOazvhOA"
 elif [ "$HOST" = "1093869618" ]; then
@@ -88,12 +89,13 @@ export FILE COVER
 BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/${file.replace(/^.*\\//,"")}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
 COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/covers/${file.replace(/^.*\\//,"")}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" <<'PY' > "$RESULT"
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
+source_url=sys.argv[13]
 w,h,d,fps,avg,pix,ts=sys.argv[7:]
-hitem={'host_id':host,'host_name':name,'original_url':f'https://www.bigo.tv/{host}','blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':True,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
+hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':True,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
 print(json.dumps({'highlight':hitem}))
 PY
 echo "Captured $HOST"
