@@ -14,6 +14,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: bigo-live-automation
+  cancel-in-progress: false
+
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
@@ -48,21 +52,40 @@ jobs:
         run: |
           set -euo pipefail
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
-          CONFIGURED_HOSTS="${BIGO_HOST_IDS:-}"
-          REQUIRED_HOSTS="1043719016,748833040,1097208386,804247401,calderdeo,1102883606,950503985,snow254,pickyboo,1093869618"
-          HOSTS="${CONFIGURED_HOSTS:+${CONFIGURED_HOSTS},}${REQUIRED_HOSTS}"
           mkdir -p /tmp/bigo-results
-          mapfile -t HOST_ARRAY < <(printf "%s" "$HOSTS" | tr ", " "\n" | awk "NF" | awk '!seen[$0]++')
+          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          python3 - "${PIPELINE_URL}" "${OIDC_TOKEN}" "${BIGO_HOST_IDS:-}" <<'PY' > /tmp/bigo-hosts.txt
+import json,sys,urllib.request
+url,token,fallback=sys.argv[1:]
+req=urllib.request.Request(url,headers={"Authorization":f"Bearer {token}"})
+try:
+    with urllib.request.urlopen(req,timeout=20) as r:
+        data=json.load(r)
+    hosts=data.get("hosts") or []
+    if not hosts: raise RuntimeError("Supabase source registry returned zero eligible hosts")
+    seen=set()
+    for h in hosts:
+        host=str(h.get("bigo_id") or "").strip()
+        source=str(h.get("source_url") or "").strip()
+        if host and host not in seen:
+            print(host+"\t"+source); seen.add(host)
+    print(f"::notice::Supabase source registry selected {len(seen)} active capture-enabled host(s)",file=sys.stderr)
+except Exception as e:
+    fb=[x.strip() for x in fallback.replace(","," ").split() if x.strip()]
+    if not fb: raise
+    for host in dict.fromkeys(fb): print(host+"\t")
+    print(f"::warning::Supabase source registry unavailable; using BIGO_HOST_IDS fallback ({len(fb)} host(s)): {e}",file=sys.stderr)
+PY
+          mapfile -t HOST_ARRAY < /tmp/bigo-hosts.txt
           SELECTED=()
           for i in "${!HOST_ARRAY[@]}"; do
             if (( i % ${SHARDS:-8} == SHARD )); then SELECTED+=( "${HOST_ARRAY[$i]}" ); fi
           done
-          printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
           echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
           export BLOB_READ_WRITE_TOKEN
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
-          printf '%s\n' "${SELECTED[@]}" | xargs -r -n1 -P "${HOSTS_PER_SHARD_PARALLEL:-8}" bash -c 'bash /tmp/bigo-capture-host.sh "$1"' _ || true
+          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash /tmp/bigo-capture-host.sh "$1" "$2"' _ || true
           python3 - <<'PY'
           import json,glob
           out={"highlights":[]}
