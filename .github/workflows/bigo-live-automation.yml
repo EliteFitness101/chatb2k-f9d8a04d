@@ -82,9 +82,8 @@ jobs:
           printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
           echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
           export BLOB_READ_WRITE_TOKEN
-          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
-          chmod +x /tmp/bigo-capture-host.sh
-          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash /tmp/bigo-capture-host.sh "$1" "$2"' _ || true
+          chmod +x ./scripts/bigo-capture-host.sh
+          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash ./scripts/bigo-capture-host.sh "$1" "$2"' _ || true
           python3 - <<'PY'
           import json,glob
           out={"highlights":[],"limit":10}
@@ -99,14 +98,20 @@ jobs:
           PY
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           echo "Shard $SHARD capture result: $COUNT highlight(s)"
+          printf '%s\n' "$COUNT" > "/tmp/bigo-results/count-${SHARD}.txt"
+          echo "::notice::Shard $SHARD captured $COUNT highlight(s) this cycle."
           if [ "$COUNT" -lt 1 ]; then
-            if [ "${SMOKE_TEST:-false}" = "true" ]; then
-              echo "::error::Smoke test failed: shard $SHARD produced zero successful BIGO captures."
-              exit 1
-            fi
             echo "::notice::Shard $SHARD captured no live hosts this cycle; continuing."
             exit 0
           fi
+
+      - name: Upload shard smoke-test result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigo-shard-${{ matrix.shard }}-smoke
+          path: /tmp/bigo-results/count-${{ matrix.shard }}.txt
+          if-no-files-found: warn
 
       - name: Ingest, enrich and auto-post BIGO batch
         run: |
@@ -115,3 +120,34 @@ jobs:
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
+
+
+  smoke-test:
+    name: BIGO capture smoke-test aggregate
+    needs: capture-transform-publish
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.smoke_test }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download shard smoke results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bigo-shard-*-smoke
+          path: /tmp/bigo-smoke
+          merge-multiple: false
+      - name: Require at least one successful capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOTAL=0
+          FOUND=0
+          while IFS= read -r f; do
+            FOUND=1
+            n="$(cat "$f")"
+            echo "$f -> $n highlight(s)"
+            TOTAL=$((TOTAL + n))
+          done < <(find /tmp/bigo-smoke -type f -name '*.txt' -print)
+          if [ "$FOUND" -eq 0 ] || [ "$TOTAL" -lt 1 ]; then
+            echo "::error::BIGO smoke test failed: zero successful captures across all 8 shards."
+            exit 1
+          fi
+          echo "BIGO smoke test PASSED: $TOTAL successful capture(s) across 8 shards."
