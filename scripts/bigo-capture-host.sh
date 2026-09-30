@@ -6,14 +6,17 @@ if [ -z "$HOST" ]; then exit 2; fi
 
 RESULT="/tmp/bigo-results/${HOST}.json"
 RAW="/tmp/bigo-${HOST}-raw.mp4"
-FILE="/tmp/bigo-${HOST}.mp4"
-COVER="/tmp/bigo-${HOST}.jpg"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+FILE="/tmp/bigo-${HOST}-${TS}.mp4"
+COVER="/tmp/bigo-${HOST}-${TS}.jpg"
 LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
 SOURCE_URL="https://www.bigo.tv/${HOST}"
 if [ "$HOST" = "1043719016" ]; then
   SOURCE_URL="https://www.bigo.tv/sid/2831697474_1950671439_1790805082?c=0&p=2&t=0&b=891792825&h=1043719016&mk=v2.lPaAcaEEDHZVKsRkGqdxhQpxSNApelrPzdCADpDsMHAE1yJOazvhOA"
+elif [ "$HOST" = "1093869618" ]; then
+  SOURCE_URL="https://www.bigo.tv/sid/2876252101_1950667276_1790804637?c=0&p=2&t=0&b=891792825&h=1093869618&mk=v2.QiPONUc8JXmAeipRr9Ow57-YPPJA2W5z-d0uiI_12guDHI3hzcBdgw"
 fi
 
 INFO='{"alive":false,"name":"BIGO Host","title":"BIGO Live Highlight","room_id":"'"$HOST"'","hls_src":""}'
@@ -81,7 +84,6 @@ if not (1 <= d <= 180): raise SystemExit('QA duration')
 if p != 'yuv420p': raise SystemExit('QA pixel format')
 PY
 
-TS="$(date -u +%Y%m%dT%H%M%SZ)"
 export FILE COVER
 BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/${file.replace(/^.*\\//,"")}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
 COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/covers/${file.replace(/^.*\\//,"")}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
