@@ -45,7 +45,7 @@ jobs:
           REQUIRED_HOSTS="748833040,1097208386,804247401,calderdeo,1102883606,950503985,snow254,pickyboo"
           HOSTS="${CONFIGURED_HOSTS:+${CONFIGURED_HOSTS},}${REQUIRED_HOSTS}"
           echo '{"highlights":[],"limit":10}' > /tmp/bigo-batch.json
-          mapfile -t HOST_ARRAY < <(printf "%s" "$HOSTS" | tr ", " "\n" | awk "NF" | awk "!seen[$0]++")
+          mapfile -t HOST_ARRAY < <(printf "%s" "$HOSTS" | tr ", " "\n" | awk "NF" | awk '!seen[$0]++')
           CAPTURED_COUNT=0
           for HOST in "${HOST_ARRAY[@]}"; do
             [ -z "$HOST" ] && continue
