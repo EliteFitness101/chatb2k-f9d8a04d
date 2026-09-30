@@ -25,6 +25,7 @@ import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as Chatb2kRouteImport } from './routes/chatb2k'
 import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as BigoHostRouteImport } from './routes/bigo-host'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
@@ -133,6 +134,7 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BigoHostRoute = BigoHostRouteImport.update({ id: '/bigo-host', path: '/bigo-host', getParentRoute: () => rootRouteImport } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -288,6 +290,7 @@ const ApiPublicHooksCheckoutAbandonmentRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/bigo-host': typeof BigoHostRoute
   '/bundles': typeof BundlesRoute
   '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
@@ -423,6 +426,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/bigo-host'
     | '/bundles'
     | '/chatb2k'
     | '/checkout'
@@ -557,6 +561,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AboutRoute: typeof AboutRoute
+  BigoHostRoute: typeof BigoHostRoute
   BundlesRoute: typeof BundlesRoute
   Chatb2kRoute: typeof Chatb2kRoute
   CheckoutRoute: typeof CheckoutRoute
@@ -694,6 +699,13 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bigo-host': {
+      id: '/bigo-host'
+      path: '/bigo-host'
+      fullPath: '/bigo-host'
+      preLoaderRoute: typeof BigoHostRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -955,6 +967,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AboutRoute: AboutRoute,
+  BigoHostRoute: BigoHostRoute,
   BundlesRoute: BundlesRoute,
   Chatb2kRoute: Chatb2kRoute,
   CheckoutRoute: CheckoutRoute,
