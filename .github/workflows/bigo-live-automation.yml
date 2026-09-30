@@ -27,7 +27,7 @@ env:
 jobs:
   capture-transform-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Install capture and Blob tools
         run: |
@@ -42,10 +42,10 @@ jobs:
           set -euo pipefail
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
           CONFIGURED_HOSTS="${BIGO_HOST_IDS:-}"
-          REQUIRED_HOSTS="748833040,1097208386,804247401,calderdeo,1102883606,950503985,snow254,pickyboo,2567580489"
+          REQUIRED_HOSTS="748833040,1097208386,804247401,calderdeo,1102883606,950503985,snow254,pickyboo"
           HOSTS="${CONFIGURED_HOSTS:+${CONFIGURED_HOSTS},}${REQUIRED_HOSTS}"
           echo '{"highlights":[],"limit":10}' > /tmp/bigo-batch.json
-          IFS=', ' read -r -a HOST_ARRAY <<< "$HOSTS"
+          mapfile -t HOST_ARRAY < <(printf "%s" "$HOSTS" | tr ", " "\n" | awk "NF" | awk "!seen[$0]++")
           CAPTURED_COUNT=0
           for HOST in "${HOST_ARRAY[@]}"; do
             [ -z "$HOST" ] && continue
