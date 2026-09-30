@@ -1,11 +1,11 @@
-name: BIGO Live → ChatB2K → Buffer
-# Canonical public media contract: /buffer/assets/
+name: BIGO Live → ChatB2K → Buffer (Sharded Multi-Host)
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/bigo-live-automation.yml'
+      - 'scripts/bigo-capture-host.sh'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -14,23 +14,28 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: bigo-live-automation
-  cancel-in-progress: false
-
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
+  SHARDS: "8"
+  HOSTS_PER_SHARD_PARALLEL: "8"
 
 jobs:
   capture-transform-publish:
+    name: "BIGO shard ${{ matrix.shard }}"
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
     steps:
       - name: Install capture and Blob tools
         run: |
+          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.0,<9' requests
@@ -38,113 +43,46 @@ jobs:
 
       - name: Capture, normalize and prepare ChatB2K batch
         shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
           CONFIGURED_HOSTS="${BIGO_HOST_IDS:-}"
           REQUIRED_HOSTS="1043719016,748833040,1097208386,804247401,calderdeo,1102883606,950503985,snow254,pickyboo,1093869618"
           HOSTS="${CONFIGURED_HOSTS:+${CONFIGURED_HOSTS},}${REQUIRED_HOSTS}"
-          echo '{"highlights":[],"limit":10}' > /tmp/bigo-batch.json
+          mkdir -p /tmp/bigo-results
           mapfile -t HOST_ARRAY < <(printf "%s" "$HOSTS" | tr ", " "\n" | awk "NF" | awk '!seen[$0]++')
-          CAPTURED_COUNT=0
-          for HOST in "${HOST_ARRAY[@]}"; do
-            [ -z "$HOST" ] && continue
-            TS="$(date -u +%Y%m%dT%H%M%SZ)"
-            RAW="bigo-${HOST}-${TS}-raw.mp4"
-            FILE="bigo-${HOST}-${TS}.mp4"
-            COVER="bigo-${HOST}-${TS}.jpg"
-            STREAMLINK_LOG="/tmp/streamlink-${HOST}.log"
-            INFO="{\"alive\":false,\"name\":\"BIGO Host\",\"title\":\"BIGO Live Highlight\",\"room_id\":\"$HOST\",\"hls_src\":\"\"}"
-
-            set +e
-            SOURCE_URL="https://www.bigo.tv/${HOST}"
-            if [ "$HOST" = "1043719016" ]; then SOURCE_URL="https://www.bigo.tv/sid/2831697474_1950671439_1790805082?c=0&p=2&t=0&b=891792825&h=1043719016&mk=v2.lPaAcaEEDHZVKsRkGqdxhQpxSNApelrPzdCADpDsMHAE1yJOazvhOA"; fi
-            timeout 55s streamlink --stdout "$SOURCE_URL" best 2>"$STREAMLINK_LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-            PIPE_RC=( "${PIPESTATUS[@]}" )
-            CAPTURE_RC="${PIPE_RC[0]:-1}"
-            FFMPEG_RC="${PIPE_RC[1]:-1}"
-            set -e
-
-            if [ "$CAPTURE_RC" -ne 0 ] || [ "$FFMPEG_RC" -ne 0 ] || [ ! -s "$RAW" ]; then
-              echo "Streamlink capture failed for ${HOST}; trying direct HLS discovery fallback"
-              INFO="$(python3 - "$HOST" <<'PY'
-          import json,sys,requests
-          host=sys.argv[1]
-          r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=15)
-          r.raise_for_status(); d=r.json().get('data') or {}
-          print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'hls_src':d.get('hls_src') or d.get('hlsSrc') or d.get('hls') or ''}))
-          PY
-              )"
-              export INFO
-              STREAM_URL="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("hls_src", ""))')"
-              if [ -n "$STREAM_URL" ]; then
-                timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW" || true
-              fi
-            fi
-
-            if [ ! -s "$RAW" ]; then
-              echo "::warning::BIGO host ${HOST} produced no media; continuing other configured hosts."
-              cat "$STREAMLINK_LOG" 2>/dev/null || true
-              rm -f "$RAW"
-              continue
-            fi
-            export INFO
-            NAME="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("name", "BIGO Host"))')"
-            TITLE="$(python3 -c 'import json,os; print(json.loads(os.environ["INFO"]).get("title", "BIGO Live Highlight"))')"
-            ffmpeg -hide_banner -loglevel error -i "$RAW" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$FILE"
-            ffmpeg -hide_banner -loglevel error -i "$FILE" -map 0:v:0 -frames:v 1 -q:v 3 "$COVER"
-            META="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,avg_frame_rate,pix_fmt -show_entries format=duration -of json "$FILE")"
-            export META
-            read -r WIDTH HEIGHT FPS AVG_FPS DURATION PIX_FMT <<< "$(python3 - <<'PY'
-          import json,os,fractions
-          d=json.loads(os.environ['META']); s=(d.get('streams') or [{}])[0]
-          def rate(x):
-              try:return float(fractions.Fraction(x))
-              except:return 0.0
-          print(s.get('width',0),s.get('height',0),rate(s.get('r_frame_rate','0/1')),rate(s.get('avg_frame_rate','0/1')),float((d.get('format') or {}).get('duration') or 0),s.get('pix_fmt',''))
-          PY
-            )"
-            python3 - "$FPS" "$AVG_FPS" "$WIDTH" "$HEIGHT" "$DURATION" "$PIX_FMT" <<'PY'
-          import sys
-          fps,avg,w,h,d,p=sys.argv[1:]
-          fps=float(fps); avg=float(avg); w=int(w); h=int(h); d=float(d)
-          if not (23 <= fps <= 60 and 23 <= avg <= 60): raise SystemExit('FAIL: FPS outside TikTok 23-60 requirement')
-          if abs(fps-avg) > 0.5: raise SystemExit('FAIL: variable/inconsistent frame rate')
-          if w < 720 or h < 1280 or not (0.55 <= w/h <= 0.75): raise SystemExit('FAIL: unsupported vertical dimensions/aspect')
-          if not (1 <= d <= 180): raise SystemExit('FAIL: duration outside production short-form range')
-          if p != 'yuv420p': raise SystemExit('FAIL: unsupported pixel format')
-          PY
-            export FILE COVER WIDTH HEIGHT DURATION FPS AVG_FPS PIX_FMT HOST NAME TITLE TS
-            BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/${file}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
-            COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/covers/${file}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
-            export BLOB_URL COVER_URL
-            FP="${HOST}:${TS}:${BLOB_URL}"
-            export FP
-            python3 - <<'PY'
-          import json,os
-          d=json.load(open('/tmp/bigo-batch.json'))
-          info=json.loads(os.environ['INFO'])
-          d['highlights'].append({'host_id':os.environ['HOST'],'host_name':os.environ['NAME'],'original_url':f'https://www.bigo.tv/{os.environ["HOST"]}','blob_url':os.environ['BLOB_URL'],'title':os.environ['TITLE'],'caption':f'{os.environ["TITLE"]} — live highlight from {os.environ["NAME"]}.','fingerprint':os.environ['FP'],'source_asset_id':os.environ['FP'],'metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(os.environ['WIDTH']),'height':int(os.environ['HEIGHT']),'duration_seconds':float(os.environ['DURATION']),'aspect_ratio':float(os.environ['WIDTH'])/float(os.environ['HEIGHT']),'audio_present':True,'fps':float(os.environ['FPS']),'avg_fps':float(os.environ['AVG_FPS']),'frame_rate_verified':True,'codec':'h264','pixel_format':os.environ['PIX_FMT'],'cfr':True,'captured_at':os.environ['TS'],'blob_url':os.environ['BLOB_URL'],'cover_url':os.environ['COVER_URL']}})
-          json.dump(d,open('/tmp/bigo-batch.json','w'))
-          PY
-            rm -f "$RAW" "$FILE" "$COVER"
-            CAPTURED_COUNT=$((CAPTURED_COUNT + 1))
-            echo "Captured ${HOST}; total=${CAPTURED_COUNT}"
+          SELECTED=()
+          for i in "${!HOST_ARRAY[@]}"; do
+            if (( i % ${SHARDS:-8} == SHARD )); then SELECTED+=( "${HOST_ARRAY[$i]}" ); fi
           done
-          if [ "$CAPTURED_COUNT" -lt 1 ]; then
-            echo "::error::No BIGO media captured; refusing empty ChatB2K batch."
-            exit 1
-          fi
+          printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
+          echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
+          export BLOB_READ_WRITE_TOKEN
+          printf '%s\n' "${SELECTED[@]}" | xargs -r -n1 -P "${HOSTS_PER_SHARD_PARALLEL:-8}" bash -c 'bash scripts/bigo-capture-host.sh "$1"' _ || true
           python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/bigo-batch.json'))
-          if not d.get('highlights'):
-              raise SystemExit('FAIL: empty BIGO batch')
-          print(f"Verified BIGO batch: {len(d['highlights'])} highlight(s)")
+          import json,glob
+          out={"highlights":[],"limit":10}
+          for p in glob.glob("/tmp/bigo-results/*.json"):
+              try:
+                  d=json.load(open(p))
+                  if d.get("highlight"): out["highlights"].append(d["highlight"])
+              except Exception as e:
+                  print(f"::warning::bad result {p}: {e}")
+          json.dump(out,open("/tmp/bigo-batch.json","w"))
+          print(f"Verified BIGO shard batch: {len(out['highlights'])} highlight(s)")
           PY
+          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+            echo "::notice::Shard $SHARD captured no live hosts this cycle; continuing."
+            exit 0
+          fi
 
       - name: Ingest, enrich and auto-post BIGO batch
+        if: hashFiles('/tmp/bigo-batch.json') != ''
         run: |
           set -euo pipefail
+          COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
+          if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
