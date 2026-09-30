@@ -9,6 +9,16 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      smoke_test:
+        description: 'Require at least one successful BIGO capture per shard'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: bigo-live-automation-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -21,6 +31,7 @@ env:
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
   SHARDS: "8"
   HOSTS_PER_SHARD_PARALLEL: "8"
+  SMOKE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.smoke_test || false }}
 
 jobs:
   capture-transform-publish:
@@ -33,6 +44,9 @@ jobs:
       matrix:
         shard: [0,1,2,3,4,5,6,7]
     steps:
+      - name: Checkout production worker
+        uses: actions/checkout@v4
+
       - name: Install capture and Blob tools
         run: |
           set -euo pipefail
@@ -83,7 +97,13 @@ jobs:
           json.dump(out,open("/tmp/bigo-batch.json","w"))
           print(f"Verified BIGO shard batch: {len(out['highlights'])} highlight(s)")
           PY
-          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+          COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
+          echo "Shard $SHARD capture result: $COUNT highlight(s)"
+          if [ "$COUNT" -lt 1 ]; then
+            if [ "${SMOKE_TEST:-false}" = "true" ]; then
+              echo "::error::Smoke test failed: shard $SHARD produced zero successful BIGO captures."
+              exit 1
+            fi
             echo "::notice::Shard $SHARD captured no live hosts this cycle; continuing."
             exit 0
           fi
