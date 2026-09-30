@@ -295,9 +295,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/bigo-host': typeof BigoHostRoute
-  '/bigo-host': typeof BigoHostRoute
-  '/bigo-host': typeof BigoHostRoute
-  '/bigo-host': typeof BigoHostRoute
   '/bundles': typeof BundlesRoute
   '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
@@ -342,6 +339,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/bigo-host': typeof BigoHostRoute
   '/bundles': typeof BundlesRoute
   '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
@@ -387,6 +385,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/about': typeof AboutRoute
+  '/bigo-host': typeof BigoHostRoute
   '/bundles': typeof BundlesRoute
   '/chatb2k': typeof Chatb2kRoute
   '/checkout': typeof CheckoutRoute
