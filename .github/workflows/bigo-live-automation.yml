@@ -14,10 +14,6 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: bigo-live-automation
-  cancel-in-progress: false
-
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
