@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 HOST="${1:-}"
 if [ -z "$HOST" ]; then exit 2; fi
