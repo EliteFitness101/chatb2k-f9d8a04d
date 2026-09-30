@@ -14,12 +14,6 @@ LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
 SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
-if [ "$HOST" = "1043719016" ]; then
-  SOURCE_URL="https://www.bigo.tv/sid/2831697474_1950671439_1790805082?c=0&p=2&t=0&b=891792825&h=1043719016&mk=v2.lPaAcaEEDHZVKsRkGqdxhQpxSNApelrPzdCADpDsMHAE1yJOazvhOA"
-elif [ "$HOST" = "1093869618" ]; then
-  SOURCE_URL="https://www.bigo.tv/sid/2876252101_1950667276_1790804637?c=0&p=2&t=0&b=891792825&h=1093869618&mk=v2.QiPONUc8JXmAeipRr9Ow57-YPPJA2W5z-d0uiI_12guDHI3hzcBdgw"
-fi
-
 INFO='{"alive":false,"name":"BIGO Host","title":"BIGO Live Highlight","room_id":"'"$HOST"'","hls_src":""}'
 
 set +e
