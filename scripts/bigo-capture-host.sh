@@ -93,7 +93,7 @@ python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$H
 import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
-source_url=sys.argv[13]
+source_url=sys.argv[14]
 w,h,d,fps,avg,pix,ts=sys.argv[7:]
 hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':True,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
 print(json.dumps({'highlight':hitem}))
