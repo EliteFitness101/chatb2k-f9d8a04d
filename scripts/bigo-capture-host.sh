@@ -58,19 +58,19 @@ if ! ffmpeg -hide_banner -loglevel error -i "$FILE" -map 0:v:0 -frames:v 1 -q:v 
   echo "::warning::Cover generation failed for $HOST"; exit 0
 fi
 
-META="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,avg_frame_rate,pix_fmt -show_entries format=duration -of json "$FILE")"
-read -r WIDTH HEIGHT FPS AVG_FPS DURATION PIX_FMT <<< "$(python3 - "$META" <<'PY'
+META="$(ffprobe -v error -show_entries stream=width,height,r_frame_rate,avg_frame_rate,pix_fmt,codec_type -show_entries format=duration -of json "$FILE")"
+read -r WIDTH HEIGHT FPS AVG_FPS DURATION PIX_FMT AUDIO_STREAMS <<< "$(python3 - "$META" <<'PY'
 import json,sys,fractions
 d=json.loads(sys.argv[1]); s=(d.get('streams') or [{}])[0]
 def rate(x):
  try:return float(fractions.Fraction(x))
  except:return 0.0
-print(s.get('width',0),s.get('height',0),rate(s.get('r_frame_rate','0/1')),rate(s.get('avg_frame_rate','0/1')),float((d.get('format') or {}).get('duration') or 0),s.get('pix_fmt',''))
+print(s.get('width',0),s.get('height',0),rate(s.get('r_frame_rate','0/1')),rate(s.get('avg_frame_rate','0/1')),float((d.get('format') or {}).get('duration') or 0),s.get('pix_fmt',''),sum(1 for x in d.get('streams',[]) if x.get('codec_type')=='audio'))
 PY
 )"
-python3 - "$FPS" "$AVG_FPS" "$WIDTH" "$HEIGHT" "$DURATION" "$PIX_FMT" <<'PY'
+python3 - "$FPS" "$AVG_FPS" "$WIDTH" "$HEIGHT" "$DURATION" "$PIX_FMT" "$AUDIO_STREAMS" <<'PY'
 import sys
-fps,avg,w,h,d,p=sys.argv[1:]
+fps,avg,w,h,d,p,a=sys.argv[1:]
 fps=float(fps); avg=float(avg); w=int(w); h=int(h); d=float(d)
 if not (23 <= fps <= 60 and 23 <= avg <= 60): raise SystemExit('QA FPS')
 if abs(fps-avg) > 0.5: raise SystemExit('QA CFR')
@@ -89,7 +89,8 @@ info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
 source_url=sys.argv[14]
 w,h,d,fps,avg,pix,ts=sys.argv[7:]
-hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':True,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
+audio_present=int(a)>0
+hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
 print(json.dumps({'highlight':hitem}))
 PY
 echo "Captured $HOST"
