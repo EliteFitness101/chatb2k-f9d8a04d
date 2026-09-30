@@ -112,8 +112,7 @@ function ResultCard({ answers, onRestart }: { answers: Required<Answers>; onRest
   const [curating, setCurating] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
   const redirectedRef = useRef(false);
-  const checkoutPath = `/paystack?sku=${encodeURIComponent(r.recommended.sku)}`;
-  const checkoutUrl = (typeof window !== "undefined" ? window.location.origin : SITE_URL) + checkoutPath;
+  const checkoutUrl = `https://store.resofit.fit/shop?sku=${encodeURIComponent(r.recommended.sku)}&source=chatb2k&surface=assessment`;
   const priceNgn = `₦${(r.recommended.ngnMinor / 100).toLocaleString("en-NG")}`;
   const overseerName = r.overseer === "buchi" ? "Coach Buchi" : "Coach Mavia";
 
@@ -124,7 +123,7 @@ function ResultCard({ answers, onRestart }: { answers: Required<Answers>; onRest
       window.setTimeout(() => {
         if (redirectedRef.current) return;
         redirectedRef.current = true;
-        window.location.assign(checkoutPath);
+        window.location.assign(checkoutUrl);
       }, 850);
     }, 1350);
     return () => window.clearTimeout(timer);
@@ -147,7 +146,7 @@ function ResultCard({ answers, onRestart }: { answers: Required<Answers>; onRest
             <div className="glass rounded-2xl p-6 border border-white/10"><div className="text-[10px] tracking-[0.3em] uppercase text-gold">Your recommendation</div><div className="mt-3 font-display text-2xl sm:text-3xl">{r.recommended.title}</div><div className="mt-2 text-2xl text-gold-gradient font-display">{priceNgn}</div><p className="mt-4 text-sm text-muted-foreground leading-relaxed">{r.recommended.description}</p><ul className="mt-5 space-y-2 text-sm">{r.recommended.highlights.slice(0, 3).map((h) => <li key={h} className="flex gap-2"><span className="text-gold">◆</span>{h}</li>)}</ul><div className="mt-6 rounded-xl border border-[var(--gold)]/25 bg-[var(--gold)]/10 p-4"><div className="text-xs text-gold font-semibold">Opening the exact checkout</div><div className="mt-1 text-xs text-muted-foreground">No catalog detour. No search required.</div></div></div>
           </div>
           {redirecting && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 flex items-center justify-center gap-3 text-sm text-muted-foreground"><span className="h-2 w-2 rounded-full bg-[var(--gold)] animate-pulse" />Securing your recommendation and opening checkout…</motion.div>}
-          <div className="mt-7 flex flex-wrap justify-center gap-3"><Link to="/paystack" search={{ sku: r.recommended.sku }} className="px-7 py-4 rounded-xl bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold">Continue to exact checkout →</Link><a href={waUrl} target="_blank" rel="noopener noreferrer" className="px-6 py-4 rounded-xl glass text-sm hover:border-[var(--gold)] transition">Share recommendation</a><button onClick={onRestart} className="px-6 py-4 rounded-xl glass text-sm text-muted-foreground hover:text-foreground hover:border-[var(--gold)] transition">Re-run assessment</button></div>
+          <div className="mt-7 flex flex-wrap justify-center gap-3"><a href={checkoutUrl} className="px-7 py-4 rounded-xl bg-gold-gradient text-[var(--ink)] font-semibold shadow-gold">Continue to exact checkout →</a><a href={waUrl} target="_blank" rel="noopener noreferrer" className="px-6 py-4 rounded-xl glass text-sm hover:border-[var(--gold)] transition">Share recommendation</a><button onClick={onRestart} className="px-6 py-4 rounded-xl glass text-sm text-muted-foreground hover:text-foreground hover:border-[var(--gold)] transition">Re-run assessment</button></div>
         </motion.div>}
       </div>
     </div>
