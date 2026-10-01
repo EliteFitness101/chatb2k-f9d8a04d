@@ -1,4 +1,4 @@
-name: BIGO Live → ChatB2K → Buffer (Sharded Multi-Host)
+name: BIGO Live → FFmpeg → Public Blob Storage (Sharded Multi-Host)
 
 on:
   push:
@@ -34,7 +34,7 @@ env:
   SMOKE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.smoke_test || false }}
 
 jobs:
-  capture-transform-publish:
+  capture-transform-store:
     name: "BIGO shard ${{ matrix.shard }}"
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -113,18 +113,19 @@ jobs:
           path: /tmp/bigo-results/count-${{ matrix.shard }}.txt
           if-no-files-found: warn
 
-      - name: Ingest, enrich and auto-post BIGO batch
+      - name: Store BIGO batch in ResoFit and public Blob (no publishing)
         run: |
           set -euo pipefail
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
+          jq '. + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
+          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
 
 
   smoke-test:
     name: BIGO capture smoke-test aggregate
-    needs: capture-transform-publish
+    needs: capture-transform-store
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.smoke_test }}
     runs-on: ubuntu-latest
     steps:
