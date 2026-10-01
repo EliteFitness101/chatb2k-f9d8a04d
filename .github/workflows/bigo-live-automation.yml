@@ -32,6 +32,14 @@ env:
   SHARDS: "8"
   HOSTS_PER_SHARD_PARALLEL: "8"
   SMOKE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.smoke_test || false }}
+  PRIORITY_LIVE_HOSTS: |
+    angel210	https://www.bigo.tv/sid/2593757977_1984951071_1790838881
+    1091768750	https://www.bigo.tv/sid/2874322965_1986422622_1790840986
+    1102883606	https://www.bigo.tv/sid/2884539547_1987182932_1790841201?c=0&p=2&t=0&b=888083554&h=1102883606&mk=v2.KWcmG2ozlv5-TDh-C544c6Tom8BptRSNVrfKLsjYOu3LmnHy8g_SVQ
+    wendyepitom	https://www.bigo.tv/sid/2803649422_1987183096_1790841216
+    989484732	https://www.bigo.tv/sid/2786583126_1987184454_1790841300
+    1097208386	https://www.bigo.tv/sid/2879313895_1987185057_1790841352
+    1120973144	https://www.bigo.tv/sid/2901946544_1987185443_1790841385
 
 jobs:
   capture-transform-store:
@@ -70,8 +78,10 @@ jobs:
             HOSTS="$(printf "%s" "${BIGO_HOST_IDS:-}" | tr ',' '\n' | sed '/^$/d' | awk '{print $1"\t"}')"
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
           fi
+          # Add the user-supplied currently-live rooms without replacing the canonical registry.
+          HOSTS="$(printf '%s\n%s\n' "${HOSTS}" "${PRIORITY_LIVE_HOSTS:-}" | sed '/^[[:space:]]*$/d' | awk -F '\t' '!seen[$1]++')"
           if [ -z "${HOSTS}" ]; then
-            echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
+            echo "::error::No eligible BIGO hosts available from Supabase source registry, priority live set, or BIGO_HOST_IDS."
             exit 1
           fi
           mapfile -t HOST_ARRAY <<< "${HOSTS}"
