@@ -14,32 +14,63 @@ LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
 SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
-INFO='{"alive":false,"name":"BIGO Host","title":"BIGO Live Highlight","room_id":"'"$HOST"'","hls_src":""}'
-
-set +e
-timeout 55s streamlink --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-PIPE_RC=("${PIPESTATUS[@]}")
-CAPTURE_RC="${PIPE_RC[0]:-1}"
-FFMPEG_RC="${PIPE_RC[1]:-1}"
-set -e
-
-if [ "$CAPTURE_RC" -ne 0 ] || [ "$FFMPEG_RC" -ne 0 ] || [ ! -s "$RAW" ]; then
-  echo "Streamlink capture failed for $HOST; trying direct HLS discovery fallback"
-  INFO="$(python3 - "$HOST" <<'PY'
+# Resolve room metadata before capture so successful Streamlink captures retain real names.
+INFO="$(python3 - "$HOST" <<'PY'
 import json,sys,requests
 host=sys.argv[1]
 try:
- r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=15)
+ r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=12)
  r.raise_for_status(); d=r.json().get('data') or {}
- print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'hls_src':d.get('hls_src') or d.get('hlsSrc') or d.get('hls') or ''}))
+ print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src') or d.get('hlsSrc') or d.get('hls')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'hls_src':d.get('hls_src') or d.get('hlsSrc') or d.get('hls') or ''}))
 except Exception as e:
- print(json.dumps({'alive':False,'name':host,'title':'BIGO Live Highlight','room_id':host,'hls_src':'','error':str(e)}))
+ print(json.dumps({'alive':False,'name':host,'title':'BIGO Live Highlight','room_id':host,'hls_src':'','discovery_error':str(e)}))
 PY
-  )"
-  STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hls_src",""))' "$INFO")"
-  if [ -n "$STREAM_URL" ]; then
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW" || true
-  fi
+)"
+NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
+TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
+STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hls_src",""))' "$INFO")"
+CAPTURE_OK=0
+# Bounded retries: isolate transient room/network failures to this host.
+for ATTEMPT in 1 2; do
+  rm -f "$RAW"
+  echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
+  set +e
+  timeout 55s streamlink --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  PIPE_RC=("${PIPESTATUS[@]}")
+  CAPTURE_RC="${PIPE_RC[0]:-1}"
+  FFMPEG_RC="${PIPE_RC[1]:-1}"
+  set -e
+  if [ "$CAPTURE_RC" -eq 0 ] && [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
+  sleep "$ATTEMPT"
+done
+# Direct HLS is the fallback when Streamlink cannot resolve or capture the room.
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
+  echo "::notice::BIGO host $HOST trying direct HLS fallback"
+  for ATTEMPT in 1 2; do
+    rm -f "$RAW"
+    set +e
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    PIPE_RC=("${PIPESTATUS[@]}")
+    CURL_RC="${PIPE_RC[0]:-1}"
+    FFMPEG_RC="${PIPE_RC[1]:-1}"
+    set -e
+    if [ "$CURL_RC" -eq 0 ] && [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
+    sleep "$ATTEMPT"
+  done
+fi
+if [ "$CAPTURE_OK" -ne 1 ] || [ ! -s "$RAW" ]; then
+  REASON="$(python3 - "$INFO" "$LOG" <<'PY'
+import json,sys,os
+d=json.loads(sys.argv[1]); p=sys.argv[2]
+try: tail=' '.join(open(p,errors='replace').read().splitlines()[-3:])
+except Exception: tail='no Streamlink log'
+print(json.dumps({'status':'capture_failed','reason':d.get('discovery_error') or tail or 'stream unavailable'}))
+PY
+)"
+  echo "::warning::BIGO host $HOST capture failed after bounded retries: $REASON"
+  printf '%s\n' "$REASON" > "/tmp/bigo-results/${HOST}.failure.json"
+  rm -f "$RAW" "$LOG"
+  exit 0
 fi
 
 if [ ! -s "$RAW" ]; then
