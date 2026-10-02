@@ -40,7 +40,7 @@ for ATTEMPT in 1 2; do
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
   set -e
-  if [ "$CAPTURE_RC" -eq 0 ] && [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
+  if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
   sleep "$ATTEMPT"
 done
 # Direct HLS is the fallback when Streamlink cannot resolve or capture the room.
@@ -54,7 +54,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
     set -e
-    if [ "$CURL_RC" -eq 0 ] && [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
+    if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
     sleep "$ATTEMPT"
   done
 fi
