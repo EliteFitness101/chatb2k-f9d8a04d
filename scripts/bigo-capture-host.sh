@@ -127,6 +127,33 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   done
 fi
 # Direct HLS is the fallback when Streamlink cannot resolve or capture the room.
+# Signed BIGO /sid/ pages are not media URLs. When direct probing returns HTML, extract the
+# current HLS manifest embedded in the signed page and reuse the proven direct-HLS fallback.
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
+  PAGE="/tmp/bigo-${HOST}-signed.html"
+  rm -f "$PAGE"
+  if curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$PAGE"; then
+    DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
+import re,sys
+p=sys.argv[1]
+try:
+    s=open(p,errors="replace").read()
+except Exception:
+    s=""
+s=s.replace("\\\\/","/").replace("\\u0026","&")
+urls=re.findall(r'https?://[^"\'<>\\s]+m3u8[^"\'<>\\s]*',s,re.I)
+print(urls[0] if urls else "")
+PY
+    )"
+    if [ -n "$DISCOVERED_HLS" ]; then
+      STREAM_URL="$DISCOVERED_HLS"
+      echo "::notice::BIGO host $HOST discovered HLS manifest from signed /sid/ page"
+    else
+      echo "::notice::BIGO host $HOST signed /sid/ page contained no discoverable HLS manifest"
+    fi
+  fi
+  rm -f "$PAGE"
+fi
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   echo "::notice::BIGO host $HOST trying direct HLS fallback"
   for ATTEMPT in 1 2; do
