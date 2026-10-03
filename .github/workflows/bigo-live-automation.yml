@@ -1,5 +1,7 @@
 name: BIGO Live → ChatB2K → Buffer (Sharded Multi-Host)
 
+# Controlled Noble_terra probe trigger; capture remains storage-only unless separately verified.
+
 on:
   push:
     branches: [main]
