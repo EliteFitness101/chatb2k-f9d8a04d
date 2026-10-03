@@ -65,7 +65,6 @@ jobs:
         shell: bash
         env:
           SHARD: ${{ matrix.shard }}
-          BIGO_CAPTURE_DURATION_SECONDS: ${{ vars.BIGO_CAPTURE_DURATION_SECONDS }}
         run: |
           set -euo pipefail
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
