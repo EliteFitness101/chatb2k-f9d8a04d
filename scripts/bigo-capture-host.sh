@@ -55,7 +55,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 -t 25 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
