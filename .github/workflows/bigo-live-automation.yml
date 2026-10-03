@@ -57,20 +57,12 @@ jobs:
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
           fi
           if [ -n "${BIGO_HOST_IDS:-}" ]; then
-            HOSTS="$(python3 - "${BIGO_HOST_IDS}" "${REGISTRY_HOSTS}" <<'PY'
-import sys
-allow=[]
-for raw in sys.argv[1].replace(",", "\n").splitlines():
-    host=raw.strip()
-    if host and host not in allow: allow.append(host)
-registry={}
-for line in sys.argv[2].splitlines():
-    parts=line.split("\t",1)
-    if parts and parts[0].strip(): registry[parts[0].strip()]=parts[1].strip() if len(parts)>1 else ""
-for host in allow:
-    print(f"{host}\t{registry.get(host) or f'https://www.bigo.tv/{host}'}")
-PY
-)"
+            ALLOWLIST="$(printf "%s" "${BIGO_HOST_IDS}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk "!seen[$1]++")"
+            HOSTS="$(while IFS= read -r host; do
+              url="$(jq -r --arg id "$host" '.hosts[] | select((.bigo_id|tostring) == $id) | .source_url' /tmp/bigo-sources.json 2>/dev/null | head -n1)"
+              [ -n "$url" ] && [ "$url" != "null" ] || url="https://www.bigo.tv/$host"
+              printf "%s\t%s\n" "$host" "$url"
+            done <<< "$ALLOWLIST")"
           else
             HOSTS="${REGISTRY_HOSTS}"
           fi
