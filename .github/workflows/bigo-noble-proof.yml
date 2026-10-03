@@ -1,5 +1,7 @@
 name: BIGO Noble_terra Proof
 
+# Retry after signed /sid/ HLS discovery patch
+
 on:
   push:
     branches: [main]
