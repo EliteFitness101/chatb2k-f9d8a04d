@@ -30,7 +30,7 @@ def callback():
     return f"jsonpcallback_{int(time.time()*1000)}_{secrets.randbelow(1000001)}"
 
 def jsonp(text):
-    m=re.match(r'jsonp\\w+\\((?P<json>.+?)\\);',text,re.S)
+    m=re.match(r'jsonp\w+\((?P<json>.+?)\);',text,re.S)
     if not m:
         raise ValueError('invalid BIGO JSONP response')
     return json.loads(m.group('json'))
