@@ -29,6 +29,7 @@ env:
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+  BIGO_CAPTURE_DURATION_SECONDS: ${{ vars.BIGO_CAPTURE_DURATION_SECONDS }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
   SHARDS: "8"
   HOSTS_PER_SHARD_PARALLEL: "8"
