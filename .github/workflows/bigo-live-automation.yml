@@ -25,6 +25,7 @@ env:
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
   SHARDS: "8"
   HOSTS_PER_SHARD_PARALLEL: "8"
+  BIGO_CAPTURE_DURATION_SECONDS: "25"
 
 jobs:
   capture-transform-publish:
@@ -37,12 +38,15 @@ jobs:
       matrix:
         shard: [0,1,2,3,4,5,6,7]
     steps:
+      - name: Checkout production worker
+        uses: actions/checkout@v4
+
       - name: Install capture and Blob tools
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
-          python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.0,<9' requests
+          python3 -m pip install --disable-pip-version-check -q 'streamlink==8.6.1' requests
           npm install --no-save --no-package-lock @vercel/blob
 
       - name: Capture, normalize and prepare ChatB2K batch
@@ -82,9 +86,8 @@ jobs:
           printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
           echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
           export BLOB_READ_WRITE_TOKEN
-          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
-          chmod +x /tmp/bigo-capture-host.sh
-          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash /tmp/bigo-capture-host.sh "$1" "$2"' _ || true
+          chmod +x ./scripts/bigo-capture-host.sh
+          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash ./scripts/bigo-capture-host.sh "$1" "$2"' _ || true
           python3 - <<'PY'
           import json,glob
           out={"highlights":[],"limit":10}
