@@ -155,7 +155,7 @@ PY
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
 
-          : "${BIGO_VERIFIED_HOST_IDS:?BIGO_VERIFIED_HOST_IDS is required for verified publishing}"
+          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-${BIGO_HOST_IDS:-}}"\n          : "${VERIFIED_HOST_IDS:?BIGO_HOST_IDS is required for verified publishing}"
           VERIFIED_PATTERN="$(printf '%s' "${BIGO_VERIFIED_HOST_IDS}" | tr ', ' '\n' | sed '/^$/d' | jq -R -s 'split("\n") | map(select(length>0))')"
 
           jq --argjson verified "$VERIFIED_PATTERN" '{
