@@ -26,6 +26,7 @@ env:
   SHARDS: "8"
   HOSTS_PER_SHARD_PARALLEL: "8"
   BIGO_CAPTURE_DURATION_SECONDS: "25"
+  BIGO_NOBLE_TERRA_SOURCE_URL: ${{ secrets.BIGO_NOBLE_TERRA_SOURCE_URL }}
 
 jobs:
   capture-transform-publish:
@@ -64,7 +65,12 @@ jobs:
             REGISTRY_HOSTS=""
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
           fi
-          if [ -n "${BIGO_HOST_IDS:-}${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
+          if [ -n "${BIGO_NOBLE_TERRA_SOURCE_URL:-}" ]; then
+            # One-shot controlled proof mode: when the signed Noble_terra source secret is present,
+            # capture only Noble_terra using that exact runtime source. No other host is selected.
+            HOSTS="Noble_terra\t${BIGO_NOBLE_TERRA_SOURCE_URL}"
+            echo "::notice::Noble_terra signed-source proof mode enabled; selecting only Noble_terra."
+          elif [ -n "${BIGO_HOST_IDS:-}${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
             ALLOWLIST="$(printf "%s\n%s" "${BIGO_HOST_IDS:-}" "${BIGO_LIVE_PROBE_HOST_IDS:-}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk '!seen[$1]++')"
             HOSTS="$(while IFS= read -r host; do
               url="$(jq -r --arg id "$host" '.hosts[] | select((.bigo_id|tostring) == $id) | .source_url' /tmp/bigo-sources.json 2>/dev/null | head -n1)"
