@@ -74,15 +74,39 @@ jobs:
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
-            HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | @tsv' /tmp/bigo-sources.json)"
+            REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | @tsv' /tmp/bigo-sources.json)"
           else
-            HOSTS="$(printf "%s" "${BIGO_HOST_IDS:-}" | tr ',' '\n' | sed '/^$/d' | awk '{print $1"\t"}')"
+            REGISTRY_HOSTS=""
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
           fi
-          # Add the user-supplied currently-live rooms without replacing the canonical registry.
-          HOSTS="$(printf '%s\n%s\n' "${HOSTS}" "${PRIORITY_LIVE_HOSTS:-}" | sed '/^[[:space:]]*$/d' | awk -F '\t' '!seen[$1]++')"
+
+          # BIGO_HOST_IDS is the capture allowlist when supplied. The registry resolves source
+          # URLs for those IDs; missing URLs fall back to the BIGO room URL.
+          if [ -n "${BIGO_HOST_IDS:-}" ]; then
+            ALLOWLIST="$(printf '%s' "${BIGO_HOST_IDS}" | tr ', ' '\n' | sed '/^[[:space:]]*$/d' | awk '!seen[$1]++')"
+            HOSTS="$(python3 - "${ALLOWLIST}" "${REGISTRY_HOSTS}" "${PRIORITY_LIVE_HOSTS:-}" <<'PY'
+import sys
+allow=[x.strip() for x in sys.argv[1].splitlines() if x.strip()]
+registry={}
+for line in sys.argv[2].splitlines():
+    parts=line.split("\t",1)
+    if parts and parts[0].strip():
+        registry[parts[0].strip()]=parts[1].strip() if len(parts)>1 else ""
+priority={}
+for line in sys.argv[3].splitlines():
+    parts=line.split("\t",1)
+    if parts and parts[0].strip():
+        priority[parts[0].strip()]=parts[1].strip() if len(parts)>1 else ""
+for host in allow:
+    url=registry.get(host) or priority.get(host) or f"https://www.bigo.tv/{host}"
+    print(f"{host}\t{url}")
+PY
+)"
+          else
+            HOSTS="$(printf '%s\n%s\n' "${REGISTRY_HOSTS}" "${PRIORITY_LIVE_HOSTS:-}" | sed '/^[[:space:]]*$/d' | awk -F '\t' '!seen[$1]++')"
+          fi
           if [ -z "${HOSTS}" ]; then
-            echo "::error::No eligible BIGO hosts available from Supabase source registry, priority live set, or BIGO_HOST_IDS."
+            echo "::error::No BIGO capture hosts available from BIGO_HOST_IDS or the canonical source registry."
             exit 1
           fi
           mapfile -t HOST_ARRAY <<< "${HOSTS}"
