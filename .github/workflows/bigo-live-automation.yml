@@ -1,7 +1,5 @@
 name: BIGO Live → ChatB2K → Buffer (Sharded Multi-Host)
 
-# Controlled Noble_terra probe trigger; capture remains storage-only unless separately verified.
-
 on:
   push:
     branches: [main]
@@ -11,6 +9,16 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      smoke_test:
+        description: 'Require at least one successful BIGO capture per shard'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: bigo-live-automation-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -18,7 +26,7 @@ permissions:
 
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
-  BIGO_LIVE_PROBE_HOST_IDS: "Noble_terra,1102883606,spicyslim,990938206"
+  BIGO_LIVE_PROBE_HOST_IDS: ${{ secrets.BIGO_LIVE_PROBE_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
@@ -26,7 +34,7 @@ env:
   SHARDS: "8"
   HOSTS_PER_SHARD_PARALLEL: "8"
   BIGO_CAPTURE_DURATION_SECONDS: "25"
-  BIGO_NOBLE_TERRA_SOURCE_URL: ${{ secrets.BIGO_NOBLE_TERRA_SOURCE_URL }}
+  SMOKE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.smoke_test || false }}
 
 jobs:
   capture-transform-publish:
@@ -48,7 +56,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           python3 -m pip install --disable-pip-version-check -q 'streamlink==8.6.1' requests
-          rm -rf /tmp/bigo-blob-node && mkdir -p /tmp/bigo-blob-node && cd /tmp/bigo-blob-node && npm init -y --silent && npm install --no-package-lock --omit=dev @vercel/blob@2.6.1 --no-audit --no-fund && cd -
+          rm -rf /tmp/bigo-blob-node
+          mkdir -p /tmp/bigo-blob-node
+          cd /tmp/bigo-blob-node
+          npm init -y --silent
+          npm install --no-package-lock --omit=dev @vercel/blob@2.6.1 --no-audit --no-fund
+          cd -
 
       - name: Capture, normalize and prepare ChatB2K batch
         shell: bash
@@ -60,91 +73,22 @@ jobs:
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
-            REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | @tsv' /tmp/bigo-sources.json)"
+            HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | @tsv' /tmp/bigo-sources.json)"
+            if [ -n "${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
+              PROBE_HOSTS="$(printf "%s" "${BIGO_LIVE_PROBE_HOST_IDS}" | tr ', ' '\n' | sed '/^$/d' | awk '!seen[$1]++')"
+              while IFS= read -r host; do
+                [ -n "$host" ] || continue
+                if ! printf '%s\n' "$HOSTS" | awk -F '\t' -v h="$host" '$1 == h {found=1} END {exit(found ? 0 : 1)}'; then
+                  printf '%s\t%s\n' "$host" "https://www.bigo.tv/$host" >> /tmp/bigo-probe-hosts.tsv
+                fi
+              done <<< "$PROBE_HOSTS"
+              if [ -s /tmp/bigo-probe-hosts.tsv ]; then
+                HOSTS="$(cat /tmp/bigo-sources.json | jq -r '.hosts[] | [.bigo_id, .source_url] | @tsv'; cat /tmp/bigo-probe-hosts.tsv)"
+              fi
+            fi
           else
-            REGISTRY_HOSTS=""
+            HOSTS="$(printf "%s\n" "${BIGO_HOST_IDS:-}" | tr ',' '\n' | sed '/^$/d' | awk '{print $1"\thttps://www.bigo.tv/"$1}')"
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
-          fi
-          if [ -n "${BIGO_NOBLE_TERRA_SOURCE_URL:-}" ]; then
-            # One-shot controlled proof mode: when the signed Noble_terra source secret is present,
-            # capture only Noble_terra using that exact runtime source. No other host is selected.
-            HOSTS="Noble_terra"
-          elif [ -n "${BIGO_HOST_IDS:-}${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
-            ALLOWLIST="$(printf "%s\n%s" "${BIGO_HOST_IDS:-}" "${BIGO_LIVE_PROBE_HOST_IDS:-}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk '!seen[$1]++')"
-            HOSTS="$(while IFS= read -r host; do
-              url="$(jq -r --arg id "$host" '.hosts[] | select((.bigo_id|tostring) == $id) | .source_url' /tmp/bigo-sources.json 2>/dev/null | head -n1)"
-              [ -n "$url" ] && [ "$url" != "null" ] || url="https://www.bigo.tv/$host"
-              printf "%s\t%s\n" "$host" "$url"
-            done <<< "$ALLOWLIST")"
-          else
-            HOSTS="${REGISTRY_HOSTS}"
-          fi
-          if [ -z "${HOSTS}" ]; then
-            echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
-            exit 1
-          fi
-          mapfile -t HOST_ARRAY <<< "${HOSTS}"
-          SELECTED=()
-          for i in "${!HOST_ARRAY[@]}"; do
-            if (( i % ${SHARDS:-8} == SHARD )); then SELECTED+=( "${HOST_ARRAY[$i]}" ); fi
-          done
-          printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
-          echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
-          export BLOB_READ_WRITE_TOKEN
-          chmod +x ./scripts/bigo-capture-host.sh
-          if [ -n "${BIGO_NOBLE_TERRA_SOURCE_URL:-}" ]; then
-            bash ./scripts/bigo-capture-host.sh "Noble_terra" "${BIGO_NOBLE_TERRA_SOURCE_URL}" || true
-          else
-            printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash ./scripts/bigo-capture-host.sh "$1" "$2"' _ || true
-          fi
-          python3 - <<'PY'
-          import json,glob
-          out={"highlights":[],"limit":10}
-          for p in glob.glob("/tmp/bigo-results/*.json"):
-              try:
-                  d=json.load(open(p))
-                  if d.get("highlight"): out["highlights"].append(d["highlight"])
-              except Exception as e:
-                  print(f"::warning::bad result {p}: {e}")
-          json.dump(out,open("/tmp/bigo-batch.json","w"))
-          print(f"Verified BIGO shard batch: {len(out['highlights'])} highlight(s)")
-          PY
-          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
-            echo "::notice::Shard $SHARD captured no live hosts this cycle; continuing."
-            exit 0
-          fi
-
-      - name: Ingest, enrich and auto-post BIGO batch
-        env:
-          BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
-        run: |
-          set -euo pipefail
-          COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
-          if [ "$COUNT" -lt 1 ]; then exit 0; fi
-          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
-          VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
-          VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
-          if [ "$VERIFIED_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
-          fi
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | (any($verified[]; . as $id | $host == $id or ($host | startswith($id))) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
-          STORAGE_COUNT="$(jq ".highlights | length" /tmp/bigo-storage-batch.json)"
-          if [ "$STORAGE_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
-          fi
-Noble_terra\t'"${BIGO_NOBLE_TERRA_SOURCE_URL}"
-            echo "::notice::Noble_terra signed-source proof mode enabled; selecting only Noble_terra."
-          elif [ -n "${BIGO_HOST_IDS:-}${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
-            ALLOWLIST="$(printf "%s\n%s" "${BIGO_HOST_IDS:-}" "${BIGO_LIVE_PROBE_HOST_IDS:-}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk '!seen[$1]++')"
-            HOSTS="$(while IFS= read -r host; do
-              url="$(jq -r --arg id "$host" '.hosts[] | select((.bigo_id|tostring) == $id) | .source_url' /tmp/bigo-sources.json 2>/dev/null | head -n1)"
-              [ -n "$url" ] && [ "$url" != "null" ] || url="https://www.bigo.tv/$host"
-              printf "%s\t%s\n" "$host" "$url"
-            done <<< "$ALLOWLIST")"
-          else
-            HOSTS="${REGISTRY_HOSTS}"
           fi
           if [ -z "${HOSTS}" ]; then
             echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
@@ -172,28 +116,57 @@ Noble_terra\t'"${BIGO_NOBLE_TERRA_SOURCE_URL}"
           json.dump(out,open("/tmp/bigo-batch.json","w"))
           print(f"Verified BIGO shard batch: {len(out['highlights'])} highlight(s)")
           PY
-          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+          COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
+          echo "Shard $SHARD capture result: $COUNT highlight(s)"
+          printf '%s\n' "$COUNT" > "/tmp/bigo-results/count-${SHARD}.txt"
+          echo "::notice::Shard $SHARD captured $COUNT highlight(s) this cycle."
+          if [ "$COUNT" -lt 1 ]; then
             echo "::notice::Shard $SHARD captured no live hosts this cycle; continuing."
             exit 0
           fi
 
+      - name: Upload shard smoke-test result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigo-shard-${{ matrix.shard }}-smoke
+          path: /tmp/bigo-results/count-${{ matrix.shard }}.txt
+          if-no-files-found: warn
+
       - name: Ingest, enrich and auto-post BIGO batch
-        env:
-          BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
         run: |
           set -euo pipefail
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
-          VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
-          VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
-          if [ "$VERIFIED_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
+          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-batch.json
+
+  smoke-test:
+    name: BIGO capture smoke-test aggregate
+    needs: capture-transform-publish
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.smoke_test }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download shard smoke results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bigo-shard-*-smoke
+          path: /tmp/bigo-smoke
+          merge-multiple: false
+      - name: Require at least one successful capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOTAL=0
+          FOUND=0
+          while IFS= read -r f; do
+            FOUND=1
+            n="$(cat "$f")"
+            echo "$f -> $n highlight(s)"
+            TOTAL=$((TOTAL + n))
+          done < <(find /tmp/bigo-smoke -type f -name '*.txt' -print)
+          if [ "$FOUND" -eq 0 ] || [ "$TOTAL" -lt 1 ]; then
+            echo "::error::BIGO smoke test failed: zero successful captures across all 8 shards."
+            exit 1
           fi
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | (any($verified[]; . as $id | $host == $id or ($host | startswith($id))) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
-          STORAGE_COUNT="$(jq ".highlights | length" /tmp/bigo-storage-batch.json)"
-          if [ "$STORAGE_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
-          fi
+          echo "BIGO smoke test PASSED: $TOTAL successful capture(s) across 8 shards."
