@@ -92,7 +92,11 @@ jobs:
           echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
           export BLOB_READ_WRITE_TOKEN
           chmod +x ./scripts/bigo-capture-host.sh
+          if [ -n "${BIGO_NOBLE_TERRA_SOURCE_URL:-}" ]; then
+            bash ./scripts/bigo-capture-host.sh "Noble_terra" "${BIGO_NOBLE_TERRA_SOURCE_URL}" || true
+          else
           printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash ./scripts/bigo-capture-host.sh "$1" "$2"' _ || true
+          fi
           python3 - <<'PY'
           import json,glob
           out={"highlights":[],"limit":10}
