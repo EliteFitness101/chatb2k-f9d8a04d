@@ -16,8 +16,10 @@ permissions:
 
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
+  BIGO_LIVE_PROBE_HOST_IDS: "1102883606,spicyslim,990938206"
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+  FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
   SHARDS: "8"
   HOSTS_PER_SHARD_PARALLEL: "8"
@@ -56,8 +58,8 @@ jobs:
             REGISTRY_HOSTS=""
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
           fi
-          if [ -n "${BIGO_HOST_IDS:-}" ]; then
-            ALLOWLIST="$(printf "%s" "${BIGO_HOST_IDS}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk '!seen[$1]++')"
+          if [ -n "${BIGO_HOST_IDS:-}${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
+            ALLOWLIST="$(printf "%s\n%s" "${BIGO_HOST_IDS:-}" "${BIGO_LIVE_PROBE_HOST_IDS:-}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk '!seen[$1]++')"
             HOSTS="$(while IFS= read -r host; do
               url="$(jq -r --arg id "$host" '.hosts[] | select((.bigo_id|tostring) == $id) | .source_url' /tmp/bigo-sources.json 2>/dev/null | head -n1)"
               [ -n "$url" ] && [ "$url" != "null" ] || url="https://www.bigo.tv/$host"
