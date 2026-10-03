@@ -68,7 +68,69 @@ jobs:
           if [ -n "${BIGO_NOBLE_TERRA_SOURCE_URL:-}" ]; then
             # One-shot controlled proof mode: when the signed Noble_terra source secret is present,
             # capture only Noble_terra using that exact runtime source. No other host is selected.
-            HOSTS="Noble_terra\t${BIGO_NOBLE_TERRA_SOURCE_URL}"
+            HOSTS=            echo "::notice::Noble_terra signed-source proof mode enabled; selecting only Noble_terra."
+          elif [ -n "${BIGO_HOST_IDS:-}${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
+            ALLOWLIST="$(printf "%s\n%s" "${BIGO_HOST_IDS:-}" "${BIGO_LIVE_PROBE_HOST_IDS:-}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk '!seen[$1]++')"
+            HOSTS="$(while IFS= read -r host; do
+              url="$(jq -r --arg id "$host" '.hosts[] | select((.bigo_id|tostring) == $id) | .source_url' /tmp/bigo-sources.json 2>/dev/null | head -n1)"
+              [ -n "$url" ] && [ "$url" != "null" ] || url="https://www.bigo.tv/$host"
+              printf "%s\t%s\n" "$host" "$url"
+            done <<< "$ALLOWLIST")"
+          else
+            HOSTS="${REGISTRY_HOSTS}"
+          fi
+          if [ -z "${HOSTS}" ]; then
+            echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
+            exit 1
+          fi
+          mapfile -t HOST_ARRAY <<< "${HOSTS}"
+          SELECTED=()
+          for i in "${!HOST_ARRAY[@]}"; do
+            if (( i % ${SHARDS:-8} == SHARD )); then SELECTED+=( "${HOST_ARRAY[$i]}" ); fi
+          done
+          printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
+          echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
+          export BLOB_READ_WRITE_TOKEN
+          chmod +x ./scripts/bigo-capture-host.sh
+          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash ./scripts/bigo-capture-host.sh "$1" "$2"' _ || true
+          python3 - <<'PY'
+          import json,glob
+          out={"highlights":[],"limit":10}
+          for p in glob.glob("/tmp/bigo-results/*.json"):
+              try:
+                  d=json.load(open(p))
+                  if d.get("highlight"): out["highlights"].append(d["highlight"])
+              except Exception as e:
+                  print(f"::warning::bad result {p}: {e}")
+          json.dump(out,open("/tmp/bigo-batch.json","w"))
+          print(f"Verified BIGO shard batch: {len(out['highlights'])} highlight(s)")
+          PY
+          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+            echo "::notice::Shard $SHARD captured no live hosts this cycle; continuing."
+            exit 0
+          fi
+
+      - name: Ingest, enrich and auto-post BIGO batch
+        env:
+          BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
+        run: |
+          set -euo pipefail
+          COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
+          if [ "$COUNT" -lt 1 ]; then exit 0; fi
+          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
+          VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
+          VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
+          if [ "$VERIFIED_COUNT" -gt 0 ]; then
+            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
+          fi
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | (any($verified[]; . as $id | $host == $id or ($host | startswith($id))) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
+          STORAGE_COUNT="$(jq ".highlights | length" /tmp/bigo-storage-batch.json)"
+          if [ "$STORAGE_COUNT" -gt 0 ]; then
+            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
+          fi
+Noble_terra\t'"${BIGO_NOBLE_TERRA_SOURCE_URL}"
             echo "::notice::Noble_terra signed-source proof mode enabled; selecting only Noble_terra."
           elif [ -n "${BIGO_HOST_IDS:-}${BIGO_LIVE_PROBE_HOST_IDS:-}" ]; then
             ALLOWLIST="$(printf "%s\n%s" "${BIGO_HOST_IDS:-}" "${BIGO_LIVE_PROBE_HOST_IDS:-}" | tr ", " "\n" | sed "/^[[:space:]]*$/d" | awk '!seen[$1]++')"
