@@ -110,6 +110,22 @@ for ATTEMPT in 1 2; do
   if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
   sleep "$ATTEMPT"
 done
+# Some registry sources are BIGO shortlinks/session URLs that Streamlink does not recognize.
+# Probe those supplied source URLs directly before falling back to BIGO API discovery.
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* || "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
+  echo "::notice::BIGO host $HOST trying supplied source URL directly"
+  for ATTEMPT in 1 2; do
+    rm -f "$RAW"
+    set +e
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    PIPE_RC=("${PIPESTATUS[@]}")
+    CURL_RC="${PIPE_RC[0]:-1}"
+    FFMPEG_RC="${PIPE_RC[1]:-1}"
+    set -e
+    if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
+    sleep "$ATTEMPT"
+  done
+fi
 # Direct HLS is the fallback when Streamlink cannot resolve or capture the room.
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   echo "::notice::BIGO host $HOST trying direct HLS fallback"
