@@ -16,7 +16,6 @@ permissions:
 
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
-  BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
@@ -108,6 +107,8 @@ PY
           fi
 
       - name: Ingest, enrich and auto-post BIGO batch
+        env:
+          BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
         run: |
           set -euo pipefail
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
