@@ -14,16 +14,77 @@ LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
 SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
-# Resolve room metadata before capture so successful Streamlink captures retain real names.
+# Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
+# This is the critical fallback for hosts that are visibly live but now return an empty
+# hls_src to the older unauthenticated getInternalStudioInfo request.
 INFO="$(python3 - "$HOST" <<'PY'
-import json,sys,requests
+import base64,json,secrets,sys,time,re,requests
 host=sys.argv[1]
+API='https://ta.bigo.tv/official_website/studio/getInternalStudioInfo'
+TOKEN_T='https://sec.bigo.sg/v1/webjs/t'
+TOKEN_STATUS='https://sec.bigo.sg/v1/webjs/status'
+KEY=b'undefinedval0x01'
+UA='Mozilla/5.0'
+
+def callback():
+    return f"jsonpcallback_{int(time.time()*1000)}_{secrets.randbelow(1000001)}"
+
+def jsonp(text):
+    m=re.match(r'jsonp\\w+\\((?P<json>.+?)\\);',text,re.S)
+    if not m:
+        raise ValueError('invalid BIGO JSONP response')
+    return json.loads(m.group('json'))
+
+def resolve_token():
+    tr=requests.get(TOKEN_T,params={'callback':callback()},headers={'User-Agent':UA,'Accept':'*/*'},timeout=12)
+    tr.raise_for_status()
+    ts=jsonp(tr.text)['time']
+    payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
+    try:
+        from streamlink.utils.crypto import encrypt_openssl
+    except Exception:
+        raise RuntimeError('streamlink crypto module unavailable')
+    encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
+    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers={'User-Agent':UA,'Accept':'*/*'},timeout=12)
+    sr.raise_for_status()
+    return jsonp(sr.text)['token']
+
+def build(d):
+    return {
+      'alive':bool(d.get('alive') or d.get('hls_src') or d.get('hlsSrc') or d.get('hls')),
+      'name':d.get('nick_name') or host,
+      'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight',
+      'room_id':d.get('roomId') or host,
+      'hls_src':d.get('hls_src') or d.get('hlsSrc') or d.get('hls') or ''
+    }
+
 try:
- r=requests.post('https://ta.bigo.tv/official_website/studio/getInternalStudioInfo',data={'siteId':host},headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'},timeout=12)
- r.raise_for_status(); d=r.json().get('data') or {}
- print(json.dumps({'alive':bool(d.get('alive') or d.get('hls_src') or d.get('hlsSrc') or d.get('hls')),'name':d.get('nick_name') or host,'title':d.get('roomTopic') or d.get('gameTitle') or 'BIGO Live Highlight','room_id':d.get('roomId') or host,'hls_src':d.get('hls_src') or d.get('hlsSrc') or d.get('hls') or ''}))
+    token=resolve_token()
+    r=requests.post(API,params={'siteId':host,'verify':'','token':token},
+                     headers={'Accept':'application/json','User-Agent':UA},timeout=15)
+    r.raise_for_status()
+    d=r.json().get('data') or {}
+    out=build(d)
+    out['discovery_method']='bigo_tokenized_api'
+    if out['hls_src']:
+        print(json.dumps(out)); raise SystemExit
+    # Preserve the older working path as a secondary fallback.
+    r=requests.post(API,data={'siteId':host},headers={'Accept':'application/json','User-Agent':UA},timeout=12)
+    r.raise_for_status()
+    out=build(r.json().get('data') or {})
+    out['discovery_method']='bigo_legacy_api'
+    print(json.dumps(out))
 except Exception as e:
- print(json.dumps({'alive':False,'name':host,'title':'BIGO Live Highlight','room_id':host,'hls_src':'','discovery_error':str(e)}))
+    try:
+        r=requests.post(API,data={'siteId':host},headers={'Accept':'application/json','User-Agent':UA},timeout=12)
+        r.raise_for_status()
+        out=build(r.json().get('data') or {})
+        out['discovery_method']='bigo_legacy_api'
+        if out['hls_src']:
+            print(json.dumps(out)); raise SystemExit
+    except Exception:
+        pass
+    print(json.dumps({'alive':False,'name':host,'title':'BIGO Live Highlight','room_id':host,'hls_src':'','discovery_error':str(e)}))
 PY
 )"
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
