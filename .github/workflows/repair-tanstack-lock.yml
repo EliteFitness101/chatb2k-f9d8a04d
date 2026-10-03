@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'package.json'
+      - '.github/workflows/repair-tanstack-lock.yml'
 
 permissions:
   contents: write
