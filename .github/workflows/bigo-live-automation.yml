@@ -1,4 +1,4 @@
-name: BIGO Live -> ChatB2K -> Buffer (Sharded Multi-Host)
+name: BIGO Live -> ChatB2K -> Buffer
 
 on:
   push:
@@ -20,19 +20,11 @@ env:
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
-  SHARDS: "8"
-  HOSTS_PER_SHARD_PARALLEL: "8"
 
 jobs:
   capture-transform-publish:
-    name: "BIGO shard ${{ matrix.shard }}"
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      max-parallel: 8
-      matrix:
-        shard: [0,1,2,3,4,5,6,7]
     steps:
       - name: Install capture and Blob tools
         run: |
@@ -45,7 +37,6 @@ jobs:
       - name: Capture, normalize and prepare ChatB2K batch
         shell: bash
         env:
-          SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
@@ -80,16 +71,12 @@ PY
             exit 1
           fi
           mapfile -t HOST_ARRAY <<< "${HOSTS}"
-          SELECTED=()
-          for i in "${!HOST_ARRAY[@]}"; do
-            if (( i % ${SHARDS:-8} == SHARD )); then SELECTED+=( "${HOST_ARRAY[$i]}" ); fi
-          done
+          SELECTED=("${HOST_ARRAY[@]}")
           printf '%s\n' "${SELECTED[@]}" | sed '/^$/d' > /tmp/bigo-hosts.txt
-          echo "Shard $SHARD selected ${#SELECTED[@]} host(s)"
+          echo "Selected ${#SELECTED[@]} host(s) for capture"
           export BLOB_READ_WRITE_TOKEN
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
-          printf '%s\n' "${SELECTED[@]}" | awk -F '\t' 'NF>=1 {print $1 "\t" $2}' | xargs -r -P "${HOSTS_PER_SHARD_PARALLEL:-8}" -n2 bash -c 'bash /tmp/bigo-capture-host.sh "$1" "$2"' _ || true
           python3 - <<'PY'
           import json,glob
           out={"highlights":[],"limit":10}
@@ -103,7 +90,7 @@ PY
           print(f"Verified BIGO shard batch: {len(out['highlights'])} highlight(s)")
           PY
           if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
-            echo "::notice::Shard $SHARD captured no live hosts this cycle; continuing."
+            echo "::notice::No live hosts captured this cycle; continuing."
             exit 0
           fi
 
