@@ -15,10 +15,10 @@ permissions:
   id-token: write
 
 env:
-  BIGO_HOST_IDS: ${${ secrets.BIGO_HOST_IDS $}}
-  BIGO_VERIFIED_HOST_IDS: ${${ secrets.BIGO_VERIFIED_HOST_IDS $}}
-  CHATB2K_LIVE_INGEST_KEY: ${${ secrets.CHATB2K_LIVE_INGEST_KEY $}}
-  BLOB_READ_WRITE_TOKEN: ${${ secrets.BLOB_READ_WRITE_TOKEN $}}
+  BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
+  BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
+  CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
+  BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
 
 jobs:
