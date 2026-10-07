@@ -1,0 +1,17 @@
+name: BIGO YAML Parse Probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bigo-yaml-parse-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse BIGO workflow
+        run: |
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/bigo-live-automation.yml"); puts "BIGO YAML parses with Ruby Psych"'
