@@ -1,0 +1,43 @@
+name: BIGO Single Host Test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+env:
+  BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+  PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install capture tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.0,<9' requests
+          npm install --no-save --no-package-lock @vercel/blob
+      - name: Run established capture worker for test host
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/bigo-results
+          export BLOB_READ_WRITE_TOKEN
+          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
+          chmod +x /tmp/bigo-capture-host.sh
+          bash /tmp/bigo-capture-host.sh "990938206" "https://www.bigo.tv/sid/2787917875_413439516_1791414883?c=0&p=2&t=0&b=891792825&h=990938206&mk=v2.A29RT_j8rCNOThjWu77ZUE5A8RF_Tvi4ahSQtVj0Pwa1hNV3PdLl1w"
+      - name: Inspect test result
+        if: always()
+        run: |
+          echo "=== result files ==="
+          ls -la /tmp/bigo-results || true
+          for f in /tmp/bigo-results/*; do echo "=== $f ==="; cat "$f"; done
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigo-single-host-test-990938206-${{ github.run_id }}
+          path: /tmp/bigo-results/*
+          if-no-files-found: ignore
+          retention-days: 2
