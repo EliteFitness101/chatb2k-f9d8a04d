@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/bigo-yaml-parse-probe.yml'
+      - '.github/workflows/bigo-live-automation.yml'
   workflow_dispatch:
 permissions:
   contents: read
