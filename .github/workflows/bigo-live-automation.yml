@@ -1,4 +1,5 @@
 name: BIGO Live -> ChatB2K -> Buffer
+# Production capture workflow — proven capture logic preserved; YAML syntax repaired.
 
 on:
   push:
