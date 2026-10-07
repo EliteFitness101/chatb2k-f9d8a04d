@@ -1,0 +1,128 @@
+name: Coach Buchi Story -> ChatB2K -> FFmpeg -> Buffer
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_FUNCTION_BASE: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1
+  STORY_GENERATOR: resofit-story-generator
+  STORY_RENDER_COMPLETE: resofit-story-render-complete
+  BUFFER_PUBLISHER: buffer-publisher
+
+jobs:
+  generate-render-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Install FFmpeg and runtime tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-core jq python3
+          npm install --no-save --no-package-lock @vercel/blob
+
+      - name: Generate next canonical story episode with ChatB2K + Gemini
+        id: generate
+        env:
+          CONTENT_CRON_SECRET: ${{ secrets.CONTENT_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "${CONTENT_CRON_SECRET}" || { echo "::error::CONTENT_CRON_SECRET is missing"; exit 1; }
+          curl -fsS -X POST "${SUPABASE_FUNCTION_BASE}/${STORY_GENERATOR}"             -H "x-content-cron-secret: ${CONTENT_CRON_SECRET}"             -H "content-type: application/json"             -d '{}' > /tmp/story.json
+          cat /tmp/story.json
+          CREATED="$(jq -r '.created // 0' /tmp/story.json)"
+          if [ "${CREATED}" != "1" ]; then
+            echo "No new story generated: $(jq -r '.reason // "unknown"' /tmp/story.json)"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          jq -r '.episode.id' /tmp/story.json > /tmp/episode-id
+          jq -r '.episode.duration_seconds' /tmp/story.json > /tmp/duration
+          jq -r '.episode.episode_title' /tmp/story.json > /tmp/title
+          jq -r '.episode.hook' /tmp/story.json > /tmp/hook
+          jq -r '.episode.scene_plan' /tmp/story.json > /tmp/scene-plan.json
+
+      - name: Render captioned vertical MP4 with FFmpeg
+        if: steps.generate.outputs.created == 'true'
+        run: |
+          set -euo pipefail
+          DURATION="$(cat /tmp/duration)"
+          FONT="$(fc-match -f '%{file}' 'Noto Sans' | head -1)"
+          python3 - <<'PY'
+          import json
+          plan=json.load(open("/tmp/scene-plan.json"))
+          def sec(v):
+              if isinstance(v,(int,float)): return float(v)
+              try:
+                  a=v.split(":")
+                  return int(a[0])*3600+int(a[1])*60+float(a[2])
+              except: return 0.0
+          def ts(v):
+              v=max(0,float(v)); h=int(v//3600); m=int((v%3600)//60); s=int(v%60); ms=int(round((v-int(v))*1000))
+              if ms>=1000: s+=1; ms-=1000
+              return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+          out=[]
+          for i,x in enumerate(plan,1):
+              start=sec(x.get("start",0)); end=sec(x.get("end",start+5))
+              text=" ".join(str(x.get(k,"")).strip() for k in ("on_screen_text","narration") if str(x.get(k,"")).strip())
+              if not text: continue
+              out += [str(i),f"{ts(start)} --> {ts(end)}",text,""]
+          open("/tmp/story.srt","w",encoding="utf-8").write("\n".join(out))
+          PY
+
+          # Black/gold editorial card: deterministic FFmpeg output, 1080x1920, H.264/AAC.
+          ffmpeg -y -hide_banner -loglevel error             -f lavfi -i "color=c=0x090909:s=1080x1920:r=30:d=${DURATION}"             -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=48000"             -filter_complex "[0:v]drawbox=x=54:y=54:w=972:h=1812:color=0xD4AF37@0.85:t=4,drawbox=x=78:y=78:w=924:h=1764:color=0xD4AF37@0.16:t=2,drawtext=fontfile=${FONT}:text='RESOFIT':fontcolor=0xD4AF37:fontsize=46:x=(w-text_w)/2:y=110,drawtext=fontfile=${FONT}:textfile=/tmp/title:fontcolor=white:fontsize=58:line_spacing=12:x=(w-text_w)/2:y=260:enable='between(t,0,6)',drawtext=fontfile=${FONT}:textfile=/tmp/hook:fontcolor=white:fontsize=42:line_spacing=10:x=90:y=h-420:enable='between(t,0,8)',subtitles=/tmp/story.srt:force_style='FontName=Noto Sans,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00101010,Outline=2,Alignment=2,MarginV=190'"             -map 0:v -map 1:a -t "${DURATION}"             -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p             -c:a aac -b:a 128k -shortest /tmp/story.mp4
+
+          ffmpeg -y -hide_banner -loglevel error -ss 2 -i /tmp/story.mp4 -frames:v 1 -q:v 2 /tmp/story.jpg
+
+      - name: Upload MP4, thumbnail and SRT to Vercel Blob
+        if: steps.generate.outputs.created == 'true'
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${BLOB_READ_WRITE_TOKEN}" || { echo "::error::BLOB_READ_WRITE_TOKEN is missing"; exit 1; }
+          EPISODE="$(cat /tmp/episode-id)"
+          export EPISODE
+          node --input-type=module <<'NODE'
+          import { put } from "@vercel/blob";
+          import { readFile } from "node:fs/promises";
+          const ep=process.env.EPISODE;
+          const token=process.env.BLOB_READ_WRITE_TOKEN;
+          const mp4=await put(`buffer/assets/stories/${ep}/episode.mp4`,await readFile("/tmp/story.mp4"),{access:"public",token,contentType:"video/mp4",addRandomSuffix:false});
+          const jpg=await put(`buffer/assets/stories/${ep}/thumbnail.jpg`,await readFile("/tmp/story.jpg"),{access:"public",token,contentType:"image/jpeg",addRandomSuffix:false});
+          const srt=await put(`buffer/assets/stories/${ep}/episode.srt`,await readFile("/tmp/story.srt"),{access:"public",token,contentType:"application/x-subrip",addRandomSuffix:false});
+          console.log(JSON.stringify({mp4:mp4.url,jpg:jpg.url,srt:srt.url}));
+          await import("node:fs/promises").then(fs=>fs.writeFile("/tmp/blob.json",JSON.stringify({mp4:mp4.url,jpg:jpg.url,srt:srt.url})));
+          NODE
+
+      - name: Complete render and enqueue existing Buffer publisher
+        if: steps.generate.outputs.created == 'true'
+        env:
+          CONTENT_CRON_SECRET: ${{ secrets.CONTENT_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          EPISODE="$(cat /tmp/episode-id)"
+          jq --arg episode_id "${EPISODE}"              --arg asset_url "$(jq -r '.mp4' /tmp/blob.json)"              --arg thumbnail_url "$(jq -r '.jpg' /tmp/blob.json)"              --arg subtitle_url "$(jq -r '.srt' /tmp/blob.json)"              '{episode_id:$episode_id,asset_url:$asset_url,thumbnail_url:$thumbnail_url,subtitle_url:$subtitle_url,ffmpeg_version:"7.x",metadata:{workflow:"coach-buchi-story-autopilot",target:"1080x1920",fps:30}}' > /tmp/render.json
+          curl -fsS -X POST "${SUPABASE_FUNCTION_BASE}/${STORY_RENDER_COMPLETE}"             -H "x-content-cron-secret: ${CONTENT_CRON_SECRET}"             -H "content-type: application/json"             --data-binary @/tmp/render.json > /tmp/render-result.json
+          cat /tmp/render-result.json
+          jq -r '.queued[]?.id' /tmp/render-result.json > /tmp/queue-ids
+
+      - name: Hand queued story posts to existing Buffer publisher
+        if: steps.generate.outputs.created == 'true'
+        env:
+          CONTENT_CRON_SECRET: ${{ secrets.CONTENT_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r ID; do
+            [ -z "${ID}" ] && continue
+            curl -fsS -X POST "${SUPABASE_FUNCTION_BASE}/${BUFFER_PUBLISHER}"               -H "x-buffer-cron-secret: ${CONTENT_CRON_SECRET}"               -H "content-type: application/json"               -d "{\"id\":\"${ID}\"}"
+            echo
+          done < /tmp/queue-ids
