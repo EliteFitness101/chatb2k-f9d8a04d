@@ -63,7 +63,7 @@ jobs:
                   registry[parts[0].strip()]=parts[1].strip() if len(parts)>1 else ""
           for host in allow:
               print(f"{host}\t{registry.get(host) or f'https://www.bigo.tv/{host}'}")
-          PY
+                    PY
 )"
           else
             HOSTS="${REGISTRY_HOSTS}"
