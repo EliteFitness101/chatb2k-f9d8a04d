@@ -1,0 +1,19 @@
+name: BIGO Runner Probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bigo-runner-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Runner probe
+        run: |
+          set -euo pipefail
+          echo "BIGO runner probe OK"
+          node --version
+          npm --version
