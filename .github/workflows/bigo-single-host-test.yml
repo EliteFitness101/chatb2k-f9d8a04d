@@ -1,0 +1,34 @@
+name: BIGO Single Host Test - 989484732
+
+on:
+  push:
+    paths:
+      - ".github/workflows/bigo-single-host-test.yml"
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg
+          npm install --global streamlink
+      - name: Test established capture worker
+        env:
+          HOST_ID: "989484732"
+          SOURCE_URL: "https://www.bigo.tv/sid/2786583126_413838190_1791415270?c=0&p=2&t=0&b=891792825&h=989484732&mk=v2.bQfti6Qk4hT_yYkVu4ynWZJW5Sr4r36DieZJJ_KTm_yq3dsX2-QS9A"
+          SHORT_URL: "https://slink.bigovideo.tv/SSgFmk?sc=SSgFmk"
+        run: |
+          mkdir -p /tmp/bigo-results
+          bash scripts/bigo-capture-host.sh "$HOST_ID" "$SOURCE_URL" > /tmp/bigo-results/989484732.log 2>&1 || true
+          cat /tmp/bigo-results/989484732.log
+          find /tmp -maxdepth 3 -type f \( -name "*.mp4" -o -name "*.json" \) -print
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigo-single-host-test-989484732
+          path: /tmp/bigo-results/
+          if-no-files-found: warn
