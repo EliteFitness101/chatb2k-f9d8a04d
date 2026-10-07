@@ -48,8 +48,7 @@ jobs:
             REGISTRY_HOSTS=""
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
           fi
-          if [ -n "${BIGO_HOST_IDS:-}" ]; then
-            HOSTS="$(python3 - "${BIGO_HOST_IDS}" "${REGISTRY_HOSTS}" <<'PY'
+          HOSTS="$(python3 - "${BIGO_HOST_IDS:-}" "${REGISTRY_HOSTS}" <<'PY'
           import sys
           allow=[]
           for raw in sys.argv[1].replace(",", "\n").splitlines():
@@ -61,11 +60,15 @@ jobs:
               parts=line.split("\t",1)
               if parts and parts[0].strip():
                   registry[parts[0].strip()]=parts[1].strip() if len(parts)>1 else ""
+          for host in list(registry):
+              if host not in allow:
+                  allow.append(host)
           for host in allow:
-              print(f"{host}\t{registry.get(host) or f'https://www.bigo.tv/{host}'}")
+              print(host + "\t" + (registry.get(host) or "https://www.bigo.tv/" + host))
           PY
-            )"
-            HOSTS="${REGISTRY_HOSTS}"
+          )"
+          if [ -n "${BIGO_HOST_IDS:-}" ]; then
+            echo "::notice::Explicit BIGO_HOST_IDS are included in the capture pool."
           fi
           if [ -z "${HOSTS}" ]; then
             echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
