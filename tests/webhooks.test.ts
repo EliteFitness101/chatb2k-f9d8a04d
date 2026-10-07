@@ -59,7 +59,7 @@ describe("webhook processing", () => {
 
   it("processes a verified physical payment and reserves inventory atomically", async () => {
     mockDb.seed("payments", [{ id: "p-physical", paystack_ref: "R-PHYS", amount: 22000, currency: "NGN", customer_email: "buyer@example.com", product_sku: "res-iron-15", plan_type: "commerce", funnel_origin: "chatb2k", status: "pending" }]);
-    mockDb.seed("resofit_hub_inventory", [{ hub_code: "Lagos,NG", sku: "res-iron-15", on_hand: 10, reserved: 0 }]);
+    mockDb.seed("resofit_hub_inventory", [{ hub_code: "NG-LAGOS", sku: "res-iron-15", on_hand: 10, reserved: 0 }]);
     const res = await processWebhook(makeAdapter(), signedRequest({ id: "e-physical", event: "paid", reference: "R-PHYS", amount: 2200000, email: "buyer@example.com", metadata: { country: "NG", sku: "res-iron-15" } }));
     expect(res.status).toBe(200);
     expect(mockDb.rows("resofit_hub_inventory")[0].reserved).toBe(1);
