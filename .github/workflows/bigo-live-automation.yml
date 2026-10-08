@@ -79,10 +79,59 @@ jobs:
           export BLOB_READ_WRITE_TOKEN
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
-          while IFS=$'\t' read -r HOST_ID SOURCE_URL; do
-            [ -z "${HOST_ID}" ] && continue
+          run_capture() {
+            local HOST_ID="$1"
+            local SOURCE_URL="$2"
             bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}" || true
+          }
+          ACTIVE=0
+          while IFS=
+          python3 - <<'PY'
+          import json,glob
+          out={"highlights":[],"limit":10}
+          for p in glob.glob("/tmp/bigo-results/*.json"):
+              try:
+                  d=json.load(open(p))
+                  if d.get("highlight"):
+                      out["highlights"].append(d["highlight"])
+              except Exception as e:
+                  print(f"::warning::bad result {p}: {e}")
+          json.dump(out,open("/tmp/bigo-batch.json","w"))
+          print(f"Verified BIGO batch: {len(out['highlights'])} highlight(s)")
+          PY
+          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+            echo "::notice::No live hosts captured this cycle; continuing."
+            exit 0
+          fi
+
+      - name: Ingest, enrich and auto-post BIGO batch
+        run: |
+          set -euo pipefail
+          COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
+          if [ "$COUNT" -lt 1 ]; then exit 0; fi
+          OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
+          VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
+          VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
+          if [ "$VERIFIED_COUNT" -gt 0 ]; then
+            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
+          fi
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | (any($verified[]; . as $id | $host == $id or ($host | startswith($id))) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
+          STORAGE_COUNT="$(jq ".highlights | length" /tmp/bigo-storage-batch.json)"
+          if [ "$STORAGE_COUNT" -gt 0 ]; then
+            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
+          fi
+\t' read -r HOST_ID SOURCE_URL; do
+            [ -z "${HOST_ID}" ] && continue
+            run_capture "${HOST_ID}" "${SOURCE_URL}" &
+            ACTIVE=$((ACTIVE + 1))
+            if [ "${ACTIVE}" -ge 8 ]; then
+              wait -n || true
+              ACTIVE=$((ACTIVE - 1))
+            fi
           done < /tmp/bigo-hosts.txt
+          wait
           python3 - <<'PY'
           import json,glob
           out={"highlights":[],"limit":10}
