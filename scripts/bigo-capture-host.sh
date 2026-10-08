@@ -90,6 +90,13 @@ PY
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
 STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hls_src",""))' "$INFO")"
+# Prefer freshly discovered HLS over a cached/expiring registry source URL.
+# Keep the registry URL as fallback provenance, but do not let it block current
+# room discovery when BIGO rotates its signed playback URL.
+if [ -n "$STREAM_URL" ]; then
+  SOURCE_URL="$STREAM_URL"
+  echo "::notice::BIGO host $HOST using freshly discovered HLS source"
+fi
 CAPTURE_OK=0
 # Capture duration is runtime-configurable. When unset, FFmpeg captures until the live source
 # closes/Streamlink's bounded probe ends; no fixed clip duration is imposed by source code.
