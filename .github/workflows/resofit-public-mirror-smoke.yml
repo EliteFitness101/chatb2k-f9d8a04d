@@ -1,0 +1,106 @@
+name: ResoFit Public Web Mirror Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resofit-public-web-mirror-smoke
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    name: Firecrawl mirror checks for public ecosystem routes
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+    steps:
+      - name: Validate Firecrawl credential is available
+        shell: bash
+        run: ': "${FIRECRAWL_API_KEY:?FIRECRAWL_API_KEY GitHub Actions secret is required}"'
+      - name: Scrape public ecosystem endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error
+          urls = [
+              "https://www.resofit.fit/",
+              "https://www.resofit.fit/me",
+              "https://chatb2k.resofit.fit/",
+              "https://dashboard.resofit.fit/",
+              "https://store.resofit.fit/",
+              "https://elite.resofit.fit/",
+              "https://martial.resofit.fit/",
+              "https://api.resofit.fit/api/index",
+          ]
+          key = os.environ["FIRECRAWL_API_KEY"]
+          results = []
+          for url in urls:
+              started = time.time()
+              request = urllib.request.Request(
+                  "https://api.firecrawl.dev/v2/scrape",
+                  data=json.dumps({
+                      "url": url,
+                      "formats": ["markdown"],
+                      "onlyMainContent": True,
+                      "timeout": 30000,
+                  }).encode(),
+                  headers={
+                      "Authorization": "Bearer " + key,
+                      "Content-Type": "application/json",
+                  },
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=40) as response:
+                      payload = json.load(response)
+                  data = payload.get("data", payload)
+                  markdown = data.get("markdown") or ""
+                  metadata = data.get("metadata") or {}
+                  success = payload.get("success", True) and bool(markdown.strip())
+                  result = {
+                      "url": url,
+                      "ok": bool(success),
+                      "title": metadata.get("title", ""),
+                      "markdown_characters": len(markdown),
+                      "elapsed_ms": round((time.time() - started) * 1000),
+                      "reason": "scrape returned content" if success else str(payload.get("error") or "no markdown returned")[:300],
+                  }
+              except Exception as error:
+                  result = {
+                      "url": url,
+                      "ok": False,
+                      "title": "",
+                      "markdown_characters": 0,
+                      "elapsed_ms": round((time.time() - started) * 1000),
+                      "reason": (type(error).__name__ + ": " + str(error))[:300],
+                  }
+              results.append(result)
+              print(json.dumps(result, ensure_ascii=False))
+          report = {
+              "status": "pass" if all(item["ok"] for item in results) else "fail",
+              "checked_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "checked": len(results),
+              "failed": sum(not item["ok"] for item in results),
+              "results": results,
+          }
+          with open("resofit-public-mirror-report.json", "w", encoding="utf-8") as file:
+              json.dump(report, file, indent=2, ensure_ascii=False)
+          print("SUMMARY " + json.dumps({k: report[k] for k in ("status", "checked", "failed")}))
+          if report["failed"]:
+              raise SystemExit(1)
+          PY
+      - name: Preserve mirror evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resofit-public-mirror-${{ github.run_id }}
+          path: resofit-public-mirror-report.json
+          if-no-files-found: ignore
+          retention-days: 14
