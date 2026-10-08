@@ -1,0 +1,38 @@
+name: BIGO single host 1102883606
+
+on:
+  push:
+    paths:
+      - .github/workflows/bigo-single-host-1102883606.yml
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    env:
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install capture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          pip install "streamlink>=8.6,<9"
+      - name: Capture host 1102883606
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh" -o /tmp/bigo-capture-host.sh
+          chmod +x /tmp/bigo-capture-host.sh
+          mkdir -p /tmp/bigo-results
+          bash /tmp/bigo-capture-host.sh "1102883606" "https://www.bigo.tv/1102883606" || true
+          cat /tmp/bigo-results/1102883606.json 2>/dev/null || true
+          cat /tmp/bigo-results/1102883606.failure.json 2>/dev/null || true
+      - name: Upload capture diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigo-1102883606-${{ github.run_id }}
+          path: /tmp/bigo-results/
+          if-no-files-found: ignore
