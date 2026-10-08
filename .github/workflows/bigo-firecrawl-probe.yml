@@ -1,0 +1,56 @@
+name: BIGO Firecrawl Discovery Probe
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+      BIGO_LIVE_PROBE_HOST_IDS: ${{ secrets.BIGO_LIVE_PROBE_HOST_IDS }}
+    steps:
+      - name: Probe public BIGO metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${FIRECRAWL_API_KEY:?FIRECRAWL_API_KEY is required}"
+          python3 - <<'PY'
+          import json, os, urllib.request
+          ids=[x.strip() for x in os.environ.get("BIGO_LIVE_PROBE_HOST_IDS","").replace(",","\n").splitlines() if x.strip()]
+          ids=list(dict.fromkeys(ids))
+          if not ids:
+              print("No BIGO_LIVE_PROBE_HOST_IDS configured; probe exits cleanly.")
+              json.dump({"status":"no_probe_ids","candidates":[]},open("/tmp/bigo-firecrawl-report.json","w"))
+              raise SystemExit(0)
+          candidates=[]
+          for host in ids[:50]:
+              url="https://www.bigo.tv/"+host
+              req=urllib.request.Request(
+                  "https://api.firecrawl.dev/v2/scrape",
+                  data=json.dumps({"url":url,"formats":["markdown"],"onlyMainContent":True}).encode(),
+                  headers={"Authorization":"Bearer "+os.environ["FIRECRAWL_API_KEY"],"Content-Type":"application/json"},
+                  method="POST")
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      data=json.load(r)
+                  doc=data.get("data",data)
+                  excerpt=(doc.get("markdown") or "")[:12000]
+                  candidates.append({"host_id":host,"url":url,"status":"discovered","metadata_excerpt":excerpt})
+              except Exception as e:
+                  candidates.append({"host_id":host,"url":url,"status":"probe_error","error":str(e)[:500]})
+          json.dump({"status":"complete","candidates":candidates},open("/tmp/bigo-firecrawl-report.json","w"))
+          print(json.dumps({"status":"complete","tested":len(candidates),"discovered":sum(x["status"]=="discovered" for x in candidates)}))
+          PY
+      - name: Upload discovery evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigo-firecrawl-discovery-${{ github.run_id }}
+          path: /tmp/bigo-firecrawl-report.json
+          if-no-files-found: error
