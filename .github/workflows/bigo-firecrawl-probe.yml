@@ -1,6 +1,10 @@
 name: BIGO Firecrawl Discovery Probe
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bigo-firecrawl-probe.yml'
   workflow_dispatch:
   schedule:
     - cron: '*/30 * * * *'
