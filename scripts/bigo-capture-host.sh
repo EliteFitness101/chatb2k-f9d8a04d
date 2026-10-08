@@ -229,7 +229,7 @@ PY
 
 export FILE COVER
 BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/${file.split("/").pop()}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
-COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/covers/${file.replace(/^.*\\//,"")}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
+COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/covers/${file.split("/").pop()}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
 
 python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" <<'PY' > "$RESULT"
 import json,sys
