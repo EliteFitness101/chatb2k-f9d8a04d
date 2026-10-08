@@ -64,7 +64,7 @@ jobs:
               if host not in allow:
                   allow.append(host)
           for host in allow:
-              print(host + "\t" + (registry.get(host) or "https://www.bigo.tv/" + host))
+              print(host + "|" + (registry.get(host) or "https://www.bigo.tv/" + host))
           PY
           )"
           if [ -n "${BIGO_HOST_IDS:-}" ]; then
