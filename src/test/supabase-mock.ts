@@ -35,7 +35,7 @@ export class MockDb {
   tables: Record<string, Row[]> = {};
   unique: Record<string, string[][]> = {
     payment_events: [["paystack_ref", "event"]],
-    payment_event_processing: [["paystack_ref"]],
+    payment_event_processing: [["paystack_ref", "event_key"]],
     ops_tasks: [["dedupe_key"]],
     recovery_workflows: [["dedupe_key"]],
     sla_timers: [["sla_type", "entity", "entity_id"]],
