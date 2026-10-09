@@ -107,7 +107,7 @@ describe("recovery workflows", () => {
 describe("canonical fulfillment + inventory reservation", () => {
   function seedPayment(country = "NG", qty = 1) {
     mockDb.seed("payments", [{ id: "p1", paystack_ref: "PS-1", order_id: "o1", user_id: "u1", customer_email: "a@b.com", amount: 100000, currency: "NGN", status: "success", product_sku: "res-iron-15", rsid: "rsid-1" }]);
-    mockDb.seed("resofit_hub_inventory", [{ hub_code: "Lagos,NG", sku: "res-iron-15", on_hand: 10, reserved: 0 }]);
+    mockDb.seed("resofit_hub_inventory", [{ hub_code: "NG-LAGOS", sku: "res-iron-15", on_hand: 10, reserved: 0 }]);
     return { country, qty };
   }
 
