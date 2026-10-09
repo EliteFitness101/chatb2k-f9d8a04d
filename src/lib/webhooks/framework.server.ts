@@ -4,11 +4,11 @@ import { publishEvent, audit } from "@/lib/events.server";
 import { allocatePayment } from "@/lib/fulfillment.server";
 import { raiseAlert } from "@/lib/alerts.server";
 
-export type PaymentStatus = "created" | "authorized" | "paid" | "verified" | "fulfillment_started" | "completed" | "refunded" | "failed";
+export type PaymentStatus = "created" | "authorized" | "paid" | "verified" | "fulfillment_started" | "completed" | "refunded" | "partially_refunded" | "reversed" | "disputed" | "failed";
 
 export interface NormalizedEvent {
   eventKey: string;
-  type: "paid" | "failed" | "refunded" | "ignored";
+  type: "paid" | "failed" | "refunded" | "partially_refunded" | "reversed" | "disputed" | "ignored";
   reference: string | null;
   amountMinor: number;
   currency: string;
@@ -276,14 +276,107 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
       await supabaseAdmin.from("payment_event_processing").update({ status: "failed", last_error: "fulfillment allocation failed", updated_at: new Date().toISOString() }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
       return new Response("Payment verified; fulfillment allocation failed", { status: 500 });
     }
-  } else if (event.type === "failed" || event.type === "refunded") {
-    const status = event.type === "refunded" ? "refunded" : "failed";
-    await supabaseAdmin.from("payments").update({ status, gateway_response: `webhook_${status}` }).eq("paystack_ref", event.reference);
-    if (event.type === "refunded") await supabaseAdmin.from("revenue_events").update({ status: "refunded" }).eq("payment_reference", event.reference);
-    await publishEvent(event.type === "refunded" ? "PaymentRefunded" : "PaymentFailed", "payment", event.reference, {
-      provider: adapter.code, reference: event.reference, amount_minor: event.amountMinor, currency: event.currency, rsid,
+  } else if (event.type === "disputed") {
+    await publishEvent("PaymentDisputed", "payment", event.reference, {
+      provider: adapter.code, reference: event.reference, amount_minor: event.amountMinor, currency: event.currency, product_sku: productSku, rsid,
     });
-    await audit(`payment.${status}`, "payment", event.reference, { provider: adapter.code, amount_minor: event.amountMinor, currency: event.currency });
+    await audit("payment.disputed", "payment", event.reference, { provider: adapter.code, amount_minor: event.amountMinor, currency: event.currency });
+    const { error: disputeLearningError } = await supabaseAdmin.from("chatb2k_learning_events").insert({
+      platform: "resofit",
+      source: "paystack_webhook",
+      event_type: "payment.disputed",
+      topic: productSku ?? "payment",
+      observation: { payment_reference: event.reference, amount: amountMajor(event.amountMinor), currency: event.currency, product_sku: productSku, rsid, funnel_origin: funnelOrigin },
+      confidence: 1,
+      action: "payment_dispute_opened",
+    });
+    if (disputeLearningError) console.error("[webhook] dispute learning event write failed", disputeLearningError);
+  } else if (event.type === "failed" || event.type === "refunded" || event.type === "reversed") {
+    if ((event.type === "refunded" || event.type === "reversed") && !payment) {
+      throw new Error(`Canonical payment record missing for ${event.type} event`);
+    }
+
+    let lifecycleStatus: "failed" | "refunded" | "partially_refunded" | "reversed" = event.type;
+    if (event.type === "refunded") {
+      const refundAmount = amountMajor(event.amountMinor);
+      if (!Number.isFinite(refundAmount) || refundAmount <= 0) throw new Error("Refund event is missing a valid amount");
+
+      const { data: revenueRecord, error: revenueLookupError } = await supabaseAdmin
+        .from("revenue_events")
+        .select("amount")
+        .eq("payment_reference", event.reference)
+        .maybeSingle();
+      if (revenueLookupError) throw revenueLookupError;
+      if (!revenueRecord) throw new Error("Revenue ledger row missing for refund event");
+
+      const currentNetRevenue = Number(revenueRecord.amount ?? 0);
+      const remainingRevenue = Math.max(currentNetRevenue - refundAmount, 0);
+      const partialRefund = remainingRevenue > 0;
+      lifecycleStatus = partialRefund ? "partially_refunded" : "refunded";
+
+      if (partialRefund) {
+        const { error: revenueUpdateError } = await supabaseAdmin
+          .from("revenue_events")
+          .update({ amount: remainingRevenue, status: "success" })
+          .eq("payment_reference", event.reference);
+        if (revenueUpdateError) throw revenueUpdateError;
+
+        const { error: paymentUpdateError } = await supabaseAdmin
+          .from("payments")
+          .update({ gateway_response: "webhook_partially_refunded", reconciled: true, reconciled_at: new Date().toISOString() })
+          .eq("paystack_ref", event.reference);
+        if (paymentUpdateError) throw paymentUpdateError;
+      } else {
+        const { error: paymentUpdateError } = await supabaseAdmin
+          .from("payments")
+          .update({ status: "refunded", gateway_response: "webhook_refunded", reconciled: true, reconciled_at: new Date().toISOString() })
+          .eq("paystack_ref", event.reference);
+        if (paymentUpdateError) throw paymentUpdateError;
+        const { error: revenueUpdateError } = await supabaseAdmin
+          .from("revenue_events")
+          .update({ status: "refunded" })
+          .eq("payment_reference", event.reference);
+        if (revenueUpdateError) throw revenueUpdateError;
+      }
+    } else {
+      const { error: paymentUpdateError } = await supabaseAdmin
+        .from("payments")
+        .update({ status: lifecycleStatus, gateway_response: `webhook_${lifecycleStatus}`, reconciled: true, reconciled_at: new Date().toISOString() })
+        .eq("paystack_ref", event.reference);
+      if (paymentUpdateError) throw paymentUpdateError;
+      if (event.type === "reversed") {
+        const { error: revenueUpdateError } = await supabaseAdmin
+          .from("revenue_events")
+          .update({ status: "reversed" })
+          .eq("payment_reference", event.reference);
+        if (revenueUpdateError) throw revenueUpdateError;
+      }
+    }
+
+    const eventName = lifecycleStatus === "partially_refunded"
+      ? "PaymentPartiallyRefunded"
+      : lifecycleStatus === "refunded"
+        ? "PaymentRefunded"
+        : lifecycleStatus === "reversed"
+          ? "PaymentReversed"
+          : "PaymentFailed";
+    await publishEvent(eventName, "payment", event.reference, {
+      provider: adapter.code, reference: event.reference, amount_minor: event.amountMinor, currency: event.currency, rsid, lifecycle_status: lifecycleStatus,
+    });
+    await audit(`payment.${lifecycleStatus}`, "payment", event.reference, { provider: adapter.code, amount_minor: event.amountMinor, currency: event.currency });
+
+    if (lifecycleStatus !== "failed") {
+      const { error: lifecycleLearningError } = await supabaseAdmin.from("chatb2k_learning_events").insert({
+        platform: "resofit",
+        source: "paystack_webhook",
+        event_type: `payment.${lifecycleStatus}`,
+        topic: productSku ?? "payment",
+        observation: { payment_reference: event.reference, amount: amountMajor(event.amountMinor), currency: event.currency, product_sku: productSku, rsid, funnel_origin: funnelOrigin },
+        confidence: 1,
+        action: `payment_${lifecycleStatus}_recorded`,
+      });
+      if (lifecycleLearningError) console.error("[webhook] payment lifecycle learning event write failed", lifecycleLearningError);
+    }
   }
 
   if (adapter.code === "paystack" && event.reference) {
