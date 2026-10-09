@@ -59,7 +59,7 @@ describe("webhook processing", () => {
 
   it("processes a verified physical payment and reserves inventory atomically", async () => {
     mockDb.seed("payments", [{ id: "p-physical", paystack_ref: "R-PHYS", amount: 22000, currency: "NGN", customer_email: "buyer@example.com", product_sku: "res-iron-15", plan_type: "commerce", funnel_origin: "chatb2k", status: "pending" }]);
-    mockDb.seed("resofit_hub_inventory", [{ hub_code: "Lagos,NG", sku: "res-iron-15", on_hand: 10, reserved: 0 }]);
+    mockDb.seed("resofit_hub_inventory", [{ hub_code: "NG-LAGOS", sku: "res-iron-15", on_hand: 10, reserved: 0 }]);
     const res = await processWebhook(makeAdapter(), signedRequest({ id: "e-physical", event: "paid", reference: "R-PHYS", amount: 2200000, email: "buyer@example.com", metadata: { country: "NG", sku: "res-iron-15" } }));
     expect(res.status).toBe(200);
     expect(mockDb.rows("resofit_hub_inventory")[0].reserved).toBe(1);
@@ -97,6 +97,33 @@ describe("webhook processing", () => {
     expect(await second.text()).toBe("duplicate");
     expect(mockDb.rows("payment_event_processing")).toHaveLength(1);
     expect(mockDb.rows("payments")).toHaveLength(1);
+  });
+
+
+  it("retries a failed event with the same provider event identity", async () => {
+    mockDb.seed("payments", [{ id: "p-retry", paystack_ref: "R-RETRY", amount: 2500, currency: "NGN", customer_email: "retry@example.com", product_sku: "APEX", plan_type: "commerce", status: "pending" }]);
+    const failedAttempt = await processWebhook(makeAdapter(), signedRequest({ id: "retry-event-1", event: "paid", reference: "R-RETRY", amount: 249900 }));
+    expect(failedAttempt.status).toBe(422);
+    expect(mockDb.rows("payment_event_processing")[0].status).toBe("failed");
+
+    const retried = await processWebhook(makeAdapter(), signedRequest({ id: "retry-event-1", event: "paid", reference: "R-RETRY", amount: 250000 }));
+    expect(retried.status).toBe(200);
+    expect(mockDb.rows("payment_event_processing")).toHaveLength(1);
+    expect(mockDb.rows("payment_event_processing")[0].status).toBe("processed");
+    expect(mockDb.rows("payment_event_processing")[0].attempt_count).toBe(2);
+    expect(mockDb.rows("payments")[0].status).toBe("success");
+  });
+
+  it("processes a refund event after a successful payment using a separate event identity", async () => {
+    mockDb.seed("payments", [{ id: "p-refund-after-paid", paystack_ref: "R-LIFECYCLE", amount: 1000, currency: "NGN", customer_email: "buyer@example.com", product_sku: "APEX", plan_type: "commerce", status: "pending" }]);
+    const paid = await processWebhook(makeAdapter(), signedRequest({ id: "lifecycle-paid", event: "paid", reference: "R-LIFECYCLE", amount: 100000 }));
+    expect(paid.status).toBe(200);
+    const refunded = await processWebhook(makeAdapter(), signedRequest({ id: "lifecycle-refund", event: "refunded", reference: "R-LIFECYCLE", amount: 100000 }));
+    expect(refunded.status).toBe(200);
+    expect(mockDb.rows("payment_event_processing")).toHaveLength(2);
+    expect(mockDb.rows("payment_event_processing").every((row) => row.status === "processed")).toBe(true);
+    expect(mockDb.rows("payments")[0].status).toBe("refunded");
+    expect(mockDb.rows("revenue_events")[0].status).toBe("refunded");
   });
 
   it("handles a failed payment in the canonical payment ledger", async () => {
