@@ -13,7 +13,7 @@ function makeAdapter(currency = "NGN") {
     verify: (raw: string, headers: Headers) => hmacMatches(raw, headers.get("x-paystack-signature"), SECRET, "sha512"),
     normalize: (payload: any) => ({
       eventKey: payload.id as string,
-      type: payload.event as "paid" | "failed" | "refunded" | "partially_refunded" | "reversed" | "disputed" | "ignored",
+      type: payload.event as "paid" | "failed" | "refunded" | "reversed" | "disputed" | "ignored",
       reference: payload.reference as string,
       amountMinor: payload.amount as number,
       currency,
