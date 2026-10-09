@@ -51,31 +51,81 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
   const event = adapter.normalize(payload);
   const payloadHash = createHash("sha256").update(raw).digest("hex");
 
+  const processingKey = createHash("sha256")
+    .update(`${adapter.code}:${event.reference ?? ""}:${event.type}:${event.eventKey || payloadHash}`)
+    .digest("hex");
+  let processingClaimed = false;
+
+  // Claim per provider event, not per payment reference. A payment can legitimately
+  // receive distinct paid/refunded events, while repeated deliveries of one event stay idempotent.
   if (adapter.code === "paystack" && event.reference) {
-    const { data: existing } = await supabaseAdmin.from("payment_event_processing").select("id,status").eq("paystack_ref", event.reference).maybeSingle();
-    if (existing) return new Response("duplicate", { status: 200 });
+    const { data: existing, error: lookupError } = await supabaseAdmin
+      .from("payment_event_processing")
+      .select("id,status,attempt_count")
+      .eq("paystack_ref", event.reference)
+      .eq("event_key", processingKey)
+      .maybeSingle();
+    if (lookupError) return new Response("Processing ledger lookup failed", { status: 500 });
+
+    if (existing) {
+      if (existing.status !== "failed") return new Response("duplicate", { status: 200 });
+      const { data: claimed, error: retryError } = await supabaseAdmin
+        .from("payment_event_processing")
+        .update({
+          status: "processing",
+          attempt_count: Number(existing.attempt_count ?? 1) + 1,
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .eq("status", "failed")
+        .select("id")
+        .maybeSingle();
+      if (retryError) return new Response("Processing retry claim failed", { status: 500 });
+      if (!claimed) return new Response("duplicate", { status: 200 });
+    } else {
+      const { error: claimError } = await supabaseAdmin.from("payment_event_processing").insert({
+        paystack_ref: event.reference,
+        event_key: processingKey,
+        event_type: event.type,
+        status: "processing",
+        attempt_count: 1,
+        updated_at: new Date().toISOString(),
+      });
+      if (claimError?.code === "23505") return new Response("duplicate", { status: 200 });
+      if (claimError) return new Response("Processing ledger failed", { status: 500 });
+    }
+    processingClaimed = true;
   }
 
-  const { error: eventPersistError } = await supabaseAdmin.from("payment_events").insert({
+  const { error: eventPersistError } = await supabaseAdmin.from("payment_events").upsert({
     event: event.type,
     payload: payload as never,
     paystack_ref: event.reference,
     processed: false,
     signature_verified: true,
     source: adapter.code,
-  });
+  }, { onConflict: "paystack_ref,event" });
   if (eventPersistError) {
-    console.error("[webhook] canonical payment_events insert failed", eventPersistError);
+    if (processingClaimed && event.reference) {
+      await supabaseAdmin.from("payment_event_processing").update({
+        status: "failed", last_error: "payment_events persistence failed", updated_at: new Date().toISOString(),
+      }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
+    }
+    console.error("[webhook] canonical payment_events upsert failed", eventPersistError);
     return new Response("Event persistence failed", { status: 500 });
   }
 
-  if (adapter.code === "paystack" && event.reference) {
-    const { error: processingError } = await supabaseAdmin.from("payment_event_processing").insert({ paystack_ref: event.reference, status: "processing" });
-    if (processingError?.code === "23505") return new Response("duplicate", { status: 200 });
-    if (processingError) return new Response("Processing ledger failed", { status: 500 });
-  }
-
-  if (event.type === "ignored" || !event.reference) return new Response("ok");
+  try {
+    if (event.type === "ignored" || !event.reference) {
+      await supabaseAdmin.from("payment_events").update({ processed: true }).eq("paystack_ref", event.reference).eq("event", event.type);
+      if (processingClaimed && event.reference) {
+        await supabaseAdmin.from("payment_event_processing").update({
+          status: "processed", processed_at: new Date().toISOString(), last_error: null, updated_at: new Date().toISOString(),
+        }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
+      }
+      return new Response("ok");
+    }
 
   const { data: payment } = await supabaseAdmin
     .from("payments")
@@ -91,7 +141,7 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
 
   if (event.type === "paid") {
     if (!payment) {
-      await supabaseAdmin.from("payment_event_processing").update({ status: "failed" }).eq("paystack_ref", event.reference);
+      await supabaseAdmin.from("payment_event_processing").update({ status: "failed", last_error: "payment processing failed", updated_at: new Date().toISOString() }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
       await raiseAlert("critical", "payment", "Verified payment has no canonical ledger row", { reference: event.reference }, "payment", event.reference);
       return new Response("Payment record not found", { status: 422 });
     }
@@ -102,7 +152,7 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
     const receivedCurrency = String(event.currency).toUpperCase();
 
     if (!Number.isFinite(expectedAmount) || Math.abs(expectedAmount - receivedAmount) > 0.000001 || expectedCurrency !== receivedCurrency) {
-      await supabaseAdmin.from("payment_event_processing").update({ status: "failed" }).eq("paystack_ref", event.reference);
+      await supabaseAdmin.from("payment_event_processing").update({ status: "failed", last_error: "payment processing failed", updated_at: new Date().toISOString() }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
       await raiseAlert("critical", "payment", "Paystack amount/currency mismatch", {
         reference: event.reference,
         expected_amount: expectedAmount,
@@ -126,7 +176,7 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
     });
 
     if (finalizeError) {
-      await supabaseAdmin.from("payment_event_processing").update({ status: "failed" }).eq("paystack_ref", event.reference);
+      await supabaseAdmin.from("payment_event_processing").update({ status: "failed", last_error: "payment processing failed", updated_at: new Date().toISOString() }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
       await raiseAlert("critical", "payment", "Canonical payment finalization failed", { reference: event.reference, provider: adapter.code }, "payment", event.reference);
       return new Response("Payment finalization failed", { status: 500 });
     }
@@ -171,6 +221,7 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
         payment_id: payment.id,
         error: fulfillment.error,
       }, "payment", payment.id);
+      await supabaseAdmin.from("payment_event_processing").update({ status: "failed", last_error: "fulfillment allocation failed", updated_at: new Date().toISOString() }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
       return new Response("Payment verified; fulfillment allocation failed", { status: 500 });
     }
   } else if (event.type === "failed" || event.type === "refunded") {
@@ -184,8 +235,11 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
   }
 
   if (adapter.code === "paystack" && event.reference) {
-    await supabaseAdmin.from("payment_event_processing").update({ status: "processed", processed_at: new Date().toISOString() }).eq("paystack_ref", event.reference);
+    await supabaseAdmin.from("payment_event_processing").update({
+      status: "processed", processed_at: new Date().toISOString(), last_error: null, updated_at: new Date().toISOString(),
+    }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
   }
+  await supabaseAdmin.from("payment_events").update({ processed: true }).eq("paystack_ref", event.reference).eq("event", event.type);
 
   const makeUrl = process.env.MAKE_WEBHOOK_URL;
   if (makeUrl) {
@@ -200,4 +254,15 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
   }
 
   return new Response("ok");
+  } catch (error) {
+    if (processingClaimed && event.reference) {
+      await supabaseAdmin.from("payment_event_processing").update({
+        status: "failed",
+        last_error: error instanceof Error ? error.message.slice(0, 500) : "unexpected webhook processing error",
+        updated_at: new Date().toISOString(),
+      }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
+    }
+    console.error("[webhook] processing failed", { provider: adapter.code, eventType: event.type, payloadHash });
+    return new Response("Webhook processing failed", { status: 500 });
+  }
 }
