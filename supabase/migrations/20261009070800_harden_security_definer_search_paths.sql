@@ -7,7 +7,7 @@ DECLARE
   changed_count integer := 0;
 BEGIN
   FOR r IN
-    SELECT p.oid::regprocedure::text AS signature
+    SELECT format('%I.%I(%s)', n.nspname, p.proname, pg_get_function_identity_arguments(p.oid)) AS signature
     FROM pg_proc AS p
     JOIN pg_namespace AS n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
