@@ -6,9 +6,13 @@ const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const num = (v: unknown): number => (typeof v === "number" ? v : Number(v) || 0);
 
 function mapType(raw: string): NormalizedEvent["type"] {
+  if (/refund\\.(pending|failed|initiated)|refund_(pending|failed)/i.test(raw)) return "ignored";
+  if (/dispute.*(create|open|remind)|dispute_opened/i.test(raw)) return "disputed";
+  if (/charge\\.reversed|payment\\.reversed|reversal\\.processed|\\breversed\\b/i.test(raw)) return "reversed";
+  if (/refund\\.processed|charge\\.refunded|\\brefunded\\b/i.test(raw)) return "refunded";
+  if (/fail|declin/i.test(raw) && !/refund/i.test(raw)) return "failed";
+  if (/cancel|abandon|expire/i.test(raw)) return "ignored";
   if (/success|successful|completed|paid|confirmed/i.test(raw)) return "paid";
-  if (/refund|reversal|dispute/i.test(raw)) return "refunded";
-  if (/fail|declin|cancel/i.test(raw)) return "failed";
   return "ignored";
 }
 
