@@ -3,8 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 const CALLBACK_URI =
   process.env.GOOGLE_OAUTH_REDIRECT_URI ??
   "https://chatb2k.resofit.fit/api/google/drive-mcp/callback";
-
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ?? process.env.GOOGLE_DRIVE_CLIENT_ID;
 const DEFAULT_SCOPES = [
   "https://www.googleapis.com/auth/drive.file",
   "https://www.googleapis.com/auth/drive.readonly",
@@ -23,7 +23,6 @@ export const Route = createFileRoute("/api/google/drive-mcp/start")({
             ?.split(/\s+/)
             .map((scope) => scope.trim())
             .filter(Boolean) ?? [];
-
         const scopes = configuredScopes.length ? configuredScopes : DEFAULT_SCOPES;
 
         const stateBytes = crypto.getRandomValues(new Uint8Array(32));
