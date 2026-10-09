@@ -50,6 +50,9 @@ describe("webhook processing", () => {
     const res = await processWebhook(makeAdapter(), signedRequest({ id: "e2", event: "paid", reference: "R1", amount: 250000, email: "a@b.com" }));
     expect(res.status).toBe(200);
     expect(mockDb.rows("payments")[0].status).toBe("success");
+    expect(mockDb.rows("payment_events")).toHaveLength(1);
+    expect(mockDb.rows("payment_events")[0].processed).toBe(false);
+    expect(mockDb.rows("payment_event_processing")[0].status).toBe("processed");
     expect(mockDb.rows("revenue_events")).toHaveLength(1);
     expect(mockDb.rows("revenue_events")[0].payment_reference).toBe("R1");
     expect(mockDb.rows("resofit_events").map((e) => e.event_name)).toContain("payment.succeeded");
