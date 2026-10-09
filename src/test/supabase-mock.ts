@@ -166,7 +166,7 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
       const list = Array.isArray(this.payload) ? this.payload : [this.payload!];
       const out: Row[] = [];
       for (const p of list) {
-        const existing = this.db.rows(this.table).find((r) => this.conflict.every((c) => r[c] === p[c]));
+        const existing = this.db.rows(this.table).find((r) => this.conflict.every((c) => p[c] !== undefined && p[c] !== null && r[c] === p[c]));
         if (existing && this.ignoreDuplicates) continue;
         if (existing) { Object.assign(existing, p); out.push(existing); }
         else { const row = { id: p.id ?? uuid(), created_at: new Date().toISOString(), ...p }; this.db.rows(this.table).push(row); out.push(row); }
