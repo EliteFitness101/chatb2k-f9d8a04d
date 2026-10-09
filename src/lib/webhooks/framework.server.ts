@@ -8,7 +8,7 @@ export type PaymentStatus = "created" | "authorized" | "paid" | "verified" | "fu
 
 export interface NormalizedEvent {
   eventKey: string;
-  type: "paid" | "failed" | "refunded" | "partially_refunded" | "reversed" | "disputed" | "ignored";
+  type: "paid" | "failed" | "refunded" | "reversed" | "disputed" | "ignored";
   reference: string | null;
   amountMinor: number;
   currency: string;
