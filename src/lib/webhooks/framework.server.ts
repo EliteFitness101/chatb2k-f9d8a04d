@@ -181,9 +181,13 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
       return new Response("Payment finalization failed", { status: 500 });
     }
 
-    await supabaseAdmin.from("payments").update({ status: "success", paid_at: new Date().toISOString(), gateway_response: "webhook_verified", reconciled: false }).eq("paystack_ref", event.reference);
+    const { error: paymentUpdateError } = await supabaseAdmin
+      .from("payments")
+      .update({ status: "success", paid_at: new Date().toISOString(), gateway_response: "webhook_verified", reconciled: false })
+      .eq("paystack_ref", event.reference);
+    if (paymentUpdateError) throw paymentUpdateError;
 
-    await supabaseAdmin.from("revenue_events").insert({
+    const { error: revenueError } = await supabaseAdmin.from("revenue_events").upsert({
       amount: receivedAmount,
       currency: receivedCurrency,
       email: event.email ?? payment.customer_email ?? null,
@@ -194,7 +198,56 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
       status: "success",
       utm: utm as never,
       campaign: typeof meta.utm_campaign === "string" ? meta.utm_campaign : null,
-    });
+    }, { onConflict: "payment_reference" });
+    if (revenueError) throw revenueError;
+
+    const { data: telemetryEvent, error: telemetryError } = await supabaseAdmin
+      .from("resofit_events")
+      .upsert({
+        event_name: "payment.succeeded",
+        contract_version: "1.0",
+        occurred_at: new Date().toISOString(),
+        source_system: "paystack",
+        adapter: adapter.code,
+        idempotency_key: `paystack:${event.reference}:payment.succeeded`,
+        correlation_id: event.reference,
+        session_id: typeof meta.session_id === "string" ? meta.session_id : null,
+        user_id: payment.user_id ?? null,
+        anonymous_id: typeof meta.anonymous_id === "string" ? meta.anonymous_id : null,
+        rsid,
+        funnel_origin: funnelOrigin,
+        utm: utm as never,
+        payload: {
+          payment_reference: event.reference,
+          amount: receivedAmount,
+          currency: receivedCurrency,
+          product_sku: productSku,
+          order_id: typeof meta.order_id === "string" ? meta.order_id : null,
+        } as never,
+      }, { onConflict: "idempotency_key", ignoreDuplicates: true })
+      .select("id")
+      .maybeSingle();
+    if (telemetryError) throw telemetryError;
+
+    if (telemetryEvent?.id) {
+      const { error: learningError } = await supabaseAdmin.from("chatb2k_learning_events").insert({
+        platform: "resofit",
+        source: "paystack_webhook",
+        event_type: "payment.succeeded",
+        topic: productSku ?? "payment",
+        observation: {
+          payment_reference: event.reference,
+          amount: receivedAmount,
+          currency: receivedCurrency,
+          product_sku: productSku,
+          rsid,
+          funnel_origin: funnelOrigin,
+        },
+        confidence: 1,
+        action: "verified_payment_recorded",
+      });
+      if (learningError) console.error("[webhook] payment learning event write failed", learningError);
+    }
 
     await publishEvent("PaymentVerified", "payment", event.reference, {
       provider: adapter.code,
