@@ -51,6 +51,9 @@ describe("webhook processing", () => {
     expect(res.status).toBe(200);
     expect(mockDb.rows("payments")[0].status).toBe("success");
     expect(mockDb.rows("revenue_events")).toHaveLength(1);
+    expect(mockDb.rows("revenue_events")[0].payment_reference).toBe("R1");
+    expect(mockDb.rows("resofit_events").map((e) => e.event_name)).toContain("payment.succeeded");
+    expect(mockDb.rows("chatb2k_learning_events").some((e) => e.event_type === "payment.succeeded" && e.platform === "resofit")).toBe(true);
     expect(mockDb.rows("resofit_events").map((e) => e.event_name)).toContain("PaymentVerified");
     expect(mockDb.rows("resofit_events").some((e) => e.event_name === "FulfillmentAllocated" && e.payload?.mode === "digital")).toBe(true);
     expect(mockDb.rows("resofit_fulfillment_orders")).toHaveLength(0);
@@ -112,6 +115,21 @@ describe("webhook processing", () => {
     expect(mockDb.rows("payment_event_processing")[0].status).toBe("processed");
     expect(mockDb.rows("payment_event_processing")[0].attempt_count).toBe(2);
     expect(mockDb.rows("payments")[0].status).toBe("success");
+  });
+
+
+
+  it("upserts the revenue ledger and canonical purchase event on recovery", async () => {
+    mockDb.seed("payments", [{ id: "p-ledger-retry", paystack_ref: "R-LEDGER-RETRY", amount: 2500, currency: "NGN", customer_email: "ledger@example.com", product_sku: "RESET-001", plan_type: "commerce", status: "pending" }]);
+    mockDb.seed("revenue_events", [{ id: "rev-ledger-retry", payment_reference: "R-LEDGER-RETRY", amount: 1000, currency: "NGN", status: "success" }]);
+
+    const response = await processWebhook(makeAdapter(), signedRequest({ id: "ledger-retry-event", event: "paid", reference: "R-LEDGER-RETRY", amount: 250000, email: "ledger@example.com", metadata: { sku: "RESET-001" } }));
+
+    expect(response.status).toBe(200);
+    expect(mockDb.rows("revenue_events")).toHaveLength(1);
+    expect(mockDb.rows("revenue_events")[0].amount).toBe(2500);
+    expect(mockDb.rows("resofit_events").filter((e) => e.event_name === "payment.succeeded")).toHaveLength(1);
+    expect(mockDb.rows("chatb2k_learning_events").filter((e) => e.event_type === "payment.succeeded")).toHaveLength(1);
   });
 
   it("processes a refund event after a successful payment using a separate event identity", async () => {
