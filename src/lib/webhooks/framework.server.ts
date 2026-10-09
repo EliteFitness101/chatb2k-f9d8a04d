@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { publishEvent, audit } from "@/lib/events.server";
 import { allocatePayment } from "@/lib/fulfillment.server";
