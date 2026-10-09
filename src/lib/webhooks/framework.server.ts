@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { publishEvent, audit } from "@/lib/events.server";
 import { allocatePayment } from "@/lib/fulfillment.server";
@@ -49,7 +49,6 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
   try { payload = JSON.parse(raw); } catch { return new Response("Bad request", { status: 400 }); }
 
   const event = adapter.normalize(payload);
-  const payloadHash = createHash("sha256").update(raw).digest("hex");
 
   if (adapter.code === "paystack" && event.reference) {
     const { data: existing } = await supabaseAdmin.from("payment_event_processing").select("id,status").eq("paystack_ref", event.reference).maybeSingle();
@@ -185,18 +184,6 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
 
   if (adapter.code === "paystack" && event.reference) {
     await supabaseAdmin.from("payment_event_processing").update({ status: "processed", processed_at: new Date().toISOString() }).eq("paystack_ref", event.reference);
-  }
-
-  const makeUrl = process.env.MAKE_WEBHOOK_URL;
-  if (makeUrl) {
-    try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      const shared = process.env.MAKE_WEBHOOK_SECRET;
-      if (shared) headers["x-shared-secret"] = shared;
-      await fetch(makeUrl, { method: "POST", headers, body: JSON.stringify({ provider: adapter.code, event, payloadHash }) });
-    } catch (e) {
-      console.error("[webhook] notify failed", e);
-    }
   }
 
   return new Response("ok");
