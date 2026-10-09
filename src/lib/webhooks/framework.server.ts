@@ -105,7 +105,7 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
     processed: false,
     signature_verified: true,
     source: adapter.code,
-  }, { onConflict: "paystack_ref,event" });
+  }, { onConflict: "paystack_ref,event", ignoreDuplicates: true });
   if (eventPersistError) {
     if (processingClaimed && event.reference) {
       await supabaseAdmin.from("payment_event_processing").update({
@@ -118,7 +118,6 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
 
   try {
     if (event.type === "ignored" || !event.reference) {
-      await supabaseAdmin.from("payment_events").update({ processed: true }).eq("paystack_ref", event.reference).eq("event", event.type);
       if (processingClaimed && event.reference) {
         await supabaseAdmin.from("payment_event_processing").update({
           status: "processed", processed_at: new Date().toISOString(), last_error: null, updated_at: new Date().toISOString(),
@@ -292,7 +291,6 @@ export async function processWebhook(adapter: ProviderAdapter, request: Request)
       status: "processed", processed_at: new Date().toISOString(), last_error: null, updated_at: new Date().toISOString(),
     }).eq("paystack_ref", event.reference).eq("event_key", processingKey);
   }
-  await supabaseAdmin.from("payment_events").update({ processed: true }).eq("paystack_ref", event.reference).eq("event", event.type);
 
   const makeUrl = process.env.MAKE_WEBHOOK_URL;
   if (makeUrl) {
