@@ -1,5 +1,5 @@
-name: BIGO Live -> ChatB2K -> Buffer
-# Production capture workflow — Dropbox-first media archive; no Vercel Blob dependency.
+name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
+# Production capture workflow — Dropbox is canonical media storage; ChatB2K ingests verified Dropbox URLs for enrichment, Buffer, and Drive archive.
 
 on:
   push:
