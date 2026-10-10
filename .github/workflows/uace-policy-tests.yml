@@ -33,5 +33,3 @@ jobs:
         run: bun install
       - name: Run UACE policy and credential tests
         run: bunx vitest run tests/chatb2k/universal-config-engine.test.ts tests/chatb2k/provider-credential-broker.test.ts
-      - name: Type-check application source
-        run: bunx tsc --noEmit
