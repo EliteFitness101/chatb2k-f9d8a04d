@@ -51,7 +51,7 @@ def resolve_token():
     except Exception:
         raise RuntimeError('streamlink crypto module unavailable')
     encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
-    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers={'User-Agent':UA,'Accept':'*/*'},timeout=12)
+    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
     sr.raise_for_status()
     return jsonp(sr.text)['token']
 
@@ -75,14 +75,14 @@ try:
     if out['hls_src']:
         print(json.dumps(out)); raise SystemExit
     # Preserve the older working path as a secondary fallback.
-    r=requests.post(API,data={'siteId':host},headers={'Accept':'application/json','User-Agent':UA},timeout=12)
+    r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
     r.raise_for_status()
     out=build(r.json().get('data') or {})
     out['discovery_method']='bigo_legacy_api'
     print(json.dumps(out))
 except Exception as e:
     try:
-        r=requests.post(API,data={'siteId':host},headers={'Accept':'application/json','User-Agent':UA},timeout=12)
+        r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
         r.raise_for_status()
         out=build(r.json().get('data') or {})
         out['discovery_method']='bigo_legacy_api'
