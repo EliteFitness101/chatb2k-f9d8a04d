@@ -1,0 +1,161 @@
+name: BIGO Dropbox resumable upload canary
+
+on:
+  push:
+    branches: [ops/dropbox-large-file-upload-20261010]
+    paths:
+      - '.github/workflows/dropbox-large-file-canary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resumable-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Upload 151 MiB synthetic canary, verify hash/size, and clean up
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python -m pip install --quiet requests
+          python <<'PY'
+          import hashlib, json, os, sys, tempfile
+          import requests
+
+          def fail(message, status=None):
+              suffix = f" (HTTP {status})" if status else ""
+              print(f"FAIL: {message}{suffix}; credentials suppressed.")
+              raise SystemExit(1)
+
+          key, secret, refresh = (os.getenv(k, "") for k in (
+              "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET", "DROPBOX_REFRESH_TOKEN"
+          ))
+          if not all((key, secret, refresh)):
+              fail("required Dropbox Actions secrets unavailable")
+
+          r = requests.post(
+              "https://api.dropboxapi.com/oauth2/token",
+              auth=(key, secret),
+              data={"grant_type": "refresh_token", "refresh_token": refresh},
+              timeout=25,
+          )
+          if r.status_code != 200:
+              fail("refresh-token exchange", r.status_code)
+          token = r.json().get("access_token")
+          if not token:
+              fail("Dropbox returned no access token")
+
+          path = f"/ResoFit/BIGO/logs/.chatb2k-large-canary-{os.environ['GITHUB_RUN_ID']}.bin"
+          size = 151 * 1024 * 1024
+          chunk_size = 8 * 1024 * 1024
+          block_size = 4 * 1024 * 1024
+          headers = {"Authorization": f"Bearer {token}"}
+          uploaded = False
+          failure = None
+
+          def dbx_upload(url, arg, data):
+              return requests.post(
+                  url,
+                  headers={**headers, "Dropbox-API-Arg": json.dumps(arg, separators=(",", ":")),
+                           "Content-Type": "application/octet-stream"},
+                  data=data,
+                  timeout=180,
+              )
+
+          try:
+              with tempfile.NamedTemporaryFile() as f:
+                  block = bytes((i % 251 for i in range(block_size)))
+                  remaining = size
+                  while remaining:
+                      piece = block[:min(block_size, remaining)]
+                      f.write(piece)
+                      remaining -= len(piece)
+                  f.flush()
+
+                  outer = hashlib.sha256()
+                  f.seek(0)
+                  while True:
+                      piece = f.read(block_size)
+                      if not piece:
+                          break
+                      outer.update(hashlib.sha256(piece).digest())
+                  expected_hash = outer.hexdigest()
+
+                  f.seek(0)
+                  first = f.read(chunk_size)
+                  r = dbx_upload(
+                      "https://content.dropboxapi.com/2/files/upload_session/start",
+                      {"close": False}, first
+                  )
+                  if r.status_code != 200:
+                      failure = ("upload-session start", r.status_code)
+                  else:
+                      session_id = r.json().get("session_id")
+                      if not session_id:
+                          failure = ("upload-session id missing", None)
+                      else:
+                          offset = len(first)
+                          while failure is None and size - offset > chunk_size:
+                              piece = f.read(chunk_size)
+                              if not piece:
+                                  failure = ("unexpected end of synthetic canary", None)
+                                  break
+                              r = dbx_upload(
+                                  "https://content.dropboxapi.com/2/files/upload_session/append_v2",
+                                  {"cursor": {"session_id": session_id, "offset": offset}, "close": False},
+                                  piece,
+                              )
+                              if r.status_code != 200:
+                                  failure = ("upload-session append", r.status_code)
+                                  break
+                              offset += len(piece)
+
+                          if failure is None:
+                              r = dbx_upload(
+                                  "https://content.dropboxapi.com/2/files/upload_session/finish",
+                                  {"cursor": {"session_id": session_id, "offset": offset},
+                                   "commit": {"path": path, "mode": "add", "autorename": False, "mute": True}},
+                                  f.read(),
+                              )
+                              if r.status_code != 200:
+                                  failure = ("upload-session finish", r.status_code)
+                              elif r.json().get("path_display") != path:
+                                  failure = ("upload response path mismatch", None)
+                              else:
+                                  uploaded = True
+
+              if failure is None:
+                  r = requests.post(
+                      "https://api.dropboxapi.com/2/files/get_metadata",
+                      headers={**headers, "Content-Type": "application/json"},
+                      json={"path": path}, timeout=30
+                  )
+                  if r.status_code != 200:
+                      failure = ("metadata read-back", r.status_code)
+                  else:
+                      metadata = r.json()
+                      if metadata.get("path_display") != path:
+                          failure = ("metadata path mismatch", None)
+                      elif metadata.get("size") != size:
+                          failure = ("metadata byte-size mismatch", None)
+                      elif metadata.get("content_hash") != expected_hash:
+                          failure = ("Dropbox content-hash mismatch", None)
+          finally:
+              if uploaded:
+                  cleanup = requests.post(
+                      "https://api.dropboxapi.com/2/files/delete_v2",
+                      headers={**headers, "Content-Type": "application/json"},
+                      json={"path": path}, timeout=30
+                  )
+                  if cleanup.status_code != 200:
+                      fail("temporary canary cleanup", cleanup.status_code)
+
+          if failure:
+              fail(*failure)
+          print("PASS: 151 MiB synthetic file uploaded through Dropbox resumable sessions; exact path, byte size, and Dropbox content hash verified; temporary object deleted.")
+          PY
