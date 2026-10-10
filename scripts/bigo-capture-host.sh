@@ -250,8 +250,11 @@ import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
 w,h,d,fps,avg,pix,ts,source_url,audio_streams,drive_raw,drive_video,drive_cover=sys.argv[7:]
+def drive_ref(value):
+    parts=value.split(chr(9),1)
+    return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''}
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'folder':'BIGO Highlights Archive','raw':drive_raw,'video':drive_video,'cover':drive_cover}}}
+hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'folder':'BIGO Highlights Archive','raw':drive_ref(drive_raw),'video':drive_ref(drive_video),'cover':drive_ref(drive_cover)}}}
 print(json.dumps({'highlight':hitem}))
 PY
 echo "Captured $HOST"
