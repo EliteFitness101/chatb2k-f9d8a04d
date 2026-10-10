@@ -1,0 +1,37 @@
+name: BIGO source-title safety checks
+
+on:
+  push:
+    branches: [fix/bigo-source-safety-gate-20261010]
+    paths:
+      - 'supabase/functions/content-intelligence-enricher/index.ts'
+      - '.github/workflows/bigo-source-safety-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/content-intelligence-enricher/index.ts'
+      - '.github/workflows/bigo-source-safety-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-title-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert source-level gate precedes Gemini approval
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("supabase/functions/content-intelligence-enricher/index.ts").read_text()
+          gate = source.index("if(SOURCE_BAD.test(sourceText))")
+          gemini = source.index("const g=await gemini(a)", gate)
+          assert gate < gemini, "Source-title safety gate must run before Gemini generation"
+          assert "source_safety_keyword_gate" in source
+          assert "sit\\s+on\\s+(?:dat|that)\\s+face" in source
+          assert "send\\s+nudes" in source
+          assert "safety_keyword_gate" in source
+          print("PASS: explicit source-title gate runs before Gemini; risky sexual solicitation is held before channel approval.")
+          PY
