@@ -13,6 +13,16 @@ COVER="/tmp/bigo-${HOST}-${TS}.jpg"
 LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
+# Archive BIGO media through ChatB2K authenticated resumable Drive sessions.
+drive_put() {
+  local file="$1" mime="$2" name="$3" session result
+  : "${DRIVE_UPLOAD_URL:?DRIVE_UPLOAD_URL is required}"
+  : "${CHATB2K_LIVE_INGEST_KEY:?CHATB2K_LIVE_INGEST_KEY is required}"
+  session="$(curl -fsS -X POST "$DRIVE_UPLOAD_URL" -H "Authorization: Bearer $CHATB2K_LIVE_INGEST_KEY" -H "Content-Type: application/json" --data "$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"mimeType":sys.argv[2]}))' "$name" "$mime")" | python3 -c 'import json,sys; print(json.load(sys.stdin)["uploadUrl"])')"
+  result="$(curl -fsS -X PUT "$session" -H "Content-Type: $mime" --data-binary "@$file")"
+  printf "%s\\t%s" "$(printf "%s" "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')" "$(printf "%s" "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("webViewLink",""))')"
+}
+
 SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
@@ -190,6 +200,9 @@ PY
   exit 0
 fi
 
+DRIVE_RAW="$(drive_put "$RAW" video/mp4 "BIGO-$HOST-$TS-raw.mp4")"
+echo "::notice::Raw BIGO media archived to Google Drive for $HOST"
+
 if [ ! -s "$RAW" ]; then
   echo "::notice::BIGO host $HOST produced no media; continuing."
   rm -f "$RAW"
@@ -202,9 +215,12 @@ TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title",
 if ! ffmpeg -hide_banner -loglevel error -i "$RAW" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$FILE"; then
   echo "::warning::Normalization failed for $HOST"; exit 0
 fi
+DRIVE_VIDEO="$(drive_put "$FILE" video/mp4 "BIGO-$HOST-$TS.mp4")"
 if ! ffmpeg -hide_banner -loglevel error -i "$FILE" -map 0:v:0 -frames:v 1 -q:v 3 "$COVER"; then
   echo "::warning::Cover generation failed for $HOST"; exit 0
 fi
+DRIVE_COVER="$(drive_put "$COVER" image/jpeg "BIGO-$HOST-$TS-cover.jpg")"
+echo "::notice::Raw and normalized BIGO assets archived to Google Drive for $HOST"
 
 META="$(ffprobe -v error -show_entries stream=width,height,r_frame_rate,avg_frame_rate,pix_fmt,codec_type -show_entries format=duration -of json "$FILE")"
 read -r WIDTH HEIGHT FPS AVG_FPS DURATION PIX_FMT AUDIO_STREAMS <<< "$(python3 - "$META" <<'PY'
@@ -232,18 +248,7 @@ BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put 
 COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/covers/${file.split("/").pop()}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
 
 # Archive raw source, normalized video and cover in Google Drive before local cleanup.
-drive_put() {
-  local file="$1" mime="$2" name="$3" session result
-  session="$(curl -fsS -X POST "$DRIVE_UPLOAD_URL" -H "Authorization: Bearer $CHATB2K_LIVE_INGEST_KEY" -H "Content-Type: application/json" --data "$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"mimeType":sys.argv[2]}))' "$name" "$mime")" | python3 -c 'import json,sys; print(json.load(sys.stdin)["uploadUrl"])')"
-  result="$(curl -fsS -X PUT "$session" -H "Content-Type: $mime" --data-binary "@$file")"
-  printf "%s\t%s" "$(printf "%s" "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')" "$(printf "%s" "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("webViewLink",""))')"
-}
-: "${DRIVE_UPLOAD_URL:?DRIVE_UPLOAD_URL is required}"
 : "${CHATB2K_LIVE_INGEST_KEY:?CHATB2K_LIVE_INGEST_KEY is required}"
-DRIVE_RAW="$(drive_put "$RAW" video/mp4 "BIGO-$HOST-$TS-raw.mp4")"
-DRIVE_VIDEO="$(drive_put "$FILE" video/mp4 "BIGO-$HOST-$TS.mp4")"
-DRIVE_COVER="$(drive_put "$COVER" image/jpeg "BIGO-$HOST-$TS-cover.jpg")"
-echo "::notice::Google Drive archive verified for $HOST (raw, normalized, cover)"
 
 python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" <<'PY' > "$RESULT"
 import json,sys
