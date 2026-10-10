@@ -1,0 +1,80 @@
+name: Diagnose BIGO token response shape
+
+on:
+  push:
+    branches: [diag/bigo-token-response-20261010]
+    paths:
+      - '.github/workflows/bigo-token-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  token-shape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect BIGO token response without printing credentials
+        env:
+          BIGO_COOKIE_HEADER: ${{ secrets.BIGO_COOKIE_HEADER }}
+        run: |
+          python -m pip install --quiet 'streamlink>=8.6.1,<9' requests
+          python <<'PY'
+          import base64, json, os, re, secrets, time
+          import requests
+          from streamlink.utils.crypto import encrypt_openssl
+
+          UA = "Mozilla/5.0"
+          KEY = b"undefinedval0x01"
+          cookie = os.environ.get("BIGO_COOKIE_HEADER", "").strip()
+          def headers():
+              h = {"User-Agent": UA, "Accept": "*/*"}
+              if cookie:
+                  h["Cookie"] = cookie
+              return h
+          def callback():
+              return f"jsonpcallback_{int(time.time()*1000)}_{secrets.randbelow(1000001)}"
+          def jsonp(text):
+              m = re.match(r"jsonp\w+\((?P<json>.+?)\);", text, re.S)
+              if not m:
+                  raise ValueError("not JSONP")
+              return json.loads(m.group("json"))
+
+          token_response = requests.get("https://sec.bigo.sg/v1/webjs/t",
+              params={"callback": callback()}, headers={"User-Agent": UA, "Accept": "*/*"}, timeout=15)
+          print(f"token_time_http={token_response.status_code} content_type={token_response.headers.get('Content-Type','unknown')}")
+          token_time = jsonp(token_response.text)
+          ts = token_time.get("time")
+          print(f"token_time_keys={sorted(token_time.keys())} has_time={bool(ts)}")
+
+          token = None
+          if ts:
+              payload = {"dr": secrets.token_hex(16), "business": "bigolive-video", "scene": "", "at_time": ts, "ver": "2.0"}
+              encrypted = encrypt_openssl(json.dumps(payload, separators=(",", ":")).encode(), KEY)
+              response = requests.get("https://sec.bigo.sg/v1/webjs/status",
+                  params={"callback": callback(), "data": base64.b64encode(encrypted).decode()},
+                  headers=headers(), timeout=15)
+              print(f"token_status_http={response.status_code} content_type={response.headers.get('Content-Type','unknown')} cookie_configured={bool(cookie)}")
+              parsed = jsonp(response.text)
+              data = parsed.get("data")
+              print(f"token_status_keys={sorted(parsed.keys())} data_type={type(data).__name__} data_keys={sorted(data.keys()) if isinstance(data,dict) else []} token_present={bool(parsed.get('token') or (data.get('token') if isinstance(data,dict) else None))}")
+              token = parsed.get("token") or (data.get("token") if isinstance(data,dict) else None)
+          else:
+              print("token_status_skipped=no_time_field")
+
+          if token:
+              api = requests.post("https://ta.bigo.tv/official_website/studio/getInternalStudioInfo",
+                  params={"siteId":"748833040","verify":"","token":token},
+                  headers={**headers(), "Accept":"application/json"}, timeout=15)
+              print(f"studio_api_http={api.status_code} content_type={api.headers.get('Content-Type','unknown')}")
+              try:
+                  body = api.json()
+                  data = body.get("data") or {}
+                  print(f"studio_api_keys={sorted(body.keys())} data_keys={sorted(data.keys()) if isinstance(data,dict) else []} hls_present={bool(isinstance(data,dict) and (data.get('hls_src') or data.get('hlsSrc') or data.get('hls')))}")
+              except Exception:
+                  print("studio_api_json=false")
+          else:
+              print("studio_api_skipped=no_token_field")
+          print("Diagnostic complete; no token, cookie, encrypted payload, or signed media URL was printed.")
+          PY
