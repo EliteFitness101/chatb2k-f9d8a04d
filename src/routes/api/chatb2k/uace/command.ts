@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { buildExecutionPlan } from "@/lib/chatb2k/universal-config-engine";
+import { inspectProviderReadOnly } from "@/lib/chatb2k/provider-adapters.server";
 
 const MAX_COMMAND_LENGTH = 2000;
 
@@ -50,6 +51,18 @@ export const Route = createFileRoute("/api/chatb2k/uace/command")({
         }
 
         const plan = buildExecutionPlan(body.command);
+        let inspection: { ok: boolean; status: string; evidence?: Record<string, string | number | boolean | null> } | null = null;
+        const step = plan.steps[0];
+        if (step && step.risk === "read" && (plan.command.intent === "inspect" || plan.command.intent === "verify")) {
+          try {
+            const evidence = await inspectProviderReadOnly(step.provider);
+            inspection = { ok: evidence.ok, status: "verified-read-only", evidence: { ...evidence.evidence, httpStatus: evidence.status, checkedAt: evidence.checkedAt, resource: evidence.resource } };
+          } catch (error) {
+            inspection = { ok: false, status: "inspection-unavailable" };
+            console.warn("[UACE] read-only inspection unavailable", { provider: step.provider, error: error instanceof Error ? error.message : "unknown error" });
+          }
+        }
+
         const auditClient = createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
         const { error: auditErrorWrite } = await auditClient.from("uace_command_audit").insert({
           actor_user_id: user.id,
@@ -60,8 +73,8 @@ export const Route = createFileRoute("/api/chatb2k/uace/command")({
           environment: plan.command.environment,
           risk: plan.steps[0]?.risk ?? "blocked",
           approval_state: plan.approval,
-          outcome: "planned",
-          evidence: { step_count: plan.steps.length, execution_allowed: plan.executionAllowed },
+          outcome: inspection?.ok ? "verified-read-only" : inspection ? "inspection-unavailable" : "planned",
+          evidence: { step_count: plan.steps.length, execution_allowed: plan.executionAllowed, inspection: inspection ? { ok: inspection.ok, status: inspection.status, evidence: inspection.evidence ?? {} } : null },
         });
         if (auditErrorWrite) {
           // Fail closed: do not return a plan as actionable when its audit cannot be persisted.
@@ -73,6 +86,7 @@ export const Route = createFileRoute("/api/chatb2k/uace/command")({
           ok: true,
           plan,
           execution: { attempted: false, status: "plan-only" },
+          inspection,
         }, { status: 200 });
       },
     },
