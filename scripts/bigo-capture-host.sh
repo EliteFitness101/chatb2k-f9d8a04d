@@ -241,42 +241,32 @@ if not (1 <= d <= 180): raise SystemExit('QA duration')
 if p != 'yuv420p': raise SystemExit('QA pixel format')
 PY
 
-export FILE COVER
-BLOB_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.FILE; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/${file.split("/").pop()}`,body,{access:"public",addRandomSuffix:false,contentType:"video/mp4"}); console.log(r.url);')"
-COVER_URL="$(node --input-type=module -e 'import fs from "node:fs"; import { put } from "@vercel/blob"; const file=process.env.COVER; const body=fs.readFileSync(file); const r=await put(`buffer/assets/bigo_highlights/covers/${file.split("/").pop()}`,body,{access:"public",addRandomSuffix:false,contentType:"image/jpeg"}); console.log(r.url);')"
-
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" <<'PY' > "$RESULT"
-import json,sys
-info=json.loads(sys.argv[1])
-host,name,title,blob,cover=sys.argv[2:7]
-w,h,d,fps,avg,pix,ts,source_url,audio_streams=sys.argv[7:]
-audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
-print(json.dumps({'highlight':hitem}))
-PY
-
-# Optional Dropbox archive. The GitHub runner needs its own scoped Dropbox OAuth token;
-# the ChatGPT Dropbox connection is not automatically available inside GitHub Actions.
-# Files up to 150 MiB use a single Dropbox upload; larger files use resumable upload sessions.
-# Refresh a durable offline OAuth credential for each scheduled run.
+# Dropbox is the canonical media store for this capture path. Never attempt Blob uploads:
+# the store is suspended, and downstream ingestion accepts an HTTPS media URL.
+if [ -z "${DROPBOX_APP_KEY:-}" ] || [ -z "${DROPBOX_APP_SECRET:-}" ] || [ -z "${DROPBOX_REFRESH_TOKEN:-}" ]; then
+  echo "::error::Dropbox credentials are required; refusing to create a capture without a verified archive."
+  exit 1
+fi
+# Exchange the GitHub Actions Dropbox refresh token. Dropbox is mandatory for this
+# capture path; no Blob upload fallback is permitted while the Blob store is suspended.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
     DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
     export DROPBOX_ACCESS_TOKEN
   else
-    echo "::warning::Dropbox OAuth refresh failed; existing Blob pipeline remains available."
+    echo "::error::Dropbox OAuth refresh failed; refusing to create an unarchived capture."
   fi
 fi
 dropbox_upload() {
-  local SRC="$1" DEST="$2"
+  local SRC="$1" DEST="$2" SHARE="${3:-false}"
   [ -n "${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
   [ -s "$SRC" ] || return 1
   # Upload via a session for large captures; verify both metadata and Dropbox content hash.
   # The Dropbox content hash is SHA-256 over concatenated SHA-256 hashes of 4 MiB blocks.
-  python3 - "$SRC" "$DEST" <<'PYDROP'
+  python3 - "$SRC" "$DEST" "$SHARE" <<'PYDROP'
 import hashlib, json, os, sys, urllib.error, urllib.request
 
-src, dest = sys.argv[1], sys.argv[2]
+src, dest, share = sys.argv[1:4]
 token = os.environ.get("DROPBOX_ACCESS_TOKEN", "")
 if not token:
     raise SystemExit("Dropbox access token is unavailable")
@@ -367,33 +357,54 @@ if int(metadata.get("size", -1)) != size:
     raise RuntimeError("Dropbox read-back size mismatch")
 if metadata.get("content_hash") != expected_hash:
     raise RuntimeError("Dropbox read-back content hash mismatch")
-print(f"Dropbox archive verified: {size} bytes; content hash matched.")
+if share.lower() == "true":
+    shared = request(
+        "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings",
+        json.dumps({"path": dest, "settings": {"requested_visibility": "public", "audience": "public", "access": "viewer"}}).encode(),
+        api_headers(),
+    )
+    url = shared.get("url")
+    if not url:
+        raise RuntimeError("Dropbox did not return a public media URL")
+    if "dl=0" in url:
+        url = url.replace("dl=0", "dl=1")
+    elif "?" in url:
+        url += "&dl=1"
+    else:
+        url += "?dl=1"
+    print(url)
+else:
+    print(f"Dropbox archive verified: {size} bytes; content hash matched.", file=sys.stderr)
 PYDROP
 }
 
-if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
-  if dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/${HOST}-${TS}-raw.mp4"; then
-    echo "::notice::Dropbox raw capture archived for $HOST"
-  else
-    echo "::warning::Dropbox raw capture archive failed for $HOST; existing Blob pipeline preserved."
-  fi
-  if dropbox_upload "$FILE" "/ResoFit/BIGO/processed/${HOST}-${TS}.mp4"; then
-    echo "::notice::Dropbox processed video archived for $HOST"
-  else
-    echo "::warning::Dropbox processed video archive failed for $HOST; existing Blob pipeline preserved."
-  fi
-  if dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/${HOST}-${TS}-cover.jpg"; then
-    echo "::notice::Dropbox cover archived for $HOST"
-  else
-    echo "::warning::Dropbox cover archive failed for $HOST."
-  fi
-  if dropbox_upload "$RESULT" "/ResoFit/BIGO/metadata/${HOST}-${TS}.json"; then
-    echo "::notice::Dropbox metadata archived for $HOST"
-  else
-    echo "::warning::Dropbox metadata archive failed for $HOST."
-  fi
-else
-  echo "::warning::Dropbox archive is not enabled: configure DROPBOX_APP_KEY, DROPBOX_APP_SECRET and DROPBOX_REFRESH_TOKEN in GitHub Actions. Existing Blob + ChatB2K ingestion remains unchanged."
+if [ -z "${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  echo "::error::Dropbox access token unavailable; refusing to create a capture without a verified archive."
+  exit 1
+fi
+
+export FILE COVER
+BLOB_URL="$(dropbox_upload "$FILE" "/ResoFit/BIGO/processed/${HOST}-${TS}.mp4" true)"
+COVER_URL="$(dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/${HOST}-${TS}-cover.jpg" true)"
+
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" <<'PY' > "$RESULT"
+import json,sys
+info=json.loads(sys.argv[1])
+host,name,title,blob,cover=sys.argv[2:7]
+w,h,d,fps,avg,pix,ts,source_url,audio_streams=sys.argv[7:]
+audio_present=int(audio_streams)>0
+hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
+print(json.dumps({'highlight':hitem}))
+PY
+
+# Preserve source media and metadata in the Dropbox archive; upload/read-back hash checks are mandatory.
+if ! dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/${HOST}-${TS}-raw.mp4"; then
+  echo "::error::Dropbox raw capture archive failed for $HOST."
+  exit 1
+fi
+if ! dropbox_upload "$RESULT" "/ResoFit/BIGO/metadata/${HOST}-${TS}.json"; then
+  echo "::error::Dropbox metadata archive failed for $HOST."
+  exit 1
 fi
 
 echo "Captured $HOST"

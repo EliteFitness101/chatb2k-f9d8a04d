@@ -1,5 +1,5 @@
 name: BIGO Live -> ChatB2K -> Buffer
-# Production capture workflow — proven capture logic preserved; YAML syntax repaired.
+# Production capture workflow — Dropbox-first media archive; no Vercel Blob dependency.
 
 on:
   push:
@@ -19,7 +19,6 @@ env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
-  BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
@@ -31,19 +30,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Install capture and Blob tools
+      - name: Install capture tools (Dropbox archive)
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg chromium
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
-          npm install --no-save --no-package-lock @vercel/blob
 
       - name: Capture, normalize and prepare ChatB2K batch
         shell: bash
         run: |
           set -euo pipefail
-          : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
@@ -80,7 +77,6 @@ jobs:
           fi
           printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts.txt
           echo "Selected $(wc -l < /tmp/bigo-hosts.txt) host(s) for capture"
-          export BLOB_READ_WRITE_TOKEN
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
           run_capture() {

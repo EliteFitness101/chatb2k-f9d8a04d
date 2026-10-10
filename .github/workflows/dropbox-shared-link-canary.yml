@@ -1,0 +1,98 @@
+name: Dropbox BIGO public-media URL canary
+
+on:
+  push:
+    branches: [fix/bigo-dropbox-primary-20261010]
+    paths:
+      - '.github/workflows/dropbox-shared-link-canary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shared-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify public direct-download URL and cleanup
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python -m pip install --quiet requests
+          python <<'PY'
+          import json, os, sys, requests
+
+          def fail(message, status=None):
+              suffix = f" (HTTP {status})" if status else ""
+              print(f"FAIL: {message}{suffix}; credentials suppressed.")
+              raise SystemExit(1)
+
+          key, secret, refresh = (os.getenv(k, "") for k in (
+              "DROPBOX_APP_KEY", "DROPBOX_APP_SECRET", "DROPBOX_REFRESH_TOKEN"
+          ))
+          if not all((key, secret, refresh)):
+              fail("required Dropbox Actions secrets unavailable")
+          r = requests.post("https://api.dropboxapi.com/oauth2/token",
+              auth=(key, secret),
+              data={"grant_type":"refresh_token","refresh_token":refresh}, timeout=25)
+          if r.status_code != 200:
+              fail("refresh-token exchange", r.status_code)
+          token = r.json().get("access_token")
+          if not token:
+              fail("Dropbox returned no access token")
+
+          path = f"/ResoFit/BIGO/logs/.chatb2k-share-canary-{os.environ['GITHUB_RUN_ID']}.mp4"
+          payload = b"ChatB2K Dropbox shared-media URL probe; safe to delete.\n"
+          headers = {"Authorization": f"Bearer {token}", "Content-Type":"application/json"}
+          uploaded = False
+          shared_url = None
+          failure = None
+          try:
+              r = requests.post("https://content.dropboxapi.com/2/files/upload",
+                  headers={"Authorization":f"Bearer {token}",
+                           "Dropbox-API-Arg":json.dumps({"path":path,"mode":"add","autorename":False,"mute":True}),
+                           "Content-Type":"application/octet-stream"},
+                  data=payload, timeout=30)
+              if r.status_code != 200:
+                  failure = ("test file upload", r.status_code)
+              else:
+                  uploaded = True
+                  r = requests.post("https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings",
+                      headers=headers,
+                      json={"path":path,"settings":{"requested_visibility":"public","audience":"public","access":"viewer"}},
+                      timeout=30)
+                  if r.status_code != 200:
+                      failure = ("public shared-link creation (verify sharing.write scope/account policy)", r.status_code)
+                  else:
+                      shared_url = r.json().get("url")
+                      if not shared_url:
+                          failure = ("Dropbox returned no shared URL", None)
+                      else:
+                          direct_url = shared_url.replace("dl=0","dl=1")
+                          probe = requests.get(direct_url, headers={"Range":"bytes=0-31"}, allow_redirects=True, timeout=30)
+                          if probe.status_code not in (200,206):
+                              failure = ("public direct-download probe", probe.status_code)
+                          elif not probe.content:
+                              failure = ("public direct-download returned empty body", None)
+                          elif "dropbox" not in probe.url.lower():
+                              failure = ("public direct-download redirect host unexpected", None)
+                          else:
+                              print(f"PASS: shared link resolves publicly; HTTP {probe.status_code}; content-type={probe.headers.get('Content-Type','unknown')}; range={probe.headers.get('Content-Range','not advertised')}; credentials suppressed.")
+          finally:
+              if uploaded and shared_url:
+                  revoke = requests.post("https://api.dropboxapi.com/2/sharing/revoke_shared_link",
+                      headers=headers, json={"url":shared_url}, timeout=25)
+                  if revoke.status_code not in (200,409):
+                      fail("shared-link revocation cleanup", revoke.status_code)
+              if uploaded:
+                  delete = requests.post("https://api.dropboxapi.com/2/files/delete_v2",
+                      headers=headers, json={"path":path}, timeout=25)
+                  if delete.status_code != 200:
+                      fail("temporary test-file cleanup", delete.status_code)
+          if failure:
+              fail(*failure)
+          PY
