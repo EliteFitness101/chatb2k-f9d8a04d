@@ -26,9 +26,9 @@ TOKEN_STATUS='https://sec.bigo.sg/v1/webjs/status'
 KEY=b'undefinedval0x01'
 UA='Mozilla/5.0'
 COOKIE=os.environ.get('BIGO_COOKIE_HEADER','').strip()
-def request_headers(accept='*/*'):
+def request_headers(accept='*/*', authenticated=True):
     h={'User-Agent':UA,'Accept':accept}
-    if COOKIE:
+    if COOKIE and authenticated:
         h['Cookie']=COOKIE
     return h
 
@@ -42,7 +42,7 @@ def jsonp(text):
     return json.loads(m.group('json'))
 
 def resolve_token():
-    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12)
+    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(authenticated=False),timeout=12)
     tr.raise_for_status()
     ts=jsonp(tr.text)['time']
     payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
