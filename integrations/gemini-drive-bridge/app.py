@@ -74,7 +74,7 @@ def list_allowed_files(service, question: str, limit: int) -> list[dict[str, Any
     if not FOLDER_IDS:
         raise HTTPException(status_code=503, detail="No approved Drive folders configured")
     files: list[dict[str, Any]] = []
-    terms = [t.strip(" \\"'.,!?") for t in question.split() if len(t.strip(" \\"'.,!?")) >= 3][:8]
+    terms = [t.strip(" \"'.,!?") for t in question.split() if len(t.strip(" \"'.,!?")) >= 3][:8]
     for folder_id in sorted(FOLDER_IDS):
         query = f"'{folder_id}' in parents and trashed = false"
         response = service.files().list(
