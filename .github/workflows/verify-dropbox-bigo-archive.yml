@@ -2,6 +2,10 @@ name: Verify Dropbox BIGO Archive Access
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ops/dropbox-bigo-archive-smoke-20261010]
+    paths:
+      - '.github/workflows/verify-dropbox-bigo-archive.yml'
 
 permissions:
   contents: read
