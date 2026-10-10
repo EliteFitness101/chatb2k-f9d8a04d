@@ -37,7 +37,9 @@ jobs:
           fi
 
       - name: Install AWS CLI
-        run: python3 -m pip install --user --disable-pip-version-check awscli
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq awscli
 
       - name: Verify private R2 upload, HEAD, download and checksum
         shell: bash
