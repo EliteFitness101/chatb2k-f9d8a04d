@@ -18,7 +18,7 @@ SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
 # This is the critical fallback for hosts that are visibly live but now return an empty
 # hls_src to the older unauthenticated getInternalStudioInfo request.
 INFO="$(python3 - "$HOST" <<'PY'
-import base64,json,secrets,sys,time,re,requests
+import base64,json,secrets,sys,time,re,requests,os
 host=sys.argv[1]
 API='https://ta.bigo.tv/official_website/studio/getInternalStudioInfo'
 TOKEN_T='https://sec.bigo.sg/v1/webjs/t'
