@@ -1,0 +1,38 @@
+name: BIGO Dropbox large-file archive checks
+
+on:
+  push:
+    branches: [ops/dropbox-large-file-upload-20261010]
+    paths:
+      - 'scripts/bigo-capture-host.sh'
+      - '.github/workflows/dropbox-large-file-upload-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  archive-static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: bash -n scripts/bigo-capture-host.sh
+      - name: Assert resumable upload and integrity checks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("scripts/bigo-capture-host.sh").read_text()
+          required = [
+              "files/upload_session/start",
+              "files/upload_session/append_v2",
+              "files/upload_session/finish",
+              "files/get_metadata",
+              "metadata.get(\"content_hash\") != expected_hash",
+              "int(metadata.get(\"size\", -1)) != size",
+          ]
+          missing = [needle for needle in required if needle not in source]
+          assert not missing, f"Missing Dropbox safety controls: {missing}"
+          assert "archive skipped for" not in source, "Old >150 MiB skip path still present"
+          print("PASS: shell syntax valid; resumable sessions and byte-size/content-hash read-back checks present.")
+          PY
