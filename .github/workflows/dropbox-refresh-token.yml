@@ -1,0 +1,143 @@
+```yaml
+name: Obtain and Save Dropbox Refresh Token
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Exchange Dropbox authorization code and save refresh token
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_AUTH_CODE: ${{ secrets.DROPBOX_AUTH_CODE }}
+          GH_ADMIN_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python -m pip install --quiet requests pynacl
+
+          python <<'PY'
+          import os
+          import sys
+          import base64
+          import requests
+          from nacl.public import PublicKey, SealedBox
+
+          def fail(message):
+              print(f"ERROR: {message}")
+              sys.exit(1)
+
+          app_key = os.environ.get("DROPBOX_APP_KEY", "")
+          app_secret = os.environ.get("DROPBOX_APP_SECRET", "")
+          auth_code = os.environ.get("DROPBOX_AUTH_CODE", "")
+          gh_token = os.environ.get("GH_ADMIN_TOKEN", "")
+          repo = os.environ["GITHUB_REPOSITORY"]
+
+          if not all([app_key, app_secret, auth_code, gh_token]):
+              fail(
+                  "Missing required GitHub secrets. Configure "
+                  "DROPBOX_APP_KEY, DROPBOX_APP_SECRET, "
+                  "DROPBOX_AUTH_CODE and GH_ADMIN_TOKEN."
+              )
+
+          headers = {
+              "Authorization": f"Bearer {gh_token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          # Exchange the one-time Dropbox authorization code.
+          response = requests.post(
+              "https://api.dropboxapi.com/oauth2/token",
+              auth=(app_key, app_secret),
+              data={
+                  "code": auth_code,
+                  "grant_type": "authorization_code",
+              },
+              timeout=30,
+          )
+
+          if response.status_code != 200:
+              fail(
+                  "Dropbox token exchange failed "
+                  f"(HTTP {response.status_code}). "
+                  "The authorization code may be expired, used, "
+                  "or associated with different app credentials."
+              )
+
+          token_data = response.json()
+          refresh_token = token_data.get("refresh_token")
+
+          if not refresh_token:
+              fail(
+                  "Dropbox did not return a refresh token. "
+                  "Confirm offline access was requested."
+              )
+
+          # Obtain GitHub's public key for encrypting repository secrets.
+          api = f"https://api.github.com/repos/{repo}/actions/secrets"
+          response = requests.get(
+              f"{api}/public-key",
+              headers=headers,
+              timeout=30,
+          )
+
+          if response.status_code != 200:
+              fail(
+                  "Cannot read GitHub Actions secret public key "
+                  f"(HTTP {response.status_code}). Check GH_ADMIN_TOKEN "
+                  "permissions."
+              )
+
+          public_key_data = response.json()
+          public_key = PublicKey(
+              base64.b64decode(public_key_data["key"])
+          )
+          encrypted_value = base64.b64encode(
+              SealedBox(public_key).encrypt(refresh_token.encode())
+          ).decode()
+
+          # Persist the refresh token as a GitHub repository secret.
+          response = requests.put(
+              f"{api}/DROPBOX_REFRESH_TOKEN",
+              headers=headers,
+              json={
+                  "encrypted_value": encrypted_value,
+                  "key_id": public_key_data["key_id"],
+              },
+              timeout=30,
+          )
+
+          if response.status_code not in (201, 204):
+              fail(
+                  "GitHub rejected the secret update "
+                  f"(HTTP {response.status_code}). Check repository "
+                  "Actions-secret write permissions."
+              )
+
+          # Confirm the secret exists without reading or exposing its value.
+          response = requests.get(
+              f"{api}/DROPBOX_REFRESH_TOKEN",
+              headers=headers,
+              timeout=30,
+          )
+
+          if response.status_code != 200:
+              fail(
+                  "Secret update was accepted, but read-back metadata "
+                  "verification failed."
+              )
+
+          print(
+              "SUCCESS: Dropbox refresh token was exchanged, encrypted, "
+              "saved as DROPBOX_REFRESH_TOKEN, and verified by metadata."
+          )
+          PY
+```
