@@ -71,7 +71,8 @@ jobs:
               try:
                   body = api.json()
                   data = body.get("data") or {}
-                  print(f"studio_api_keys={sorted(body.keys())} data_keys={sorted(data.keys()) if isinstance(data,dict) else []} hls_present={bool(isinstance(data,dict) and (data.get('hls_src') or data.get('hlsSrc') or data.get('hls')))}")
+                  cdn = data.get("cdn_src") if isinstance(data,dict) else None
+                  print(f"studio_api_keys={sorted(body.keys())} data_keys={sorted(data.keys()) if isinstance(data,dict) else []} hls_present={bool(isinstance(data,dict) and (data.get('hls_src') or data.get('hlsSrc') or data.get('hls')))} alive={data.get('alive') if isinstance(data,dict) else None} room_status={data.get('roomStatus') if isinstance(data,dict) else None} need_login={data.get('needLogin') if isinstance(data,dict) else None} cdn_src_type={type(cdn).__name__} cdn_src_keys={sorted(cdn.keys()) if isinstance(cdn,dict) else []} cdn_src_items={len(cdn) if isinstance(cdn,(list,dict)) else None}")
               except Exception:
                   print("studio_api_json=false")
           else:
