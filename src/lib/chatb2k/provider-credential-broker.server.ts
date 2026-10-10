@@ -5,12 +5,12 @@
 import type { Provider } from "@/lib/chatb2k/universal-config-engine";
 
 const SERVER_CREDENTIALS: Record<Provider, string[]> = {
-  "cloudflare-r2": ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"],
+  "cloudflare-r2": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_R2_BUCKET"],
   github: ["CHATB2K_GITHUB_TOKEN"],
   vercel: ["VERCEL_TOKEN"],
   supabase: ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
   buffer: ["BUFFER_ACCESS_TOKEN"],
-  "google-drive": ["GOOGLE_DRIVE_REFRESH_TOKEN", "GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET"],
+  "google-drive": ["GOOGLE_DRIVE_REFRESH_TOKEN", "GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET", "GOOGLE_DRIVE_ARCHIVE_FOLDER_ID"],
 };
 
 export interface ProviderReadiness {
