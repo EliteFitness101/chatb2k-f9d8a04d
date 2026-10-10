@@ -89,7 +89,7 @@ export function parseConfigCommand(raw: string): ConfigCommand {
         ? "read-only"
         : "unspecified";
 
-  const targetMatch = text.match(/\b(?:for|on|in|to|into|from)\s+([a-z0-9._/-]{2,80})/i);
+  const targetMatch = text.match(/\b(?:for|on|in|to|into|from)\s+(?:project|repository|repo|bucket|folder|channel)\s+([a-z0-9._/-]{2,80})/i) ?? text.match(/\b(?:for|on|in|to|into|from)\s+([a-z0-9._/-]{2,80})/i);
   return {
     raw: text,
     intent,
