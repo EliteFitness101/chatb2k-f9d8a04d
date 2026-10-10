@@ -7,6 +7,12 @@ on:
       - 'scripts/bigo-capture-host.sh'
       - '.github/workflows/bigo-live-automation.yml'
       - '.github/workflows/dropbox-primary-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/bigo-capture-host.sh'
+      - '.github/workflows/bigo-live-automation.yml'
+      - '.github/workflows/dropbox-primary-check.yml'
 
 permissions:
   contents: read
