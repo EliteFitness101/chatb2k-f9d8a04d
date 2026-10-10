@@ -1,0 +1,64 @@
+name: R2 private-bucket smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-private-bucket-smoke
+  cancel-in-progress: false
+
+jobs:
+  verify-r2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+    steps:
+      - name: Validate required configuration without printing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in R2_ACCOUNT_ID R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required GitHub Actions secret is missing: ${name}"
+              exit 1
+            fi
+          done
+          if ! [[ "$R2_ACCOUNT_ID" =~ ^[a-f0-9]{32}$ ]]; then
+            echo "::error::R2_ACCOUNT_ID must be the 32-character Cloudflare account ID."
+            exit 1
+          fi
+
+      - name: Install AWS CLI
+        run: python3 -m pip install --user --disable-pip-version-check awscli
+
+      - name: Verify private R2 upload, HEAD, download and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          KEY="ops-smoke/github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
+          TMP="$(mktemp -d)"
+          cleanup() {
+            aws s3api delete-object --bucket "$R2_BUCKET" --key "$KEY" --endpoint-url "$ENDPOINT" --region auto >/dev/null 2>&1 || true
+            rm -rf "$TMP"
+          }
+          trap cleanup EXIT
+          printf 'ResoFit ChatB2K R2 smoke test\nrun=%s\nattempt=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > "$TMP/source.txt"
+          EXPECTED="$(sha256sum "$TMP/source.txt" | awk '{print $1}')"
+          aws s3api put-object --bucket "$R2_BUCKET" --key "$KEY" --body "$TMP/source.txt" --content-type text/plain --endpoint-url "$ENDPOINT" --region auto >/dev/null
+          SIZE="$(aws s3api head-object --bucket "$R2_BUCKET" --key "$KEY" --endpoint-url "$ENDPOINT" --region auto --query ContentLength --output text)"
+          test "$SIZE" -eq "$(wc -c < "$TMP/source.txt")"
+          aws s3api get-object --bucket "$R2_BUCKET" --key "$KEY" "$TMP/download.txt" --endpoint-url "$ENDPOINT" --region auto >/dev/null
+          ACTUAL="$(sha256sum "$TMP/download.txt" | awk '{print $1}')"
+          test "$EXPECTED" = "$ACTUAL"
+          echo "PASS: R2 upload, HEAD, GET and SHA-256 verification succeeded."
+          echo "Object size verified: $SIZE bytes. Temporary test object will be removed by cleanup."
