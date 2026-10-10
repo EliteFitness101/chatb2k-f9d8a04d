@@ -72,7 +72,7 @@ jobs:
                       if not shared_url:
                           failure = ("Dropbox returned no shared URL", None)
                       else:
-                          direct_url = shared_url.replace("?dl=0","?raw=1")
+                          direct_url = shared_url.replace("dl=0","dl=1")
                           probe = requests.get(direct_url, headers={"Range":"bytes=0-31"}, allow_redirects=True, timeout=30)
                           if probe.status_code not in (200,206):
                               failure = ("public direct-download probe", probe.status_code)
