@@ -1,0 +1,105 @@
+name: Verify Dropbox BIGO Archive Access
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-dropbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify refresh token, folder write, metadata read, and cleanup
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python -m pip install --quiet requests
+          python <<'PY'
+          import json
+          import os
+          import sys
+          import requests
+
+          def stop(step, status=None):
+              suffix = f" (HTTP {status})" if status is not None else ""
+              print(f"FAIL: {step}{suffix}; no credential values were printed.")
+              sys.exit(1)
+
+          key = os.environ.get("DROPBOX_APP_KEY", "")
+          secret = os.environ.get("DROPBOX_APP_SECRET", "")
+          refresh = os.environ.get("DROPBOX_REFRESH_TOKEN", "")
+          if not all((key, secret, refresh)):
+              stop("required Dropbox Actions secrets are unavailable")
+
+          r = requests.post(
+              "https://api.dropboxapi.com/oauth2/token",
+              auth=(key, secret),
+              data={"grant_type": "refresh_token", "refresh_token": refresh},
+              timeout=25,
+          )
+          if r.status_code != 200:
+              stop("refresh-token exchange", r.status_code)
+          token = r.json().get("access_token")
+          if not token:
+              stop("Dropbox returned no access token")
+
+          path = f"/ResoFit/BIGO/logs/.chatb2k-dropbox-smoke-{os.environ['GITHUB_RUN_ID']}.txt"
+          payload = b"ChatB2K Dropbox connectivity smoke test. Safe to delete.\n"
+          headers = {"Authorization": f"Bearer {token}"}
+          uploaded = False
+          failure = None
+
+          try:
+              r = requests.post(
+                  "https://content.dropboxapi.com/2/files/upload",
+                  headers={
+                      **headers,
+                      "Dropbox-API-Arg": json.dumps({
+                          "path": path, "mode": "add", "autorename": False, "mute": True
+                      }),
+                      "Content-Type": "application/octet-stream",
+                  },
+                  data=payload,
+                  timeout=30,
+              )
+              if r.status_code != 200:
+                  failure = ("temporary test-file upload", r.status_code)
+              else:
+                  uploaded = True
+                  info = r.json()
+                  if info.get("path_display") != path or info.get("size") != len(payload):
+                      failure = ("uploaded-file response validation", None)
+
+              if failure is None:
+                  r = requests.post(
+                      "https://api.dropboxapi.com/2/files/get_metadata",
+                      headers={**headers, "Content-Type": "application/json"},
+                      json={"path": path},
+                      timeout=25,
+                  )
+                  if r.status_code != 200:
+                      failure = ("read-back metadata verification", r.status_code)
+                  else:
+                      info = r.json()
+                      if info.get("path_display") != path or info.get("size") != len(payload):
+                          failure = ("read-back metadata validation", None)
+          finally:
+              if uploaded:
+                  cleanup = requests.post(
+                      "https://api.dropboxapi.com/2/files/delete_v2",
+                      headers={**headers, "Content-Type": "application/json"},
+                      json={"path": path},
+                      timeout=25,
+                  )
+                  if cleanup.status_code != 200:
+                      stop("temporary test-file cleanup", cleanup.status_code)
+
+          if failure:
+              stop(*failure)
+          print("SUCCESS: saved Dropbox refresh token exchanged; test file uploaded, metadata read back, and test file deleted. No token value was displayed.")
+          PY
