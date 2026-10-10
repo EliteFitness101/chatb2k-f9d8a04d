@@ -247,16 +247,14 @@ if [ -z "${DROPBOX_APP_KEY:-}" ] || [ -z "${DROPBOX_APP_SECRET:-}" ] || [ -z "${
   echo "::error::Dropbox credentials are required; refusing to create a capture without a verified archive."
   exit 1
 fi
-# Optional Dropbox archive. The GitHub runner needs its own scoped Dropbox OAuth token;
-# the ChatGPT Dropbox connection is not automatically available inside GitHub Actions.
-# Files up to 150 MiB use a single Dropbox upload; larger files use resumable upload sessions.
-# Refresh a durable offline OAuth credential for each scheduled run.
+# Exchange the GitHub Actions Dropbox refresh token. Dropbox is mandatory for this
+# capture path; no Blob upload fallback is permitted while the Blob store is suspended.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
     DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
     export DROPBOX_ACCESS_TOKEN
   else
-    echo "::warning::Dropbox OAuth refresh failed; existing Blob pipeline remains available."
+    echo "::error::Dropbox OAuth refresh failed; refusing to create an unarchived capture."
   fi
 fi
 dropbox_upload() {
