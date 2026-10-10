@@ -78,7 +78,7 @@ export function parseConfigCommand(raw: string): ConfigCommand {
   if (ARCHIVE_WORDS.test(text)) intent = "archive";
   else if (PUBLISH_WORDS.test(text)) intent = "publish";
   else if (VERIFY_WORDS.test(text)) intent = "verify";
-  else if (CONFIGURE_WORDS.test(text)) intent = "configure";
+  else if (CONFIGURE_WORDS.test(text) || MUTATION_WORDS.test(text)) intent = "configure";
   else if (INSPECT_WORDS.test(text)) intent = "inspect";
 
   const environment: ConfigCommand["environment"] = PROD_WORDS.test(text)
