@@ -4,9 +4,9 @@
 
 `src/lib/chatb2k/universal-config-engine.ts` is the first policy/planning layer for a text- or voice-transcribed command. It classifies provider, intent, environment and risk; creates a structured plan with scope hints and verification; requires approval for staging and production writes; blocks destructive and ambiguous multi-provider actions; and emits a correlation ID plus mandatory guardrails.
 
-Unit tests are in `src/lib/chatb2k/universal-config-engine.test.ts`. The stable ID is for correlation only, not a cryptographic signature.
+Policy and credential broker tests are in `tests/chatb2k/`. The stable ID is for correlation only, not a cryptographic signature.
 
-**This is not yet an executing agent.** No provider credentials are read, no API calls are made, and no secrets are created or distributed by this module. A server-side executor, managed credential vault, provider-specific adapters, persistent audit store, and voice/text entrypoint are required before autonomous configuration is enabled.
+**This is not yet an autonomous configuration agent.** An authenticated plan-only gateway and short-lived exact-plan approval-record endpoint exist, plus read-only provider inspection adapters. No provider write adapters, managed vault integration, task queue, or voice capture are enabled. Provider API credentials must be set in server-side secret stores and verified before any write execution can be considered.
 
 ## Command contract
 
@@ -54,9 +54,9 @@ Never infer permission from the phrase “do it”, a voiceprint, or the presenc
 
 1. Run unit tests and project build on this branch.
 2. Implement a server-only command endpoint and durable approval/audit storage. Do not expose execution functions to the client bundle.
-3. Add one provider adapter at a time, beginning with read-only inspection.
-4. Run contract tests using sandbox/test accounts; prove deny cases as well as success cases.
-5. Add secret-vault integration and validate rotation/revocation.
+3. Read-only inspection adapters are present for GitHub, Vercel, Supabase Auth health, Cloudflare R2 bucket metadata, Google Drive folder listing, and Buffer account metadata; verify each using authorized sandbox credentials.
+4. Run authenticated endpoint smoke tests after applying the additive migration to an approved non-production Supabase target; prove unauthorized deny cases and successful audit writes.
+5. Add a managed credential vault and validate token scope, rotation, revocation, and expiry.
 6. Enable staging writes only after approvals and audit verification work.
 7. Test production approval, timeout, duplicate request, partial failure, rollback, and operator kill switch.
 8. Keep the feature disabled by default until security review and end-to-end evidence are attached to the pull request.
