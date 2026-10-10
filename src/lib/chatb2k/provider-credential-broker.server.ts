@@ -9,7 +9,7 @@ const SERVER_CREDENTIALS: Record<Provider, string[]> = {
   github: ["CHATB2K_GITHUB_TOKEN"],
   vercel: ["VERCEL_TOKEN"],
   supabase: ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
-  buffer: ["BUFFER_ACCESS_TOKEN"],
+  buffer: ["BUFFER_API_KEY"],
   "google-drive": ["GOOGLE_DRIVE_REFRESH_TOKEN", "GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET", "GOOGLE_DRIVE_ARCHIVE_FOLDER_ID"],
 };
 
