@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { buildExecutionPlan } from "@/lib/chatb2k/universal-config-engine";
 import { inspectProviderReadOnly } from "@/lib/chatb2k/provider-adapters.server";
@@ -51,6 +52,7 @@ export const Route = createFileRoute("/api/chatb2k/uace/command")({
         }
 
         const plan = buildExecutionPlan(body.command);
+        const planHash = createHash("sha256").update(JSON.stringify(plan)).digest("hex");
         let inspection: { ok: boolean; status: string; evidence?: Record<string, string | number | boolean | null> } | null = null;
         const step = plan.steps[0];
         if (step && step.risk === "read" && (plan.command.intent === "inspect" || plan.command.intent === "verify")) {
@@ -85,6 +87,7 @@ export const Route = createFileRoute("/api/chatb2k/uace/command")({
         return Response.json({
           ok: true,
           plan,
+          planHash,
           execution: { attempted: false, status: "plan-only" },
           inspection,
         }, { status: 200 });
