@@ -272,7 +272,13 @@ PYDROP
     -H "Authorization: Bearer ${DROPBOX_ACCESS_TOKEN}" \
     -H "Dropbox-API-Arg: ${ARG}" \
     -H "Content-Type: application/octet-stream" \
-    --data-binary "@${SRC}" >/dev/null
+    --data-binary "@${SRC}" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("path_display"); print("uploaded")' >/dev/null
+  curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+    -X POST "https://api.dropboxapi.com/2/files/get_metadata" \
+    -H "Authorization: Bearer ${DROPBOX_ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    --data "$(python3 -c 'import json,sys; print(json.dumps({"path":sys.argv[1]}))' "$DEST")" \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("path_display"); print("read-back verified")' >/dev/null
 }
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   if dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/${HOST}-${TS}-raw.mp4"; then
