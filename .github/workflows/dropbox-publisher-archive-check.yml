@@ -1,0 +1,42 @@
+name: Dropbox media consumer compatibility checks
+
+on:
+  push:
+    branches: [fix/dropbox-publisher-archive-20261010]
+    paths:
+      - 'supabase/functions/buffer-publisher/index.ts'
+      - 'supabase/functions/drive-asset-archiver/index.ts'
+      - '.github/workflows/dropbox-publisher-archive-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/buffer-publisher/index.ts'
+      - 'supabase/functions/drive-asset-archiver/index.ts'
+      - '.github/workflows/dropbox-publisher-archive-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  allowlisted-dropbox-media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert allowlisted Dropbox URL handling
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          buffer = Path("supabase/functions/buffer-publisher/index.ts").read_text()
+          drive = Path("supabase/functions/drive-asset-archiver/index.ts").read_text()
+          for name, source in (("Buffer publisher", buffer), ("Drive archiver", drive)):
+              assert 'x.hostname==="www.dropbox.com"' in source, f"{name}: exact Dropbox hostname allowlist missing"
+              assert 'x.searchParams.get("dl")==="1"' in source, f"{name}: direct-download requirement missing"
+              assert 'x.searchParams.get("rlkey")' in source, f"{name}: shared-link key requirement missing"
+              assert "example.com" not in source, f"{name}: broad host acceptance suspected"
+          assert "Public Vercel Blob media required" not in buffer
+          assert "Public Vercel Blob URL required" not in drive
+          assert "Supported public Blob media required" not in drive
+          assert "const src=await fetch(mediaUrl)" in drive
+          print("PASS: Buffer and Drive accept only HTTPS Vercel Blob or exact Dropbox shared-file URLs with rlkey and dl=1; Drive downloads the allowlisted source.")
+          PY
