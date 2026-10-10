@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/google/drive-mcp/access-token")({
     handlers: {
       POST: async ({ request }) => {
         const authorization = request.headers.get("authorization") ?? "";
-        const callerKey = authorization.replace(/^Bearer\\s+/i, "");
+        const callerKey = authorization.replace(/^Bearer\s+/i, "");
         const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
         if (!callerKey || !supabaseUrl) {
           return Response.json({ ok: false, error: "Unauthorized" }, {
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/api/google/drive-mcp/access-token")({
         }
         // Validate the caller key against the project's admin endpoint rather than comparing
         // it to a possibly stale duplicate environment variable in Vercel.
-        const keyCheck = await fetch(`${supabaseUrl.replace(/\\/$/, "")}/auth/v1/admin/users?per_page=1`, {
+        const keyCheck = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/users?per_page=1`, {
           headers: { apikey: callerKey, Authorization: `Bearer ${callerKey}` },
           cache: "no-store",
         }).catch(() => null);
