@@ -100,6 +100,19 @@ export async function inspectProviderReadOnly(provider: Provider): Promise<Inspe
     return { provider, ok: true, checkedAt, status: response.status, resource: folderId, evidence: { folderAccessible: true, sampleChildCount: data.files?.length ?? 0, sampleChildName: data.files?.[0]?.name ?? null } };
   }
 
-  // Buffer's API schema/account permissions must be confirmed before a production adapter is enabled.
-  throw new Error("Buffer adapter remains disabled until the connected workspace API contract and least-privilege scopes are verified");
+  if (provider === "buffer") {
+    const token = requiredEnv("BUFFER_API_KEY");
+    const response = await safeFetch("https://api.buffer.com", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query: "query UACEReadOnlyAccount { account { id organizations { id name } } }" }),
+    });
+    if (!response.ok) throw new Error("Buffer read-only inspection failed with HTTP " + response.status);
+    const data = await response.json() as { errors?: Array<{ message?: string }>; data?: { account?: { id?: string; organizations?: Array<{ id?: string; name?: string }> } } };
+    if (data.errors?.length || !data.data?.account) throw new Error("Buffer GraphQL query failed; inspect API key scope and current schema");
+    const organizations = data.data.account.organizations ?? [];
+    return { provider, ok: true, checkedAt, status: response.status, resource: "authenticated Buffer account", evidence: { accountIdPresent: Boolean(data.data.account.id), organizationCount: organizations.length, organizationNames: organizations.slice(0, 10).map((org) => org.name ?? "unnamed").join(", ") } };
+  }
+
+  throw new Error("Unsupported provider");
 }
