@@ -37,9 +37,14 @@ export const Route = createFileRoute("/api/chatb2k/uace/command")({
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        if (Number(request.headers.get("content-length") ?? 0) > 4096) {
+          return Response.json({ error: "Request body too large" }, { status: 413 });
+        }
         let body: { command?: unknown } = {};
         try {
-          body = await request.json() as { command?: unknown };
+          const rawBody = await request.text();
+          if (rawBody.length > 4096) return Response.json({ error: "Request body too large" }, { status: 413 });
+          body = JSON.parse(rawBody) as { command?: unknown };
         } catch {
           return Response.json({ error: "Expected JSON body" }, { status: 400 });
         }
