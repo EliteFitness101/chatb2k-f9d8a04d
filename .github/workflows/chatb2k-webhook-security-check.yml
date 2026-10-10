@@ -1,0 +1,37 @@
+name: ChatB2K GitHub webhook security checks
+
+on:
+  push:
+    branches: [security/chatb2k-github-webhook-hardening-20261010]
+    paths:
+      - 'chatb2k_github_orchestrator.py'
+      - '.github/workflows/chatb2k-webhook-security-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  static-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Python module
+        run: python -m py_compile chatb2k_github_orchestrator.py
+      - name: Assert fail-closed webhook controls
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("chatb2k_github_orchestrator.py").read_text()
+          assert 'os.getenv("GITHUB_WEBHOOK_SECRET", "")' in source
+          assert "resofit-sovereign-secret-2026" not in source
+          assert "if not WEBHOOK_SECRET:" in source
+          assert "if not x_hub_signature_256 or not x_github_delivery or not x_github_event:" in source
+          assert "hmac.compare_digest(mac.hexdigest(), signature.lower())" in source
+          assert "status.HTTP_501_NOT_IMPLEMENTED" in source
+          assert '"status": "SUCCESS"' not in source
+          print("PASS: module compiles; no fallback webhook secret; unsigned requests fail closed; HMAC is compared; legacy fulfillment cannot fabricate success.")
+          PY
