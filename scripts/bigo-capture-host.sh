@@ -244,6 +244,15 @@ PY
 # Optional Dropbox archive. The GitHub runner needs its own scoped Dropbox OAuth token;
 # the ChatGPT Dropbox connection is not automatically available inside GitHub Actions.
 # Single-request Dropbox upload is limited to 150 MB; larger videos remain in Vercel Blob.
+# Refresh a durable offline OAuth credential for each scheduled run.
+if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
+  if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
+    DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
+    export DROPBOX_ACCESS_TOKEN
+  else
+    echo "::warning::Dropbox OAuth refresh failed; existing Blob pipeline remains available."
+  fi
+fi
 dropbox_upload() {
   local SRC="$1" DEST="$2" SIZE ARG
   [ -n "${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
