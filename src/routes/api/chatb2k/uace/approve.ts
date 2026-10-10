@@ -33,8 +33,15 @@ export const Route = createFileRoute("/api/chatb2k/uace/approve")({
         const approvers = (process.env["UACE_APPROVER_USER_IDS"] ?? "").split(",").map((v) => v.trim()).filter(Boolean);
         if (!approvers.includes(user.id)) return Response.json({ error: "Forbidden: user is not an authorized UACE approver" }, { status: 403 });
 
+        if (Number(request.headers.get("content-length") ?? 0) > 4096) {
+          return Response.json({ error: "Request body too large" }, { status: 413 });
+        }
         let body: { command?: unknown; target?: unknown; scopes?: unknown; planHash?: unknown } = {};
-        try { body = await request.json() as typeof body; } catch {
+        try {
+          const rawBody = await request.text();
+          if (rawBody.length > 4096) return Response.json({ error: "Request body too large" }, { status: 413 });
+          body = JSON.parse(rawBody) as typeof body;
+        } catch {
           return Response.json({ error: "Expected JSON body" }, { status: 400 });
         }
         if (typeof body.command !== "string" || body.command.length < 1 || body.command.length > 2000 ||
