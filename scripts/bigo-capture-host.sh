@@ -240,5 +240,55 @@ audio_present=int(audio_streams)>0
 hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
 print(json.dumps({'highlight':hitem}))
 PY
+
+# Optional Dropbox archive. The GitHub runner needs its own scoped Dropbox OAuth token;
+# the ChatGPT Dropbox connection is not automatically available inside GitHub Actions.
+# Single-request Dropbox upload is limited to 150 MB; larger videos remain in Vercel Blob.
+dropbox_upload() {
+  local SRC="$1" DEST="$2" SIZE ARG
+  [ -n "\${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
+  [ -s "$SRC" ] || return 1
+  SIZE="$(stat -c '%s' "$SRC")"
+  if [ "$SIZE" -gt 157286400 ]; then
+    echo "::warning::Dropbox archive skipped for $(basename "$SRC"): exceeds 150 MB; Blob copy remains available."
+    return 1
+  fi
+  ARG="$(python3 - "$DEST" <<'PYDROP'
+import json,sys
+print(json.dumps({"path":sys.argv[1],"mode":"overwrite","autorename":False,"mute":True}))
+PYDROP
+)"
+  curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+    -X POST "https://content.dropboxapi.com/2/files/upload" \
+    -H "Authorization: Bearer \${DROPBOX_ACCESS_TOKEN}" \
+    -H "Dropbox-API-Arg: \${ARG}" \
+    -H "Content-Type: application/octet-stream" \
+    --data-binary "@\${SRC}" >/dev/null
+}
+if [ -n "\${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  if dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/\${HOST}-\${TS}-raw.mp4"; then
+    echo "::notice::Dropbox raw capture archived for $HOST"
+  else
+    echo "::warning::Dropbox raw capture archive failed for $HOST; existing Blob pipeline preserved."
+  fi
+  if dropbox_upload "$FILE" "/ResoFit/BIGO/processed/\${HOST}-\${TS}.mp4"; then
+    echo "::notice::Dropbox processed video archived for $HOST"
+  else
+    echo "::warning::Dropbox processed video archive failed for $HOST; existing Blob pipeline preserved."
+  fi
+  if dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/\${HOST}-\${TS}-cover.jpg"; then
+    echo "::notice::Dropbox cover archived for $HOST"
+  else
+    echo "::warning::Dropbox cover archive failed for $HOST."
+  fi
+  if dropbox_upload "$RESULT" "/ResoFit/BIGO/metadata/\${HOST}-\${TS}.json"; then
+    echo "::notice::Dropbox metadata archived for $HOST"
+  else
+    echo "::warning::Dropbox metadata archive failed for $HOST."
+  fi
+else
+  echo "::warning::Dropbox archive is not enabled: configure GitHub Actions secret DROPBOX_ACCESS_TOKEN. Existing Blob + ChatB2K ingestion remains unchanged."
+fi
+
 echo "Captured $HOST"
 rm -f "$RAW" "$FILE" "$COVER" "$LOG"
