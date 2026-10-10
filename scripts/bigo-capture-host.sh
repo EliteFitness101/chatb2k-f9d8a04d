@@ -246,7 +246,7 @@ PY
 # Single-request Dropbox upload is limited to 150 MB; larger videos remain in Vercel Blob.
 dropbox_upload() {
   local SRC="$1" DEST="$2" SIZE ARG
-  [ -n "\${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
+  [ -n "${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
   [ -s "$SRC" ] || return 1
   SIZE="$(stat -c '%s' "$SRC")"
   if [ "$SIZE" -gt 157286400 ]; then
@@ -260,28 +260,28 @@ PYDROP
 )"
   curl --fail --silent --show-error --retry 2 --retry-delay 2 \
     -X POST "https://content.dropboxapi.com/2/files/upload" \
-    -H "Authorization: Bearer \${DROPBOX_ACCESS_TOKEN}" \
-    -H "Dropbox-API-Arg: \${ARG}" \
+    -H "Authorization: Bearer ${DROPBOX_ACCESS_TOKEN}" \
+    -H "Dropbox-API-Arg: ${ARG}" \
     -H "Content-Type: application/octet-stream" \
-    --data-binary "@\${SRC}" >/dev/null
+    --data-binary "@${SRC}" >/dev/null
 }
-if [ -n "\${DROPBOX_ACCESS_TOKEN:-}" ]; then
-  if dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/\${HOST}-\${TS}-raw.mp4"; then
+if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  if dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/${HOST}-${TS}-raw.mp4"; then
     echo "::notice::Dropbox raw capture archived for $HOST"
   else
     echo "::warning::Dropbox raw capture archive failed for $HOST; existing Blob pipeline preserved."
   fi
-  if dropbox_upload "$FILE" "/ResoFit/BIGO/processed/\${HOST}-\${TS}.mp4"; then
+  if dropbox_upload "$FILE" "/ResoFit/BIGO/processed/${HOST}-${TS}.mp4"; then
     echo "::notice::Dropbox processed video archived for $HOST"
   else
     echo "::warning::Dropbox processed video archive failed for $HOST; existing Blob pipeline preserved."
   fi
-  if dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/\${HOST}-\${TS}-cover.jpg"; then
+  if dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/${HOST}-${TS}-cover.jpg"; then
     echo "::notice::Dropbox cover archived for $HOST"
   else
     echo "::warning::Dropbox cover archive failed for $HOST."
   fi
-  if dropbox_upload "$RESULT" "/ResoFit/BIGO/metadata/\${HOST}-\${TS}.json"; then
+  if dropbox_upload "$RESULT" "/ResoFit/BIGO/metadata/${HOST}-${TS}.json"; then
     echo "::notice::Dropbox metadata archived for $HOST"
   else
     echo "::warning::Dropbox metadata archive failed for $HOST."
