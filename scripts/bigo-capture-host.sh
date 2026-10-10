@@ -257,7 +257,7 @@ PY
 
 # Optional Dropbox archive. The GitHub runner needs its own scoped Dropbox OAuth token;
 # the ChatGPT Dropbox connection is not automatically available inside GitHub Actions.
-# Single-request Dropbox upload is limited to 150 MB; larger videos remain in Vercel Blob.
+# Files up to 150 MiB use a single Dropbox upload; larger files use resumable upload sessions.
 # Refresh a durable offline OAuth credential for each scheduled run.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
@@ -268,32 +268,109 @@ if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${
   fi
 fi
 dropbox_upload() {
-  local SRC="$1" DEST="$2" SIZE ARG
+  local SRC="$1" DEST="$2"
   [ -n "${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
   [ -s "$SRC" ] || return 1
-  SIZE="$(stat -c '%s' "$SRC")"
-  if [ "$SIZE" -gt 157286400 ]; then
-    echo "::warning::Dropbox archive skipped for $(basename "$SRC"): exceeds 150 MB; Blob copy remains available."
-    return 1
-  fi
-  ARG="$(python3 - "$DEST" <<'PYDROP'
-import json,sys
-print(json.dumps({"path":sys.argv[1],"mode":"overwrite","autorename":False,"mute":True}))
+  # Upload via a session for large captures; verify both metadata and Dropbox content hash.
+  # The Dropbox content hash is SHA-256 over concatenated SHA-256 hashes of 4 MiB blocks.
+  python3 - "$SRC" "$DEST" <<'PYDROP'
+import hashlib, json, os, sys, urllib.error, urllib.request
+
+src, dest = sys.argv[1], sys.argv[2]
+token = os.environ.get("DROPBOX_ACCESS_TOKEN", "")
+if not token:
+    raise SystemExit("Dropbox access token is unavailable")
+CHUNK = 8 * 1024 * 1024
+BLOCK = 4 * 1024 * 1024
+
+def request(url, data, headers):
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            raw = response.read()
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as exc:
+        # Never print request headers or token; API response may include sensitive details.
+        raise RuntimeError(f"Dropbox API request failed (HTTP {exc.code})") from None
+
+def api_headers():
+    return {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+
+def upload_headers(arg):
+    return {
+        "Authorization": "Bearer " + token,
+        "Dropbox-API-Arg": json.dumps(arg, separators=(",", ":")),
+        "Content-Type": "application/octet-stream",
+    }
+
+def content_hash(path):
+    outer = hashlib.sha256()
+    with open(path, "rb") as stream:
+        while True:
+            block = stream.read(BLOCK)
+            if not block:
+                break
+            outer.update(hashlib.sha256(block).digest())
+    return outer.hexdigest()
+
+size = os.path.getsize(src)
+expected_hash = content_hash(src)
+with open(src, "rb") as stream:
+    if size <= 150 * 1024 * 1024:
+        body = stream.read()
+        uploaded = request(
+            "https://content.dropboxapi.com/2/files/upload",
+            body,
+            upload_headers({"path": dest, "mode": "overwrite", "autorename": False, "mute": True}),
+        )
+    else:
+        first = stream.read(CHUNK)
+        started = request(
+            "https://content.dropboxapi.com/2/files/upload_session/start",
+            first,
+            upload_headers({"close": False}),
+        )
+        session_id = started.get("session_id")
+        if not session_id:
+            raise RuntimeError("Dropbox upload session did not return a session ID")
+        offset = len(first)
+        while size - offset > CHUNK:
+            piece = stream.read(CHUNK)
+            if not piece:
+                raise RuntimeError("Unexpected end of local file during Dropbox session upload")
+            request(
+                "https://content.dropboxapi.com/2/files/upload_session/append_v2",
+                piece,
+                upload_headers({"cursor": {"session_id": session_id, "offset": offset}, "close": False}),
+            )
+            offset += len(piece)
+        final_piece = stream.read()
+        uploaded = request(
+            "https://content.dropboxapi.com/2/files/upload_session/finish",
+            final_piece,
+            upload_headers({
+                "cursor": {"session_id": session_id, "offset": offset},
+                "commit": {"path": dest, "mode": "overwrite", "autorename": False, "mute": True},
+            }),
+        )
+
+if not uploaded.get("path_display"):
+    raise RuntimeError("Dropbox upload response did not confirm a destination path")
+metadata = request(
+    "https://api.dropboxapi.com/2/files/get_metadata",
+    json.dumps({"path": dest}).encode(),
+    api_headers(),
+)
+if metadata.get("path_display") != uploaded.get("path_display"):
+    raise RuntimeError("Dropbox read-back path does not match upload response")
+if int(metadata.get("size", -1)) != size:
+    raise RuntimeError("Dropbox read-back size mismatch")
+if metadata.get("content_hash") != expected_hash:
+    raise RuntimeError("Dropbox read-back content hash mismatch")
+print(f"Dropbox archive verified: {size} bytes; content hash matched.")
 PYDROP
-)"
-  curl --fail --silent --show-error --retry 2 --retry-delay 2 \
-    -X POST "https://content.dropboxapi.com/2/files/upload" \
-    -H "Authorization: Bearer ${DROPBOX_ACCESS_TOKEN}" \
-    -H "Dropbox-API-Arg: ${ARG}" \
-    -H "Content-Type: application/octet-stream" \
-    --data-binary "@${SRC}" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("path_display"); print("uploaded")' >/dev/null
-  curl --fail --silent --show-error --retry 2 --retry-delay 2 \
-    -X POST "https://api.dropboxapi.com/2/files/get_metadata" \
-    -H "Authorization: Bearer ${DROPBOX_ACCESS_TOKEN}" \
-    -H "Content-Type: application/json" \
-    --data "$(python3 -c 'import json,sys; print(json.dumps({"path":sys.argv[1]}))' "$DEST")" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("path_display"); print("read-back verified")' >/dev/null
 }
+
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   if dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/${HOST}-${TS}-raw.mp4"; then
     echo "::notice::Dropbox raw capture archived for $HOST"
