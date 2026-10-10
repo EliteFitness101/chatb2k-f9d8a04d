@@ -1,0 +1,33 @@
+name: BIGO social fallback regression check
+
+on:
+  push:
+    branches: [fix/bigo-social-fallback-20261010]
+    paths:
+      - 'supabase/functions/bigo-live-pipeline/index.ts'
+      - '.github/workflows/bigo-social-fallback-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/bigo-live-pipeline/index.ts'
+      - '.github/workflows/bigo-social-fallback-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  no-invalid-fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prevent Buffer queue IDs from being sent to Telegram publisher
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("supabase/functions/bigo-live-pipeline/index.ts").read_text()
+          assert "deferred_to_social_fanout_cron" in source
+          assert "failed_buffer_queue_ids" in source
+          assert 'functions/v1/social-publisher' not in source, "BIGO pipeline must not send Buffer queue IDs to destination-specific social publisher"
+          print("PASS: Buffer failures are recorded and deferred to the existing social fanout cron; invalid destination-less calls are removed.")
+          PY
