@@ -1,0 +1,30 @@
+name: BIGO Drive archive verification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/bigo-capture-host.sh'
+      - 'src/routes/api/google/drive-mcp/bigo-upload-session.ts'
+      - '.github/workflows/bigo-live-automation.yml'
+      - '.github/workflows/bigo-drive-archive-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-build-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.20
+      - name: Validate capture script syntax
+        run: bash -n scripts/bigo-capture-host.sh
+      - name: Install dependencies
+        run: bun install
+      - name: Build ChatB2K routes
+        run: bun run build
