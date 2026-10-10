@@ -55,8 +55,10 @@ export const Route = createFileRoute("/api/chatb2k/uace/approve")({
           return Response.json({ error: "Requested scopes exceed this plan's permitted scopes" }, { status: 403 });
         }
 
-        const canonical = JSON.stringify({ plan, target: body.target.trim(), scopes: requestedScopes });
-        const expectedHash = createHash("sha256").update(canonical).digest("hex");
+        if (body.target.trim() !== step.target || /unresolved/i.test(step.target)) {
+          return Response.json({ error: "Target must exactly match a resolved target in the reviewed plan" }, { status: 409 });
+        }
+        const expectedHash = createHash("sha256").update(JSON.stringify(plan)).digest("hex");
         if (body.planHash !== expectedHash) {
           return Response.json({ error: "Plan hash mismatch; regenerate and review the exact plan" }, { status: 409 });
         }
