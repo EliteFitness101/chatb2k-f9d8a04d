@@ -5,7 +5,7 @@ on:
   pull_request:
     paths:
       - 'src/lib/chatb2k/universal-config-engine.ts'
-      - 'src/lib/chatb2k/universal-config-engine.test.ts'
+      - 'tests/chatb2k/universal-config-engine.test.ts'
       - 'docs/chatb2k/universal-authorized-configuration-engine.md'
       - 'package.json'
       - 'package-lock.json'
