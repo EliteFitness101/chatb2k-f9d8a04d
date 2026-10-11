@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app import APP, authorized_request, required_env, valid_service_account_json
+from app import APP, authorized_request, fetch_media_bytes, required_env, valid_service_account_json
 
 client = TestClient(APP)
 
@@ -32,6 +32,26 @@ class BridgeConfigTests(unittest.TestCase):
         self.assertFalse(valid_service_account_json("{not-json}"))
         self.assertFalse(valid_service_account_json(json.dumps({"type": "service_account"})))
         self.assertTrue(valid_service_account_json(json.dumps({"type": "service_account", "project_id": "demo"})))
+
+
+    def test_oversized_drive_file_is_rejected_before_download(self):
+        class Request:
+            def execute(self):
+                return {"size": str(20 * 1024 * 1024)}
+
+        class Files:
+            def get(self, **kwargs):
+                return Request()
+
+            def get_media(self, **kwargs):
+                raise AssertionError("oversized content must not be downloaded")
+
+        class Service:
+            def files(self):
+                return Files()
+
+        with self.assertRaisesRegex(ValueError, "exceeds configured"):
+            fetch_media_bytes(Service(), "large-file", "text/plain")
 
     def test_health_endpoint_is_liveness_only(self):
         response = client.get("/healthz")
