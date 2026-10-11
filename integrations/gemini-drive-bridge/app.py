@@ -165,10 +165,13 @@ def fetch_media_bytes(service, file_id: str, mime_type: str) -> bytes:
     size_value = meta.get("size")
     if size_value is not None:
         try:
-            if int(size_value) > size_limit:
-                raise ValueError(f"File exceeds configured {size_limit}-byte size limit")
+            parsed_size = int(size_value)
         except (TypeError, ValueError):
-            pass
+            parsed_size = None
+        if parsed_size is not None and parsed_size > size_limit:
+            # Do not swallow this ValueError: an oversized download must be rejected
+            # before get_media/export allocates the response body in memory.
+            raise ValueError(f"File exceeds configured {size_limit}-byte size limit")
 
     if mime_type == "application/vnd.google-apps.document":
         data = service.files().export(fileId=file_id, mimeType="text/plain").execute()
