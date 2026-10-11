@@ -46,6 +46,16 @@ def coerce_int_env(name: str, default: int, *, min_value: int | None = None, max
     return parsed
 
 
+def valid_service_account_json(raw: str) -> bool:
+    if not raw.strip():
+        return False
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, dict) and payload.get("type") and payload.get("project_id")
+
+
 def get_runtime_config() -> dict[str, Any]:
     max_file_chars = coerce_int_env("MAX_CHARS_PER_FILE", 18000, min_value=1000, max_value=40000)
     max_context_chars = coerce_int_env(
@@ -83,6 +93,8 @@ def get_allowed_folder_ids() -> set[str]:
 
 def drive_service():
     raw = required_env("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not valid_service_account_json(raw):
+        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON must contain a valid service account JSON payload")
     try:
         info = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -198,7 +210,13 @@ def healthz():
 def readyz():
     config = get_runtime_config()
     required = ["BRIDGE_API_TOKEN", "GOOGLE_SERVICE_ACCOUNT_JSON", "GEMINI_API_KEY", "GEMINI_MODEL"]
-    missing = [key for key in required if not os.getenv(key, "").strip()]
+    missing = []
+    for key in required:
+        value = os.getenv(key, "").strip()
+        if not value:
+            missing.append(key)
+        elif key == "GOOGLE_SERVICE_ACCOUNT_JSON" and not valid_service_account_json(value):
+            missing.append(key)
     if not config["allowed_folder_ids"]:
         missing.append("GOOGLE_DRIVE_ALLOWED_FOLDER_IDS")
     return JSONResponse(
