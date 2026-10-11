@@ -53,7 +53,18 @@ def valid_service_account_json(raw: str) -> bool:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         return False
-    return isinstance(payload, dict) and payload.get("type") and payload.get("project_id")
+    return (
+        isinstance(payload, dict)
+        and payload.get("type") == "service_account"
+        and isinstance(payload.get("project_id"), str)
+        and bool(payload.get("project_id").strip())
+        and isinstance(payload.get("client_email"), str)
+        and "@" in payload.get("client_email", "")
+        and isinstance(payload.get("private_key"), str)
+        and "BEGIN PRIVATE KEY" in payload.get("private_key", "")
+        and isinstance(payload.get("token_uri"), str)
+        and payload.get("token_uri", "").startswith("https://")
+    )
 
 
 def get_runtime_config() -> dict[str, Any]:
