@@ -28,12 +28,40 @@ log = logging.getLogger("chatb2k.gemini_drive_bridge")
 
 APP = FastAPI(title="ChatB2K Gemini Drive Bridge", version="0.1.0")
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
-FOLDER_IDS = {v.strip() for v in os.getenv("GOOGLE_DRIVE_ALLOWED_FOLDER_IDS", "").split(",") if v.strip()}
-MAX_FILES = max(1, min(int(os.getenv("MAX_FILES_PER_QUERY", "5")), 10))
-MAX_FILE_CHARS = max(1000, min(int(os.getenv("MAX_CHARS_PER_FILE", "18000")), 40000))
-MAX_CONTEXT_CHARS = max(MAX_FILE_CHARS, min(int(os.getenv("MAX_TOTAL_CONTEXT_CHARS", "60000")), 100000))
-TIMEOUT_SECONDS = max(5, min(int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30")), 90))
-MODEL = os.getenv("GEMINI_MODEL", "").strip()
+
+
+def coerce_int_env(name: str, default: int, *, min_value: int | None = None, max_value: int | None = None) -> int:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        log.warning("Ignoring invalid integer for %s=%r; using default=%s", name, value, default)
+        return default
+    if min_value is not None and parsed < min_value:
+        return min_value
+    if max_value is not None and parsed > max_value:
+        return max_value
+    return parsed
+
+
+def get_runtime_config() -> dict[str, Any]:
+    max_file_chars = coerce_int_env("MAX_CHARS_PER_FILE", 18000, min_value=1000, max_value=40000)
+    max_context_chars = coerce_int_env(
+        "MAX_TOTAL_CONTEXT_CHARS",
+        max(60000, max_file_chars),
+        min_value=max_file_chars,
+        max_value=100000,
+    )
+    return {
+        "allowed_folder_ids": {v.strip() for v in os.getenv("GOOGLE_DRIVE_ALLOWED_FOLDER_IDS", "").split(",") if v.strip()},
+        "max_files": coerce_int_env("MAX_FILES_PER_QUERY", 5, min_value=1, max_value=10),
+        "max_file_chars": max_file_chars,
+        "max_context_chars": max_context_chars,
+        "timeout_seconds": coerce_int_env("REQUEST_TIMEOUT_SECONDS", 30, min_value=5, max_value=90),
+        "model": os.getenv("GEMINI_MODEL", "").strip(),
+    }
 
 
 class QueryRequest(BaseModel):
@@ -47,6 +75,10 @@ def required_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"Missing required configuration: {name}")
     return value
+
+
+def get_allowed_folder_ids() -> set[str]:
+    return get_runtime_config()["allowed_folder_ids"]
 
 
 def drive_service():
@@ -65,17 +97,20 @@ def gemini_client():
 
 def authorized_request(authorization: str | None) -> None:
     expected = required_env("BRIDGE_API_TOKEN")
-    supplied = (authorization or "").removeprefix("Bearer ").strip()
+    supplied = (authorization or "").strip()
+    if supplied.lower().startswith("bearer "):
+        supplied = supplied[7:].strip()
     if not supplied or not secrets.compare_digest(supplied, expected):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def list_allowed_files(service, question: str, limit: int) -> list[dict[str, Any]]:
-    if not FOLDER_IDS:
+    folder_ids = get_allowed_folder_ids()
+    if not folder_ids:
         raise HTTPException(status_code=503, detail="No approved Drive folders configured")
     files: list[dict[str, Any]] = []
     terms = [t.strip(" \"'.,!?") for t in question.split() if len(t.strip(" \"'.,!?")) >= 3][:8]
-    for folder_id in sorted(FOLDER_IDS):
+    for folder_id in sorted(folder_ids):
         query = f"'{folder_id}' in parents and trashed = false"
         response = service.files().list(
             q=query,
@@ -96,39 +131,62 @@ def list_allowed_files(service, question: str, limit: int) -> list[dict[str, Any
 
 
 def assert_file_in_allowed_folder(service, file_id: str) -> dict[str, Any]:
+    folder_ids = get_allowed_folder_ids()
     meta = service.files().get(
         fileId=file_id,
         fields="id,name,mimeType,modifiedTime,size,webViewLink,parents",
         supportsAllDrives=True,
     ).execute()
     parents = set(meta.get("parents", []))
-    if not parents.intersection(FOLDER_IDS):
+    if not parents.intersection(folder_ids):
         raise HTTPException(status_code=403, detail="File is outside approved Drive folders")
     return meta
 
 
+def fetch_media_bytes(service, file_id: str, mime_type: str) -> bytes:
+    config = get_runtime_config()
+    size_limit = max(8 * 1024 * 1024, 2 * config["max_file_chars"])
+    try:
+        meta = service.files().get(fileId=file_id, fields="size", supportsAllDrives=True).execute()
+    except HttpError:
+        meta = {}
+    size_value = meta.get("size")
+    if size_value is not None:
+        try:
+            if int(size_value) > size_limit:
+                raise ValueError(f"File exceeds configured {size_limit}-byte size limit")
+        except (TypeError, ValueError):
+            pass
+
+    if mime_type == "application/vnd.google-apps.document":
+        data = service.files().export(fileId=file_id, mimeType="text/plain").execute()
+    elif mime_type == "application/vnd.google-apps.spreadsheet":
+        data = service.files().export(fileId=file_id, mimeType="text/csv").execute()
+    else:
+        data = service.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
+    if isinstance(data, str):
+        return data.encode("utf-8", errors="replace")
+    return data
+
+
 def extract_text(service, meta: dict[str, Any]) -> str:
     file_id, mime = meta["id"], meta.get("mimeType", "")
+    raw = fetch_media_bytes(service, file_id, mime)
     if mime == "application/vnd.google-apps.document":
-        data = service.files().export(fileId=file_id, mimeType="text/plain").execute()
-        text = data.decode("utf-8", errors="replace") if isinstance(data, bytes) else str(data)
+        text = raw.decode("utf-8", errors="replace")
     elif mime == "application/pdf":
-        raw = service.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
         reader = PdfReader(io.BytesIO(raw))
         text = "\n".join(page.extract_text() or "" for page in reader.pages[:150])
     elif mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        raw = service.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
         doc = Document(io.BytesIO(raw))
         text = "\n".join(p.text for p in doc.paragraphs)
     elif mime in {"text/plain", "text/markdown", "text/csv", "application/json"}:
-        raw = service.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
-        text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+        text = raw.decode("utf-8", errors="replace")
     elif mime == "application/vnd.google-apps.spreadsheet":
-        data = service.files().export(fileId=file_id, mimeType="text/csv").execute()
-        text = data.decode("utf-8", errors="replace") if isinstance(data, bytes) else str(data)
+        text = raw.decode("utf-8", errors="replace")
     else:
         raise ValueError(f"Unsupported document type: {mime}")
-    return text[:MAX_FILE_CHARS]
+    return text[: get_runtime_config()["max_file_chars"]]
 
 
 @APP.get("/healthz")
@@ -138,9 +196,10 @@ def healthz():
 
 @APP.get("/readyz")
 def readyz():
+    config = get_runtime_config()
     required = ["BRIDGE_API_TOKEN", "GOOGLE_SERVICE_ACCOUNT_JSON", "GEMINI_API_KEY", "GEMINI_MODEL"]
     missing = [key for key in required if not os.getenv(key, "").strip()]
-    if not FOLDER_IDS:
+    if not config["allowed_folder_ids"]:
         missing.append("GOOGLE_DRIVE_ALLOWED_FOLDER_IDS")
     return JSONResponse(
         status_code=200 if not missing else 503,
@@ -152,15 +211,17 @@ def readyz():
 def query_drive(payload: QueryRequest, authorization: str | None = Header(default=None)):
     started = time.monotonic()
     request_id = secrets.token_hex(8)
+    config = get_runtime_config()
     authorized_request(authorization)
-    if not MODEL:
+    if not config["model"]:
         raise HTTPException(status_code=503, detail="Gemini model is not configured")
     try:
         service = drive_service()
+        max_files = min(payload.max_files, config["max_files"])
         if payload.file_id:
             candidates = [assert_file_in_allowed_folder(service, payload.file_id)]
         else:
-            candidates = list_allowed_files(service, payload.question, min(payload.max_files, MAX_FILES))
+            candidates = list_allowed_files(service, payload.question, max_files)
 
         sources = []
         context_parts = []
@@ -173,7 +234,7 @@ def query_drive(payload: QueryRequest, authorization: str | None = Header(defaul
                 continue
             if not extracted.strip():
                 continue
-            remaining = MAX_CONTEXT_CHARS - total_chars
+            remaining = config["max_context_chars"] - total_chars
             if remaining <= 0:
                 break
             excerpt = extracted[:remaining]
@@ -197,9 +258,9 @@ def query_drive(payload: QueryRequest, authorization: str | None = Header(defaul
             + f"\n\nUSER QUESTION:\n{payload.question}"
         )
         response = gemini_client().models.generate_content(
-            model=MODEL,
+            model=config["model"],
             contents=prompt,
-            config={"http_options": {"timeout": TIMEOUT_SECONDS * 1000}},
+            config={"http_options": {"timeout": config["timeout_seconds"] * 1000}},
         )
         answer = getattr(response, "text", None)
         if not answer:
@@ -213,7 +274,7 @@ def query_drive(payload: QueryRequest, authorization: str | None = Header(defaul
             "sources": sources,
             "source_count": len(sources),
             "context_chars": total_chars,
-            "model": MODEL,
+            "model": config["model"],
         }
     except HTTPException:
         raise
