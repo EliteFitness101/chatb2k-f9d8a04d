@@ -1,10 +1,11 @@
+import json
 import os
 import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app import APP, authorized_request, required_env
+from app import APP, authorized_request, required_env, valid_service_account_json
 
 client = TestClient(APP)
 
@@ -21,6 +22,16 @@ class BridgeConfigTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as caught:
                 authorized_request("Bearer wrong-token")
             self.assertEqual(caught.exception.status_code, 401)
+
+    def test_lowercase_bearer_authorization_is_accepted(self):
+        with patch.dict(os.environ, {"BRIDGE_API_TOKEN": "test-token"}, clear=False):
+            authorized_request("bearer test-token")
+
+    def test_service_account_json_validation_rejects_invalid_payload(self):
+        self.assertFalse(valid_service_account_json(""))
+        self.assertFalse(valid_service_account_json("{not-json}"))
+        self.assertFalse(valid_service_account_json(json.dumps({"type": "service_account"})))
+        self.assertTrue(valid_service_account_json(json.dumps({"type": "service_account", "project_id": "demo"})))
 
     def test_health_endpoint_is_liveness_only(self):
         response = client.get("/healthz")
@@ -40,8 +51,24 @@ class BridgeConfigTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         body = response.json()
         self.assertFalse(body["ready"])
-        self.assertNotIn("GOOGLE_SERVICE_ACCOUNT_JSON", str(body.get("values", {})))
         self.assertIn("GOOGLE_DRIVE_ALLOWED_FOLDER_IDS", body["missing_configuration"])
+
+    def test_readiness_rejects_malformed_service_account_json(self):
+        with patch.dict(
+            os.environ,
+            {
+                "BRIDGE_API_TOKEN": "test-token",
+                "GOOGLE_SERVICE_ACCOUNT_JSON": '{"type": "service_account"}',
+                "GEMINI_API_KEY": "test-gemini-key",
+                "GEMINI_MODEL": "gemini-2.0-flash",
+                "GOOGLE_DRIVE_ALLOWED_FOLDER_IDS": "folder-123",
+            },
+            clear=False,
+        ):
+            response = client.get("/readyz")
+        self.assertEqual(response.status_code, 503)
+        body = response.json()
+        self.assertIn("GOOGLE_SERVICE_ACCOUNT_JSON", body["missing_configuration"])
 
 
 if __name__ == "__main__":
