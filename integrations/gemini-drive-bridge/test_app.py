@@ -31,7 +31,18 @@ class BridgeConfigTests(unittest.TestCase):
         self.assertFalse(valid_service_account_json(""))
         self.assertFalse(valid_service_account_json("{not-json}"))
         self.assertFalse(valid_service_account_json(json.dumps({"type": "service_account"})))
-        self.assertTrue(valid_service_account_json(json.dumps({"type": "service_account", "project_id": "demo"})))
+        incomplete = {
+            "type": "service_account",
+            "project_id": "demo",
+            "client_email": "bridge@example.iam.gserviceaccount.com",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+        self.assertFalse(valid_service_account_json(json.dumps(incomplete)))
+        complete = {
+            **incomplete,
+            "private_key": "-----BEGIN PRIVATE KEY-----\\nfake\\n-----END PRIVATE KEY-----",
+        }
+        self.assertTrue(valid_service_account_json(json.dumps(complete)))
 
 
     def test_oversized_drive_file_is_rejected_before_download(self):
