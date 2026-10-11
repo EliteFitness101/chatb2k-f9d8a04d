@@ -1,0 +1,66 @@
+name: ChatB2K Ecosystem Configuration Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'GEMINI.md'
+      - '.github/workflows/chatb2k-ecosystem-audit.yml'
+      - '.github/workflows/bigo-live-automation.yml'
+      - 'scripts/bigo-capture-host.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatb2k-ecosystem-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify manifest and automation references
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s GEMINI.md
+          test -s .github/workflows/bigo-live-automation.yml
+          test -s scripts/bigo-capture-host.sh
+          grep -q 'DROPBOX_APP_KEY' .github/workflows/bigo-live-automation.yml
+          grep -q 'DROPBOX_APP_SECRET' .github/workflows/bigo-live-automation.yml
+          grep -q 'DROPBOX_REFRESH_TOKEN' .github/workflows/bigo-live-automation.yml
+          grep -q 'CHATB2K_LIVE_INGEST_KEY' .github/workflows/bigo-live-automation.yml
+          grep -q 'BIGO_VERIFIED_HOST_IDS' .github/workflows/bigo-live-automation.yml
+          echo "Repository files and required integration references verified."
+          echo "This check does not read or validate GitHub secret values or prove live Dropbox/Supabase operations."
+
+      - name: Run Gemini CLI audit when GitHub secret is configured
+        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes @google/gemini-cli --output-format json -p "Read GEMINI.md, .github/workflows/bigo-live-automation.yml, and scripts/bigo-capture-host.sh. Perform a READ-ONLY configuration audit. Do not invoke external infrastructure, alter files, print credentials, or claim that secrets are valid. Return JSON fields: checked_files, secret_name_wiring, configuration_findings, risks, missing_runtime_evidence, next_actions. Clearly distinguish static repository checks from live integration proof." | tee gemini-audit.json
+
+      - name: Record Gemini CLI not configured in GitHub Actions
+        if: ${{ secrets.GEMINI_API_KEY == '' }}
+        shell: bash
+        run: |
+          echo "GEMINI_API_KEY GitHub Actions secret is not configured; static repository audit completed."
+          printf '%s\n' '{"status":"static_audit_only","gemini_cli":"skipped_missing_GEMINI_API_KEY","note":"No secret values were inspected. Configure GEMINI_API_KEY in repository Actions secrets to enable the Gemini CLI audit."}' > gemini-audit.json
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatb2k-ecosystem-audit
+          path: gemini-audit.json
+          if-no-files-found: error
+          retention-days: 14
