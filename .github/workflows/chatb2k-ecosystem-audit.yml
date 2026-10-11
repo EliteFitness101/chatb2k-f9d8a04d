@@ -21,6 +21,8 @@ jobs:
   repository-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,16 +43,14 @@ jobs:
           echo "This check does not read or validate GitHub secret values or prove live Dropbox/Supabase operations."
 
       - name: Run Gemini CLI audit when GitHub secret is configured
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        if: ${{ env.GEMINI_API_KEY != '' }}
         shell: bash
         run: |
           set -euo pipefail
           npx --yes @google/gemini-cli --output-format json -p "Read GEMINI.md, .github/workflows/bigo-live-automation.yml, and scripts/bigo-capture-host.sh. Perform a READ-ONLY configuration audit. Do not invoke external infrastructure, alter files, print credentials, or claim that secrets are valid. Return JSON fields: checked_files, secret_name_wiring, configuration_findings, risks, missing_runtime_evidence, next_actions. Clearly distinguish static repository checks from live integration proof." | tee gemini-audit.json
 
       - name: Record Gemini CLI not configured in GitHub Actions
-        if: ${{ secrets.GEMINI_API_KEY == '' }}
+        if: ${{ env.GEMINI_API_KEY == '' }}
         shell: bash
         run: |
           echo "GEMINI_API_KEY GitHub Actions secret is not configured; static repository audit completed."
