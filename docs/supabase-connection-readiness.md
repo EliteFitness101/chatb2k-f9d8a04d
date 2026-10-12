@@ -69,3 +69,12 @@ Review the intended server/client access model before changing policies or grant
 6. Treat the Edge Node security findings as a pre-production gate for any newly exposed customer, payment or order data.
 
 The `project_id` in `supabase/config.toml` is the intended CLI target; it does **not** by itself authorize or complete the Dashboard GitHub integration. Dashboard authorization and repository selection remain separate steps. This document records an audit snapshot, not production certification.
+
+
+### Additional source/runtime drift confirmed — 13 October 2026
+
+- Primary Supabase currently reports deployed `chatb2k-orchestrator` v28.
+- The active repository's default branch still points `supabase/config.toml` to the primary project, but fetching `supabase/functions/chatb2k-orchestrator/index.ts` from `main` returns NOT_FOUND. The deployed v28 implementation is therefore not present at that path on current `main`.
+- Open draft PR #33 proposes adding the deployed v26 source baseline and an Omni-State evaluator; its own release notes state that it is not merged/deployed and that the evaluator is not yet integrated into production authorization.
+
+This means the repository is not yet a reproducible source baseline for the deployed orchestrator. Before enabling any deployment integration, recover and review the exact deployed v28 source (or explicitly approve a versioned rollback/upgrade plan), compare its hash and dependencies with the target branch, and ensure deployment cannot unintentionally replace v28 with v26 or a different implementation. Do not treat the v26 PR as equivalent to deployed v28.
