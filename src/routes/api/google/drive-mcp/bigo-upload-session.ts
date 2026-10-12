@@ -13,13 +13,16 @@ async function driveAccessToken() {
   const { data, error } = await (supabaseAdmin as any)
     .from("google_oauth_credentials").select("refresh_token")
     .eq("provider", "google_drive").maybeSingle();
-  if (error || !data?.refresh_token) throw new Error("Stored Google Drive credential unavailable");
+  if (error) throw new Error("Stored Google Drive credential lookup failed");
+  const refreshToken = data?.refresh_token ??
+    process.env.GOOGLE_DRIVE_REFRESH_TOKEN ?? process.env.GOOGLE_REFRESH_TOKEN ?? "";
+  if (!refreshToken) throw new Error("Google Drive refresh token unavailable");
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: clientId, client_secret: clientSecret,
-      refresh_token: data.refresh_token, grant_type: "refresh_token",
+      refresh_token: refreshToken, grant_type: "refresh_token",
     }),
     cache: "no-store",
   });
