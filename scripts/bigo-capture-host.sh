@@ -13,6 +13,25 @@ COVER="/tmp/bigo-${HOST}-${TS}.jpg"
 LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
+
+# Secondary Google Drive archive. Dropbox remains canonical; Drive errors are reported
+# without suppressing an otherwise verified Dropbox capture or changing publish policy.
+drive_put() {
+  local SRC="$1" CLASS="$2" MIME="$3" NAME="$4"
+  local SESSION UPLOAD_URL UPLOAD_RESULT FILE_ID SIZE MD5 VERIFY
+  SESSION="$(python3 -c 'import json,sys; print(json.dumps({"action":"session","name":sys.argv[1],"mimeType":sys.argv[2],"archiveClass":sys.argv[3]}))' "$NAME" "$MIME" "$CLASS")"
+  SESSION="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X POST "$DRIVE_UPLOAD_URL" -H "Authorization: Bearer $CHATB2K_LIVE_INGEST_KEY" -H "Content-Type: application/json" --data "$SESSION")"
+  UPLOAD_URL="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["uploadUrl"])' <<< "$SESSION")"
+  UPLOAD_RESULT="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$UPLOAD_URL" -H "Content-Type: $MIME" --data-binary "@$SRC")"
+  FILE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' <<< "$UPLOAD_RESULT")"
+  [ -n "$FILE_ID" ] || { echo "Drive upload response did not include a file ID" >&2; return 1; }
+  SIZE="$(stat -c '%s' "$SRC")"
+  MD5="$(md5sum "$SRC" | awk '{print $1}')"
+  VERIFY="$(python3 -c 'import json,sys; print(json.dumps({"action":"verify","fileId":sys.argv[1],"expectedSize":int(sys.argv[2]),"expectedMd5":sys.argv[3]}))' "$FILE_ID" "$SIZE" "$MD5")"
+  VERIFY="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X POST "$DRIVE_UPLOAD_URL" -H "Authorization: Bearer $CHATB2K_LIVE_INGEST_KEY" -H "Content-Type: application/json" --data "$VERIFY")"
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("checksumVerified") is True; print(d.get("fileId","") + chr(9) + d.get("webViewLink",""))' <<< "$VERIFY"
+}
+
 SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
@@ -387,13 +406,32 @@ export FILE COVER
 BLOB_URL="$(dropbox_upload "$FILE" "/ResoFit/BIGO/processed/${HOST}-${TS}.mp4" true)"
 COVER_URL="$(dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/${HOST}-${TS}-cover.jpg" true)"
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" <<'PY' > "$RESULT"
+DRIVE_RAW=""
+DRIVE_VIDEO=""
+DRIVE_COVER=""
+DRIVE_SYNC_STATUS="pending"
+if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
+  if DRIVE_RAW="$(drive_put "$RAW" "raw-captures" "video/mp4" "BIGO-$HOST-$TS-raw.mp4")" &&
+     DRIVE_VIDEO="$(drive_put "$FILE" "processed" "video/mp4" "BIGO-$HOST-$TS.mp4")" &&
+     DRIVE_COVER="$(drive_put "$COVER" "metadata" "image/jpeg" "BIGO-$HOST-$TS-cover.jpg")"; then
+    DRIVE_SYNC_STATUS="verified"
+    echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST"
+  else
+    DRIVE_SYNC_STATUS="partial"
+    echo "::warning::Google Drive archive is partial for $HOST; Dropbox remains canonical and capture will continue."
+  fi
+else
+  DRIVE_SYNC_STATUS="not_configured"
+  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; Dropbox remains canonical."
+fi
+
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
-w,h,d,fps,avg,pix,ts,source_url,audio_streams=sys.argv[7:]
+w,h,d,fps,avg,pix,ts,source_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status=sys.argv[7:]
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover}}
+hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)}}}
 print(json.dumps({'highlight':hitem}))
 PY
 
