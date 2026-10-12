@@ -98,6 +98,7 @@ export const Route = createFileRoute("/api/google/drive-mcp/bigo-upload-session"
           }
           const resofitId = await ensureFolder(token, "ResoFit");
           const bigoId = await ensureFolder(token, "BIGO", resofitId);
+          for (const folderName of allowedClasses) await ensureFolder(token, folderName, bigoId);
           const folderId = await ensureFolder(token, archiveClass, bigoId);
           const session = await driveRequest(token,
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,webViewLink,size,md5Checksum,parents",
