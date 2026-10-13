@@ -1,16 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST="${1:-}"
+HOST_INPUT="${1:-}"
 SOURCE_OVERRIDE="${2:-}"
-if [ -z "$HOST" ]; then exit 2; fi
+if [ -z "$HOST_INPUT" ]; then exit 2; fi
 
-RESULT="/tmp/bigo-results/${HOST}.json"
-RAW="/tmp/bigo-${HOST}-raw.mp4"
+# Normalize a host identifier before using it in filesystem paths. Registry inputs may
+# contain a full BIGO URL (for example https://www.bigo.tv/snow254); keep that URL as
+# source provenance, but use only its final path segment as the room identifier.
+HOST="$(python3 - "$HOST_INPUT" <<'PYHOST'
+import re,sys
+from urllib.parse import urlparse
+value=sys.argv[1].strip()
+if value.startswith(("https://","http://")):
+    parsed=urlparse(value)
+    value=parsed.path.rstrip("/").split("/")[-1]
+value=value.strip()
+if not value or value in {".",".."} or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",value):
+    raise SystemExit("Invalid BIGO host identifier")
+print(value)
+PYHOST
+)"
+SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
+
+RESULT="/tmp/bigo-results/${SAFE_HOST}.json"
+RAW="/tmp/bigo-${SAFE_HOST}-raw.mp4"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-FILE="/tmp/bigo-${HOST}-${TS}.mp4"
-COVER="/tmp/bigo-${HOST}-${TS}.jpg"
-LOG="/tmp/streamlink-${HOST}.log"
+FILE="/tmp/bigo-${SAFE_HOST}-${TS}.mp4"
+COVER="/tmp/bigo-${SAFE_HOST}-${TS}.jpg"
+LOG="/tmp/streamlink-${SAFE_HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
 
@@ -414,8 +432,8 @@ if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
   if DRIVE_RAW="$(drive_put "$RAW" "raw-captures" "video/mp4" "BIGO-$HOST-$TS-raw.mp4")" &&
      DRIVE_VIDEO="$(drive_put "$FILE" "processed" "video/mp4" "BIGO-$HOST-$TS.mp4")" &&
      DRIVE_COVER="$(drive_put "$COVER" "metadata" "image/jpeg" "BIGO-$HOST-$TS-cover.jpg")"; then
-    DRIVE_SYNC_STATUS="verified"
-    echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST"
+    DRIVE_SYNC_STATUS="media_verified_metadata_pending"
+    echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST; metadata read-back is still pending"
   else
     DRIVE_SYNC_STATUS="partial"
     echo "::warning::Google Drive archive is partial for $HOST; Dropbox remains canonical and capture will continue."
@@ -447,9 +465,9 @@ if ! dropbox_upload "$RESULT" "/ResoFit/BIGO/metadata/${HOST}-${TS}.json"; then
   echo "::error::Dropbox metadata archive failed for $HOST."
   exit 1
 fi
-if [ "${DRIVE_SYNC_STATUS}" = "verified" ]; then
+if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   if drive_put "$RESULT" "metadata" "application/json" "BIGO-$HOST-$TS.json" >/dev/null; then
-    echo "::notice::Google Drive metadata archive verified for $HOST"
+    echo "::notice::Google Drive metadata archive verified for $HOST; all four archive classes are now present"
   else
     echo "::warning::Google Drive metadata archive failed for $HOST; Dropbox metadata remains verified."
   fi
