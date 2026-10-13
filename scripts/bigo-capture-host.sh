@@ -28,6 +28,7 @@ RAW="/tmp/bigo-${SAFE_HOST}-raw.mp4"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 FILE="/tmp/bigo-${SAFE_HOST}-${TS}.mp4"
 COVER="/tmp/bigo-${SAFE_HOST}-${TS}.jpg"
+GBP_FILE="/tmp/bigo-${SAFE_HOST}-${TS}-google-business.mp4"
 LOG="/tmp/streamlink-${SAFE_HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
@@ -278,6 +279,18 @@ if not (1 <= d <= 180): raise SystemExit('QA duration')
 if p != 'yuv420p': raise SystemExit('QA pixel format')
 PY
 
+# Google Business video posts are limited to 30 seconds. Preserve the master for
+# TikTok/YouTube and create a separate short variant only when required.
+GBP_DURATION=0
+if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = "True" ]; then
+  if ffmpeg -hide_banner -loglevel error -i "$FILE" -t 30 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$GBP_FILE"; then
+    GBP_DURATION=30
+  else
+    rm -f "$GBP_FILE"
+    echo "::warning::Google Business short variant generation failed for $HOST; that channel will remain held."
+  fi
+fi
+
 # Dropbox is the canonical media store for this capture path. Never attempt Blob uploads:
 # the store is suspended, and downstream ingestion accepts an HTTPS media URL.
 if [ -z "${DROPBOX_APP_KEY:-}" ] || [ -z "${DROPBOX_APP_SECRET:-}" ] || [ -z "${DROPBOX_REFRESH_TOKEN:-}" ]; then
@@ -426,6 +439,8 @@ fi
 
 export FILE COVER
 BLOB_URL="$(dropbox_upload "$FILE" "/ResoFit/BIGO/processed/${HOST}-${TS}.mp4" true)"
+GBP_URL=""
+if [ -s "$GBP_FILE" ]; then GBP_URL="$(dropbox_upload "$GBP_FILE" "/ResoFit/BIGO/processed/google-business/${HOST}-${TS}-30s.mp4" true)"; fi
 COVER_URL="$(dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/${HOST}-${TS}-cover.jpg" true)"
 
 DRIVE_RAW=""
@@ -447,16 +462,16 @@ else
   echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; Dropbox remains canonical."
 fi
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" <<'PY' > "$RESULT"
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
-w,h,d,fps,avg,pix,ts,source_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status=sys.argv[7:]
+w,h,d,fps,avg,pix,ts,source_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status,gbp_url,gbp_duration=sys.argv[7:]
 def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)}}}
+hitem={'host_id':host,'host_name':name,'original_url':source_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None}}
 print(json.dumps({'highlight':hitem}))
 PY
 
