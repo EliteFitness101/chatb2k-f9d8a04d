@@ -10,7 +10,7 @@ const clientSecret=Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET")||"";
 const refreshToken=Deno.env.get("GOOGLE_DRIVE_REFRESH_TOKEN")||"";
 const CRON_SECRET=Deno.env.get("BUFFER_CRON_SECRET")||Deno.env.get("CONTENT_CRON_SECRET")||"";
 const out=(body:unknown,status=200)=>Response.json(body,{status,headers:{"cache-control":"no-store"}});
-const isSupportedMedia=(u:string)=>{try{const x=new URL(u);const blob=/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i.test(u);const dropbox=x.protocol==="https:"&&x.hostname==="www.dropbox.com"&&/^\/scl\/fi\/[A-Za-z0-9_-]+\/[^/]+$/.test(x.pathname)&&/^[A-Za-z0-9_-]+$/.test(x.searchParams.get("rlkey")||"")&&x.searchParams.get("dl")==="1";return x.protocol==="https:"&&(blob||dropbox)}catch{return false}};
+const isSupportedMedia=(u:string)=>{try{const x=new URL(u);const blob=/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i.test(u);const dropbox=x.protocol==="https:"&&(x.hostname==="www.dropbox.com"||x.hostname==="dl.dropboxusercontent.com")&&/^\/scl\/fi\/[A-Za-z0-9_-]+\/[^/]+$/.test(x.pathname)&&/^[A-Za-z0-9_-]+$/.test(x.searchParams.get("rlkey")||"")&&x.searchParams.get("dl")==="1";return x.protocol==="https:"&&(blob||dropbox)}catch{return false}};
 async function accessToken(){
  if(!serviceKey)throw new Error("Supabase service key is not configured in the archive runtime");
  const response=await fetch("https://chatb2k.resofit.fit/api/google/drive-mcp/access-token",{
