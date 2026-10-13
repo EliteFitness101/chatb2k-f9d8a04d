@@ -30,7 +30,7 @@ jobs:
           buffer = Path("supabase/functions/buffer-publisher/index.ts").read_text()
           drive = Path("supabase/functions/drive-asset-archiver/index.ts").read_text()
           for name, source in (("Buffer publisher", buffer), ("Drive archiver", drive)):
-              assert 'x.hostname==="www.dropbox.com"' in source, f"{name}: exact Dropbox hostname allowlist missing"
+              assert 'x.hostname==="www.dropbox.com"' in source and 'x.hostname==="dl.dropboxusercontent.com"' in source, f"{name}: exact Dropbox hostname allowlist missing"
               assert 'x.searchParams.get("dl")==="1"' in source, f"{name}: direct-download requirement missing"
               assert 'x.searchParams.get("rlkey")' in source, f"{name}: shared-link key requirement missing"
               assert "example.com" not in source, f"{name}: broad host acceptance suspected"
