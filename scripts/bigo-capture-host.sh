@@ -22,6 +22,8 @@ print(value)
 PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
+# Recover a source URL that the workflow fallback accidentally double-prefixed.
+if [ "$SOURCE_OVERRIDE" = "https://www.bigo.tv/$HOST_INPUT" ]; then SOURCE_OVERRIDE="$HOST_INPUT"; fi
 
 RESULT="/tmp/bigo-results/${SAFE_HOST}.json"
 RAW="/tmp/bigo-${SAFE_HOST}-raw.mp4"
@@ -30,7 +32,7 @@ FILE="/tmp/bigo-${SAFE_HOST}-${TS}.mp4"
 COVER="/tmp/bigo-${SAFE_HOST}-${TS}.jpg"
 GBP_FILE="/tmp/bigo-${SAFE_HOST}-${TS}-google-business.mp4"
 LOG="/tmp/streamlink-${SAFE_HOST}.log"
-rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
+rm -f "$RESULT" "$RAW" "$FILE" "$COVER" "$GBP_FILE"
 
 
 # Secondary Google Drive archive. Dropbox remains canonical; Drive errors are reported
