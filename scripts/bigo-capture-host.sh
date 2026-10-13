@@ -409,6 +409,10 @@ if share.lower() == "true":
         url += "&dl=1"
     else:
         url += "?dl=1"
+    # Dropbox's dl.dropboxusercontent.com form serves the bytes without the
+    # redirect used by www.dropbox.com shared links. This matters to Buffer's
+    # media fetcher, which rejected the previous redirecting video URL.
+    url = url.replace("https://www.dropbox.com/", "https://dl.dropboxusercontent.com/", 1)
     print(url)
 else:
     print(f"Dropbox archive verified: {size} bytes; content hash matched.", file=sys.stderr)
