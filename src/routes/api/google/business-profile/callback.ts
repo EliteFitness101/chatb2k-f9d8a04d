@@ -126,7 +126,7 @@ export const Route = createFileRoute("/api/google/business-profile/callback")({
         const accounts = Array.isArray(accountPayload.accounts) ? accountPayload.accounts : [];
         const foundLocations: Array<{ name: string; title?: string; address?: unknown; placeId?: string }> = [];
         for (const account of accounts) {
-          if (typeof account.name !== "string" || !/^accounts\\/[^/]+$/.test(account.name)) continue;
+          if (typeof account.name !== "string" || !/^accounts\/[^/]+$/.test(account.name)) continue;
           const locationsUrl = new URL(`https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations`);
           locationsUrl.searchParams.set("readMask", "name,title,storefrontAddress,metadata");
           locationsUrl.searchParams.set("pageSize", "100");
