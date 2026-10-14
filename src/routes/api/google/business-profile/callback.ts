@@ -124,6 +124,38 @@ export const Route = createFileRoute("/api/google/business-profile/callback")({
 
         const accountPayload = await accountsResponse.json();
         const accounts = Array.isArray(accountPayload.accounts) ? accountPayload.accounts : [];
+        const foundLocations: Array<{ name: string; title?: string; address?: unknown; placeId?: string }> = [];
+        for (const account of accounts) {
+          if (typeof account.name !== "string" || !/^accounts\\/[^/]+$/.test(account.name)) continue;
+          const locationsUrl = new URL(`https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations`);
+          locationsUrl.searchParams.set("readMask", "name,title,storefrontAddress,metadata");
+          locationsUrl.searchParams.set("pageSize", "100");
+          let nextPageToken: string | undefined;
+          do {
+            if (nextPageToken) locationsUrl.searchParams.set("pageToken", nextPageToken);
+            const locationsResponse = await fetch(locationsUrl, {
+              headers: { Authorization: `Bearer ${refreshed.access_token}` },
+            });
+            if (!locationsResponse.ok) {
+              console.error("Google Business Profile locations API probe failed", { status: locationsResponse.status, account: account.name });
+              return new Response(
+                "Account access succeeded, but location inventory failed. Check Business Profile Business Information API access; no location audit was marked complete.",
+                { status: 502 },
+              );
+            }
+            const locationsPayload = await locationsResponse.json();
+            for (const location of Array.isArray(locationsPayload.locations) ? locationsPayload.locations : []) {
+              foundLocations.push({
+                name: location.name,
+                title: location.title,
+                address: location.storefrontAddress,
+                placeId: location.metadata?.placeId,
+              });
+            }
+            nextPageToken = locationsPayload.nextPageToken;
+          } while (nextPageToken);
+        }
+
         const { error: persistError } = await (supabaseAdmin as any)
           .from("google_oauth_credentials")
           .upsert(
@@ -142,8 +174,41 @@ export const Route = createFileRoute("/api/google/business-profile/callback")({
           return new Response("Could not securely store the Business Profile credential.", { status: 500 });
         }
 
+        const matchedPlaceIds = new Set<string>();
+        for (const location of foundLocations) {
+          if (!location.placeId) continue;
+          const { data: matched } = await (supabaseAdmin as any)
+            .from("google_business_locations")
+            .select("place_id")
+            .eq("place_id", location.placeId)
+            .maybeSingle();
+          if (!matched) continue;
+          matchedPlaceIds.add(location.placeId);
+          const { error: auditError } = await (supabaseAdmin as any)
+            .from("google_business_locations")
+            .update({
+              api_resource_name: location.name,
+              profile_status: "found_in_google_api",
+              last_audited_at: new Date().toISOString(),
+              metadata: {
+                source: "Google Business Profile API",
+                authorized_account_email: profile.email,
+                api_title: location.title ?? null,
+                api_address: location.address ?? null,
+                google_profile_api_verified: true,
+                audit_timestamp: new Date().toISOString(),
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq("place_id", location.placeId);
+          if (auditError) {
+            console.error("Google Business Profile location audit persistence failed", { message: auditError.message });
+            return new Response("API access succeeded, but location audit results could not be stored.", { status: 500 });
+          }
+        }
+
         return new Response(
-          `Google Business Profile connected and verified for ${profile.email}. Account API responded successfully; ${accounts.length} account(s) returned. Existing Google Drive credentials were left unchanged.`,
+          `Google Business Profile API connection verified for ${profile.email}. Accounts: ${accounts.length}; locations returned: ${foundLocations.length}; known ResoFit locations matched: ${matchedPlaceIds.size} of 2. Existing Google Drive credentials were left unchanged.`,
           {
             status: 200,
             headers: {
