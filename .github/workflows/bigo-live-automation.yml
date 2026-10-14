@@ -155,7 +155,7 @@ jobs:
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
           VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
           VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
           if [ "$VERIFIED_COUNT" -gt 0 ]; then
             curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
