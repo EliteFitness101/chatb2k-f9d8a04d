@@ -1,0 +1,62 @@
+name: ChatB2K webhook inbox validation
+
+on:
+  pull_request:
+    paths:
+      - 'src/routes/api/public/webhooks/github.ts'
+      - 'ops/resoflex-edge/migrations/**'
+      - 'docs/ops/chatb2k101-orchestration-trust-boundary.md'
+      - '.github/workflows/chatb2k-webhook-inbox-validation.yml'
+  push:
+    branches:
+      - feat/chatb2k101-durable-webhook-inbox-20261014
+    paths:
+      - 'src/routes/api/public/webhooks/github.ts'
+      - 'ops/resoflex-edge/migrations/**'
+      - 'docs/ops/chatb2k101-orchestration-trust-boundary.md'
+      - '.github/workflows/chatb2k-webhook-inbox-validation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatb2k-webhook-inbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Trust-boundary source assertions
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const route = readFileSync('src/routes/api/public/webhooks/github.ts', 'utf8');
+          const migration = readFileSync('ops/resoflex-edge/migrations/20261014080000_github_webhook_inbox.sql', 'utf8');
+          const checks = [
+            ['HMAC SHA-256', /createHmac\(["']sha256["']/.test(route)],
+            ['constant-time comparison', /timingSafeEqual/.test(route)],
+            ['fail-closed missing config', /return new Response\("Webhook receiver not configured", \{ status: 503 \}\)/.test(route)],
+            ['repository allowlist', /GITHUB_ALLOWED_REPOSITORIES/.test(route) && /Repository not allowlisted/.test(route)],
+            ['durable insert before ack', /\.insert\(\{/.test(route) && /status: 202/.test(route)],
+            ['retry on persistence failure', /Temporary inbox failure/.test(route) && /status: 503/.test(route)],
+            ['unique delivery id', /delivery_id text not null unique/.test(migration)],
+            ['RLS enabled', /enable row level security/i.test(migration)],
+            ['anon access revoked', /revoke all on table public\.github_webhook_inbox from public, anon, authenticated/i.test(migration)],
+          ];
+          for (const [name, pass] of checks) console.log(`${pass ? 'PASS' : 'FAIL'} ${name}`);
+          if (checks.some(([, pass]) => !pass)) process.exit(1);
+          NODE
