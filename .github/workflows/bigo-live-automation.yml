@@ -98,7 +98,16 @@ jobs:
           run_capture() {
             local HOST_ID="$1"
             local SOURCE_URL="$2"
-            bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}" || true
+            local SAFE_HOST
+            SAFE_HOST="$(printf '%s' "${HOST_ID}" | tr -c 'A-Za-z0-9._-' '_')"
+            if ! bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}"; then
+              python3 - "${SAFE_HOST}" <<'PYFAIL'
+          import json,sys
+          json.dump({"status":"capture_failed","reason":"capture script exited nonzero; inspect host logs"},open("/tmp/bigo-results/"+sys.argv[1]+".failure.json","w"))
+          PYFAIL
+              echo "::error::BIGO capture script exited nonzero for host ${SAFE_HOST}"
+            fi
+            return 0
           }
           ACTIVE=0
           while IFS='|' read -r HOST_ID SOURCE_URL; do
