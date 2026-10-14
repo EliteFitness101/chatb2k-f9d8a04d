@@ -76,7 +76,6 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
         });
 
         const { error } = await supabase
-          .schema("orchestration")
           .from("github_webhook_inbox")
           .insert({
             delivery_id: deliveryId,
