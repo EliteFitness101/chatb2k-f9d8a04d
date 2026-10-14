@@ -33,7 +33,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - name: Install locked dependencies
+        run: npm ci --legacy-peer-deps
       - name: Lint
         run: npm run lint
       - name: Unit tests
