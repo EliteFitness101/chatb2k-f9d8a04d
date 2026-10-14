@@ -1,11 +1,9 @@
 -- ResoFlex Edge Node: durable GitHub webhook inbox.
 -- Apply ONLY to Supabase project xtgteviwtoupbfvorrmk (eu-central-1).
--- This migration is intentionally not in supabase/migrations because that directory
+-- This migration is intentionally outside supabase/migrations because that directory
 -- is pinned to the canonical resonance-fitness project (vbqjvmnhdtdhmeeudqnn).
 
-create schema if not exists orchestration;
-
-create table if not exists orchestration.github_webhook_inbox (
+create table if not exists public.github_webhook_inbox (
   id bigint generated always as identity primary key,
   delivery_id text not null unique,
   event_type text not null,
@@ -25,19 +23,17 @@ create table if not exists orchestration.github_webhook_inbox (
 );
 
 create index if not exists github_webhook_inbox_status_received_idx
-  on orchestration.github_webhook_inbox (status, received_at);
+  on public.github_webhook_inbox (status, received_at);
 
 create index if not exists github_webhook_inbox_retry_idx
-  on orchestration.github_webhook_inbox (next_attempt_at)
+  on public.github_webhook_inbox (next_attempt_at)
   where status = 'retry_pending';
 
-alter table orchestration.github_webhook_inbox enable row level security;
+alter table public.github_webhook_inbox enable row level security;
 
-revoke all on schema orchestration from public, anon, authenticated;
-revoke all on table orchestration.github_webhook_inbox from public, anon, authenticated;
-grant usage on schema orchestration to service_role;
-grant select, insert, update on table orchestration.github_webhook_inbox to service_role;
-grant usage, select on sequence orchestration.github_webhook_inbox_id_seq to service_role;
+revoke all on table public.github_webhook_inbox from public, anon, authenticated;
+grant select, insert, update on table public.github_webhook_inbox to service_role;
+grant usage, select on sequence public.github_webhook_inbox_id_seq to service_role;
 
-comment on table orchestration.github_webhook_inbox is
+comment on table public.github_webhook_inbox is
   'Authenticated, allowlisted GitHub deliveries; idempotent by delivery_id. Server-only. Does not authorize arbitrary deployments or fulfillment.';
