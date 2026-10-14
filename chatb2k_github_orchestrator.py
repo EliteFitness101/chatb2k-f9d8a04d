@@ -23,7 +23,7 @@ app = FastAPI(
     description="Autonomous Repository & Global Omni-Dimensional Fulfillment Engine for CEO Lord B2K."
 )
 
-WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "resofit-sovereign-secret-2026")
+WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "").strip()
 SKU_MATRIX_CAPACITY = 999999999
 VALUATION_TARGET_NGN = 48200000000  # ₦48.2 Billion
 
@@ -67,49 +67,64 @@ async def health_check():
 async def github_webhook_receiver(
     request: Request,
     x_github_event: str = Header(None),
-    x_hub_signature_256: str = Header(None)
+    x_hub_signature_256: str = Header(None),
+    x_github_delivery: str = Header(None),
 ):
-    body_bytes = await request.body()
-    
-    if x_hub_signature_256:
-        sha_name, signature = x_hub_signature_256.split('=')
-        if sha_name == 'sha256':
-            mac = hmac.new(WEBHOOK_SECRET.encode(), msg=body_bytes, digestmod=hashlib.sha256)
-            if not hmac.compare_digest(mac.hexdigest(), signature):
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Signature verification failed.")
+    # Fail closed: no development fallback secret, no unsigned webhook acceptance.
+    if not WEBHOOK_SECRET:
+        logger.error("GitHub webhook rejected: GITHUB_WEBHOOK_SECRET is not configured.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Webhook verifier is not configured.")
 
-    payload = await request.json()
-    logger.info(f"Received GitHub Event: [{x_github_event}]")
+    if not x_hub_signature_256 or not x_github_delivery or not x_github_event:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing required GitHub webhook headers.")
+
+    try:
+        sha_name, signature = x_hub_signature_256.split("=", 1)
+        if sha_name.lower() != "sha256" or len(signature) != 64:
+            raise ValueError("invalid signature format")
+        bytes.fromhex(signature)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature format.")
+
+    body_bytes = await request.body()
+    mac = hmac.new(WEBHOOK_SECRET.encode(), msg=body_bytes, digestmod=hashlib.sha256)
+    if not hmac.compare_digest(mac.hexdigest(), signature.lower()):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Signature verification failed.")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload.")
+
+    # This endpoint acknowledges authenticated events only. It does not run arbitrary
+    # repository actions; a separate allowlisted executor must authorize and verify them.
+    logger.info("Authenticated GitHub webhook received: event=%s delivery=%s", x_github_event, x_github_delivery)
 
     if x_github_event == "pull_request":
-        repo = payload.get("repository", {}).get("full_name", "EliteFitness101/chat")
-        pr_title = payload.get("pull_request", {}).get("title", "Optimization")
-        action = payload.get("action", "opened")
-        
+        repo = payload.get("repository", {}).get("full_name")
+        pr_title = payload.get("pull_request", {}).get("title")
+        action = payload.get("action")
         return {
-            "status": "SUCCESS",
+            "status": "ACKNOWLEDGED",
             "event": "pull_request",
+            "delivery_id": x_github_delivery,
             "repository": repo,
             "action": action,
-            "gap_analysis": engine.analyze_gap_and_demand(pr_title),
-            "lord_b2k_directive": "Repository sync validated. Zero pipeline friction."
+            "processing_status": "received_only",
+            "analysis": "No repository mutation or deployment was performed by this webhook receiver.",
+            "next_step": "Route approved work through an authenticated, repository-allowlisted executor."
         }
 
-    return {"status": "ACKNOWLEDGED", "event": x_github_event}
+    return {"status": "ACKNOWLEDGED", "event": x_github_event, "delivery_id": x_github_delivery, "processing_status": "received_only"}
 
 @app.post("/api/orchestrate/fulfillment")
 async def orchestrate_fulfillment(order: OrderContext):
-    dispatch_id = f"ORD-LORD-{uuid.uuid4().hex[:8].upper()}"
-    return {
-        "success": True,
-        "dispatch_id": dispatch_id,
-        "customer_location": order.location,
-        "bundles_assigned": order.bundles,
-        "routing_engine": "ChatB2K Autonomous Node Network",
-        "fulfillment_tier": "Whiteglove Ecosystem Dispatch",
-        "estimated_delivery": "Within 45 minutes",
-        "cost_savings": "Maximized via decentralized crowd-couriers"
-    }
+    # Do not report a dispatch as successful unless the canonical commerce/order
+    # service actually accepted it. This legacy endpoint has no such integration.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Fulfillment is not connected to the canonical ResoFit order and dispatch engine."
+    )
 
 if __name__ == "__main__":
     import uvicorn
