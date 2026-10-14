@@ -15,6 +15,11 @@ permissions:
   contents: read
   id-token: write
 
+# A single capture cycle at a time prevents five-minute schedules from stacking.
+concurrency:
+  group: bigo-live-capture
+  cancel-in-progress: false
+
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
@@ -76,14 +81,33 @@ jobs:
             echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
             exit 1
           fi
-          printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts.txt
-          echo "Selected $(wc -l < /tmp/bigo-hosts.txt) host(s) for capture"
+          printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts-all.txt
+          # Rotate through a bounded subset each five-minute cycle to avoid overrunning the runner.
+          python3 - <<'PY'
+          import os, time
+          hosts=[line for line in open("/tmp/bigo-hosts-all.txt") if line.strip()]
+          limit=max(1,min(int(os.getenv("BIGO_HOSTS_PER_CYCLE","16")),32))
+          if len(hosts)>limit:
+              start=((int(time.time())//300)*limit)%len(hosts)
+              hosts=(hosts+hosts)[start:start+limit]
+          open("/tmp/bigo-hosts.txt","w").writelines(hosts)
+          print(f"Selected {len(hosts)} of {len(open('/tmp/bigo-hosts-all.txt').readlines())} registered host(s) for this cycle")
+          PY
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
           run_capture() {
             local HOST_ID="$1"
             local SOURCE_URL="$2"
-            bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}" || true
+            local SAFE_HOST
+            SAFE_HOST="$(printf '%s' "${HOST_ID}" | tr -c 'A-Za-z0-9._-' '_')"
+            if ! bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}"; then
+              python3 - "${SAFE_HOST}" <<'PYFAIL'
+          import json,sys
+          json.dump({"status":"capture_failed","reason":"capture script exited nonzero; inspect host logs"},open("/tmp/bigo-results/"+sys.argv[1]+".failure.json","w"))
+          PYFAIL
+              echo "::error::BIGO capture script exited nonzero for host ${SAFE_HOST}"
+            fi
+            return 0
           }
           ACTIVE=0
           while IFS='|' read -r HOST_ID SOURCE_URL; do
@@ -97,20 +121,29 @@ jobs:
           done < /tmp/bigo-hosts.txt
           wait
           python3 - <<'PY'
-          import json,glob
-          out={"highlights":[],"limit":10}
+          import json,glob,os
+          out={"highlights":[],"limit":10,"capture_failures":[]}
           for p in glob.glob("/tmp/bigo-results/*.json"):
               try:
                   d=json.load(open(p))
                   if d.get("highlight"):
                       out["highlights"].append(d["highlight"])
+                  elif p.endswith(".failure.json"):
+                      out["capture_failures"].append({"file":os.path.basename(p),"detail":d.get("reason","capture failed")})
               except Exception as e:
-                  print(f"::warning::bad result {p}: {e}")
+                  out["capture_failures"].append({"file":os.path.basename(p),"detail":str(e)})
           json.dump(out,open("/tmp/bigo-batch.json","w"))
-          print(f"Verified BIGO batch: {len(out['highlights'])} highlight(s)")
+          print(f"Capture summary: {len(out['highlights'])} highlight(s), {len(out['capture_failures'])} host failure(s)")
+          if out["capture_failures"]:
+              print("::warning::One or more BIGO host capture attempts failed; inspect the host capture logs for details.")
           PY
           if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
-            echo "::notice::No live hosts captured this cycle; continuing."
+            FAILURES="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["capture_failures"]))')"
+            if [ "$FAILURES" -gt 0 ]; then
+              echo "::error::No highlights captured and $FAILURES host failure(s) were recorded."
+              exit 1
+            fi
+            echo "::notice::No live hosts captured this cycle; no capture errors were recorded."
             exit 0
           fi
 
