@@ -75,20 +75,21 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
           auth: { autoRefreshToken: false, persistSession: false },
         });
 
-        const { error } = await supabase
-          .from("github_webhook_inbox")
-          .insert({
-            delivery_id: deliveryId,
-            event_type: eventType,
-            repository_full_name: repositoryName,
-            action,
-            payload,
-            status: "received",
-          });
+        const { error } = await supabase.from("github_webhook_inbox").insert({
+          delivery_id: deliveryId,
+          event_type: eventType,
+          repository_full_name: repositoryName,
+          action,
+          payload,
+          status: "received",
+        });
 
         if (error?.code === "23505") {
           // GitHub retries are safe: the delivery ID is the idempotency key.
-          return Response.json({ accepted: true, duplicate: true, delivery_id: deliveryId }, { status: 202 });
+          return Response.json(
+            { accepted: true, duplicate: true, delivery_id: deliveryId },
+            { status: 202 },
+          );
         }
         if (error) {
           console.error("GitHub webhook inbox insert failed", {
@@ -99,7 +100,10 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
           return new Response("Temporary inbox failure", { status: 503 });
         }
 
-        return Response.json({ accepted: true, duplicate: false, delivery_id: deliveryId }, { status: 202 });
+        return Response.json(
+          { accepted: true, duplicate: false, delivery_id: deliveryId },
+          { status: 202 },
+        );
       },
     },
   },
