@@ -66,12 +66,8 @@ TOKEN_T='https://sec.bigo.sg/v1/webjs/t'
 TOKEN_STATUS='https://sec.bigo.sg/v1/webjs/status'
 KEY=b'undefinedval0x01'
 UA='Mozilla/5.0'
-COOKIE=os.environ.get('BIGO_COOKIE_HEADER','').strip()
-def request_headers(accept='*/*', authenticated=True):
-    h={'User-Agent':UA,'Accept':accept}
-    if COOKIE and authenticated:
-        h['Cookie']=COOKIE
-    return h
+def request_headers(accept='*/*'):
+    return {'User-Agent':UA,'Accept':accept}
 
 def callback():
     return f"jsonpcallback_{int(time.time()*1000)}_{secrets.randbelow(1000001)}"
@@ -83,7 +79,7 @@ def jsonp(text):
     return json.loads(m.group('json'))
 
 def resolve_token():
-    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(authenticated=False),timeout=12)
+    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12)
     tr.raise_for_status()
     ts=jsonp(tr.text)['time']
     payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
@@ -144,14 +140,6 @@ if [ -n "$STREAM_URL" ]; then
   SOURCE_URL="$STREAM_URL"
   echo "::notice::BIGO host $HOST using freshly discovered HLS source"
 fi
-# BIGO may require an authenticated session for public-room playback. Store the full
-# Cookie header as a masked GitHub Actions secret; never print it to workflow logs.
-STREAMLINK_AUTH_ARGS=()
-CURL_AUTH_ARGS=()
-if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
-  STREAMLINK_AUTH_ARGS=(--http-header "Cookie=${BIGO_COOKIE_HEADER}")
-  CURL_AUTH_ARGS=(-H "Cookie: ${BIGO_COOKIE_HEADER}")
-fi
 CAPTURE_OK=0
 # Capture duration is runtime-configurable. When unset, FFmpeg captures until the live source
 # closes/Streamlink's bounded probe ends; no fixed clip duration is imposed by source code.
@@ -164,7 +152,7 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s streamlink --webbrowser yes "${STREAMLINK_AUTH_ARGS[@]}" --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --webbrowser yes --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -179,7 +167,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -194,7 +182,7 @@ fi
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
   PAGE="/tmp/bigo-${HOST}-signed.html"
   rm -f "$PAGE"
-  if curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$SOURCE_OVERRIDE" -o "$PAGE"; then
+  if curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$PAGE"; then
     DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
 import re,sys
 p=sys.argv[1]
@@ -221,7 +209,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
