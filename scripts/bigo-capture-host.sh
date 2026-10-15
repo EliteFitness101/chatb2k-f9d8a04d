@@ -22,8 +22,9 @@ print(value)
 PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
+HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
-if [ "$SOURCE_OVERRIDE" = "https://www.bigo.tv/$HOST_INPUT" ]; then SOURCE_OVERRIDE="$HOST_INPUT"; fi
+# Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
 
 RESULT="/tmp/bigo-results/${SAFE_HOST}.json"
 RAW="/tmp/bigo-${SAFE_HOST}-raw.mp4"
@@ -440,10 +441,10 @@ if [ -z "${DROPBOX_ACCESS_TOKEN:-}" ]; then
 fi
 
 export FILE COVER
-BLOB_URL="$(dropbox_upload "$FILE" "/ResoFit/BIGO/processed/${HOST}-${TS}.mp4" true)"
+BLOB_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
 GBP_URL=""
-if [ -s "$GBP_FILE" ]; then GBP_URL="$(dropbox_upload "$GBP_FILE" "/ResoFit/BIGO/processed/google-business/${HOST}-${TS}-30s.mp4" true)"; fi
-COVER_URL="$(dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/${HOST}-${TS}-cover.jpg" true)"
+if [ -s "$GBP_FILE" ]; then GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"; fi
+COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
 
 DRIVE_RAW=""
 DRIVE_VIDEO=""
@@ -486,11 +487,11 @@ print(json.dumps({'highlight':hitem}))
 PY
 
 # Preserve source media and metadata in the Dropbox archive; upload/read-back hash checks are mandatory.
-if ! dropbox_upload "$RAW" "/ResoFit/BIGO/raw-captures/${HOST}-${TS}-raw.mp4"; then
+if ! dropbox_upload "$RAW" "${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4"; then
   echo "::error::Dropbox raw capture archive failed for $HOST."
   exit 1
 fi
-if ! dropbox_upload "$RESULT" "/ResoFit/BIGO/metadata/${HOST}-${TS}.json"; then
+if ! dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json"; then
   echo "::error::Dropbox metadata archive failed for $HOST."
   exit 1
 fi
