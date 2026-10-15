@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
+import { resolveMediaProvider, recordMediaPipelineEvent } from "@/lib/media/media-pipeline-router.server";
 
 type LiveHighlightAdmin = typeof supabaseAdmin & { from(table: "resofit_live_highlights"): any };
 const liveDb = supabaseAdmin as LiveHighlightAdmin;
@@ -34,8 +35,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const expectedKey =
-          process.env.CHATB2K_LIVE_INGEST_KEY ?? process.env.LIVE_HIGHLIGHTS_INGEST_KEY ?? null;
+        const expectedKey = process.env.CHATB2K_LIVE_INGEST_KEY ?? null;
         const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
 
         if (!expectedKey || !token || token !== expectedKey) {
@@ -61,13 +61,37 @@ export const Route = createFileRoute("/api/public/live-highlights")({
         }
 
         const h = parsed.data;
-        const mediaUrl = h.blob_url ?? h.imagekit_url;
-        if (!mediaUrl) {
+        const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
+        const metadataUrls = h.metadata.media_urls && typeof h.metadata.media_urls === "object"
+          ? Object.values(h.metadata.media_urls as Record<string, unknown>).filter((v): v is string => typeof v === "string")
+          : [];
+        const mediaCandidates = [h.blob_url, h.imagekit_url, ...metadataUrls]
+          .filter((v): v is string => typeof v === "string" && v.length > 0)
+          .map((url) => ({ url }));
+        if (!mediaCandidates.length) {
           return Response.json(
-            { success: false, error: "Live highlight requires a public media URL" },
+            { success: false, error: "Live highlight requires at least one registered media URL" },
             { status: 400 },
           );
         }
+        let resolvedMedia: Awaited<ReturnType<typeof resolveMediaProvider>>;
+        try {
+          resolvedMedia = await resolveMediaProvider(mediaCandidates, requestId);
+        } catch {
+          return Response.json({ success: false, error: "Media provider registry unavailable", request_id: requestId }, { status: 503 });
+        }
+        if (!resolvedMedia) {
+          return Response.json(
+            { success: false, error: "No enabled ChatB2K media provider route accepts the supplied URLs", request_id: requestId },
+            { status: 422 },
+          );
+        }
+        const mediaUrl = resolvedMedia.url;
+        await recordMediaPipelineEvent({
+          requestId, action: "live_highlight_ingest", provider: resolvedMedia.provider,
+          routeId: resolvedMedia.route_id, outcome: "route_selected", assetHost: resolvedMedia.host,
+          metadata: { host_id: h.host_id, source_asset_id: h.source_asset_id ?? null },
+        });
 
         const fingerprint = h.fingerprint ?? `${h.host_id}:${h.original_url}:${mediaUrl}`;
         const platforms = h.target_channels.length ? h.target_channels : ["tiktok", "youtube", "google_business"];
@@ -168,7 +192,7 @@ export const Route = createFileRoute("/api/public/live-highlights")({
             alt_text: h.title ?? h.host_name ?? "ResoFit live-stream highlight",
             content_pillar: "live_stream",
             fingerprint,
-            intelligence: h.metadata,
+            intelligence: { ...h.metadata, media_provider: resolvedMedia.provider, media_route_id: resolvedMedia.route_id, media_router: "chatb2k-provider-registry" },
           };
 
           const { data: asset, error: assetError } = await supabaseAdmin
@@ -196,6 +220,9 @@ export const Route = createFileRoute("/api/public/live-highlights")({
               host_name: h.host_name ?? null,
               original_url: h.original_url,
               fingerprint,
+              media_provider: resolvedMedia.provider,
+              media_route_id: resolvedMedia.route_id,
+              media_router: "chatb2k-provider-registry",
               ...h.metadata,
             },
             campaign_key: "live_stream_highlights",
