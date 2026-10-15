@@ -90,10 +90,6 @@ jobs:
           if len(hosts)>limit:
               start=((int(time.time())//300)*limit)%len(hosts)
               selected=(hosts+hosts)[start:start+limit]
-              priority=os.getenv("BIGO_PRIORITY_HOST_ID","748833040").strip()
-              priority_lines=[line for line in hosts if line.split("|",1)[0].strip()==priority]
-              if priority_lines and not any(line.split("|",1)[0].strip()==priority for line in selected):
-                  selected[-1]=priority_lines[0]
               hosts=selected
           open("/tmp/bigo-hosts.txt","w").writelines(hosts)
           print(f"Selected {len(hosts)} of {len(open('/tmp/bigo-hosts-all.txt').readlines())} registered host(s) for this cycle")
@@ -158,15 +154,15 @@ jobs:
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          # Explicit CEO-approved publishing scope: host 748833040 only; other hosts remain governed by the configured verified-host secret.
-          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-},748833040"
+          # Publishing scope comes only from the exact BIGO_VERIFIED_HOST_IDS allowlist secret.
+          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
           VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select((.host_id | tostring) as $host | any($verified[]; . == $host))], verified_host_ids:$verified, limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
           VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
           if [ "$VERIFIED_COUNT" -gt 0 ]; then
             curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
           fi
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | (any($verified[]; . as $id | $host == $id or ($host | startswith($id))) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select((.host_id | tostring) as $host | (any($verified[]; . == $host) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
           STORAGE_COUNT="$(jq ".highlights | length" /tmp/bigo-storage-batch.json)"
           if [ "$STORAGE_COUNT" -gt 0 ]; then
             curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
