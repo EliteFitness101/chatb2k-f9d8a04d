@@ -23,7 +23,7 @@ app = FastAPI(
     description="Autonomous Repository & Global Omni-Dimensional Fulfillment Engine for CEO Lord B2K."
 )
 
-WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "resofit-sovereign-secret-2026")
+WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "").strip()
 SKU_MATRIX_CAPACITY = 999999999
 VALUATION_TARGET_NGN = 48200000000  # ₦48.2 Billion
 
@@ -71,12 +71,18 @@ async def github_webhook_receiver(
 ):
     body_bytes = await request.body()
     
-    if x_hub_signature_256:
-        sha_name, signature = x_hub_signature_256.split('=')
-        if sha_name == 'sha256':
-            mac = hmac.new(WEBHOOK_SECRET.encode(), msg=body_bytes, digestmod=hashlib.sha256)
-            if not hmac.compare_digest(mac.hexdigest(), signature):
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Signature verification failed.")
+    # Fail closed: never accept unsigned GitHub events or use a source-code fallback secret.
+    if not WEBHOOK_SECRET:
+        logger.error("GITHUB_WEBHOOK_SECRET is not configured; rejecting webhook.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Webhook verification is not configured.")
+    if not x_hub_signature_256 or "=" not in x_hub_signature_256:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid GitHub signature.")
+    sha_name, signature = x_hub_signature_256.split("=", 1)
+    if sha_name != "sha256" or not signature:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unsupported GitHub signature format.")
+    mac = hmac.new(WEBHOOK_SECRET.encode(), msg=body_bytes, digestmod=hashlib.sha256)
+    if not hmac.compare_digest(mac.hexdigest(), signature):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Signature verification failed.")
 
     payload = await request.json()
     logger.info(f"Received GitHub Event: [{x_github_event}]")
