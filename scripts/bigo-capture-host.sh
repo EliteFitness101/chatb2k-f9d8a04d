@@ -524,5 +524,16 @@ if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   fi
 fi
 
-echo "Captured $HOST"
-rm -f "$RAW" "$FILE" "$COVER" "$LOG"
+# Save a per-host verification receipt after the primary archive uploads have passed Dropbox read-back checks.
+ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+import json,sys
+host,ts,root,video,cover=sys.argv[1:]
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"archive_verified","dropbox_root":root,"processed_video":root+"/processed","raw_capture":root+"/raw-captures","metadata":root+"/metadata","logs":root+"/logs","video_url":video,"cover_url":cover,"verification":"Dropbox size and content_hash read-back"}))
+PYSTATUS
+if ! dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json"; then
+  echo "::error::Per-host archive verification receipt failed for $HOST."
+  exit 1
+fi
+echo "Captured and archive-verified $HOST at ${HOST_ROOT}"
+rm -f "$RAW" "$FILE" "$COVER" "$LOG" "$ARCHIVE_STATUS"
