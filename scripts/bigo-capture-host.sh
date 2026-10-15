@@ -440,6 +440,27 @@ if [ -z "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   exit 1
 fi
 
+dropbox_ensure_host_dirs() {
+  python3 - "${HOST_ROOT}" <<'PYDIR'
+import json, os, urllib.error, urllib.request, sys
+token=os.environ.get("DROPBOX_ACCESS_TOKEN","")
+root=sys.argv[1].rstrip("/")
+def call(endpoint,payload):
+    req=urllib.request.Request("https://api.dropboxapi.com/2/"+endpoint,data=json.dumps(payload).encode(),headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"},method="POST")
+    try:
+        with urllib.request.urlopen(req,timeout=30) as r: return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        if e.code==409 and endpoint=="files/create_folder_v2":
+            meta=call("files/get_metadata",{"path":payload["path"]})
+            if meta.get(".tag")=="folder": return meta
+        raise RuntimeError("Dropbox folder preparation failed: "+payload["path"]+" (HTTP "+str(e.code)+")")
+for path in [root,root+"/raw-captures",root+"/processed",root+"/processed/google-business",root+"/metadata",root+"/logs"]:
+    call("files/create_folder_v2",{"path":path,"autorename":False})
+    print("Ensured Dropbox folder: "+path)
+PYDIR
+}
+dropbox_ensure_host_dirs
+
 export FILE COVER
 BLOB_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
 GBP_URL=""
