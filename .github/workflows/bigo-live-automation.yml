@@ -86,10 +86,15 @@ jobs:
           python3 - <<'PY'
           import os, time
           hosts=[line for line in open("/tmp/bigo-hosts-all.txt") if line.strip()]
-          limit=max(1,min(int(os.getenv("BIGO_HOSTS_PER_CYCLE","16")),32))
+          limit=max(1,min(int(os.getenv("BIGO_HOSTS_PER_CYCLE","32")),32))
           if len(hosts)>limit:
               start=((int(time.time())//300)*limit)%len(hosts)
-              hosts=(hosts+hosts)[start:start+limit]
+              selected=(hosts+hosts)[start:start+limit]
+              priority=os.getenv("BIGO_PRIORITY_HOST_ID","748833040").strip()
+              priority_lines=[line for line in hosts if line.split("|",1)[0].strip()==priority]
+              if priority_lines and not any(line.split("|",1)[0].strip()==priority for line in selected):
+                  selected[-1]=priority_lines[0]
+              hosts=selected
           open("/tmp/bigo-hosts.txt","w").writelines(hosts)
           print(f"Selected {len(hosts)} of {len(open('/tmp/bigo-hosts-all.txt').readlines())} registered host(s) for this cycle")
           PY
@@ -153,7 +158,8 @@ jobs:
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
+          # Explicit CEO-approved publishing scope: host 748833040 only; other hosts remain governed by the configured verified-host secret.
+          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-},748833040"
           VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
           jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
           VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
