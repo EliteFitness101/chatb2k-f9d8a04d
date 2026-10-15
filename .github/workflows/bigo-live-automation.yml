@@ -48,6 +48,20 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          VERIFIED_IDS_JSON="$(python3 - <<'PY'
+          import json, os, re
+          raw = os.environ.get("BIGO_VERIFIED_HOST_IDS", "")
+          ids = list(dict.fromkeys(x.strip() for x in re.split(r"[\\s,;]+", raw) if x.strip()))
+          print(json.dumps(ids))
+          PY
+          )"
+          if [ "$(printf '%s' "$VERIFIED_IDS_JSON" | jq 'length')" -gt 0 ]; then
+            echo "::notice::Persisting CEO-authorized allowlist approvals and attempting one configured BIGO post before capture."
+            APPROVAL_RESULT="$(curl -fsS -X POST "$PIPELINE_URL" -H "Authorization: Bearer ${OIDC_TOKEN}" -H "Content-Type: application/json" --data "{\"approval_only\":true,\"verified_host_ids\":${VERIFIED_IDS_JSON}}")"
+            printf '%s\n' "$APPROVAL_RESULT" | jq '{ok,approval_only,allowlist_approval,publish_attempts,publish_success}'
+          else
+            echo "::warning::BIGO_VERIFIED_HOST_IDS is empty; no allowlist-wide approvals or publishing attempt were made."
+          fi
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
             REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
           else
