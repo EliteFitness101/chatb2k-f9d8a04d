@@ -41,7 +41,7 @@ rm -f "$RESULT" "$RAW" "$FILE" "$COVER" "$GBP_FILE"
 drive_put() {
   local SRC="$1" CLASS="$2" MIME="$3" NAME="$4"
   local SESSION UPLOAD_URL UPLOAD_RESULT FILE_ID SIZE MD5 VERIFY
-  SESSION="$(python3 -c 'import json,sys; print(json.dumps({"action":"session","name":sys.argv[1],"mimeType":sys.argv[2],"archiveClass":sys.argv[3]}))' "$NAME" "$MIME" "$CLASS")"
+  SESSION="$(python3 -c 'import json,sys; print(json.dumps({"action":"session","name":sys.argv[1],"mimeType":sys.argv[2],"archiveClass":sys.argv[3],"hostId":sys.argv[4]}))' "$NAME" "$MIME" "$CLASS" "$HOST")"
   SESSION="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X POST "$DRIVE_UPLOAD_URL" -H "Authorization: Bearer $CHATB2K_LIVE_INGEST_KEY" -H "Content-Type: application/json" --data "$SESSION")"
   UPLOAD_URL="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["uploadUrl"])' <<< "$SESSION")"
   UPLOAD_RESULT="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$UPLOAD_URL" -H "Content-Type: $MIME" --data-binary "@$SRC")"
@@ -239,6 +239,65 @@ if [ ! -s "$RAW" ]; then
   exit 0
 fi
 
+# Fail closed on missing/truncated audio before any enrichment or publishing. Inspect
+# packet timestamps as well as stream presence: a valid MP4 container alone is not audio QA.
+audio_qa() {
+  local MEDIA="$1" LABEL="$2"
+  python3 - "$MEDIA" "$LABEL" <<'PYAUDIO'
+import json, subprocess, sys
+path, label = sys.argv[1:3]
+def run(args):
+    p=subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode:
+        raise SystemExit(f"{label}: ffprobe/ffmpeg QA command failed")
+    return p.stdout
+probe=json.loads(run(["ffprobe","-v","error","-show_streams","-show_format","-of","json",path]))
+streams=probe.get("streams",[])
+audio=[s for s in streams if s.get("codec_type")=="audio"]
+video=[s for s in streams if s.get("codec_type")=="video"]
+duration=float((probe.get("format") or {}).get("duration") or 0)
+if not video or not audio:
+    raise SystemExit(f"{label}: missing video or audio stream")
+a=audio[0]
+if int(a.get("sample_rate") or 0) < 32000 or int(a.get("channels") or 0) < 1:
+    raise SystemExit(f"{label}: invalid audio sample rate/channel layout")
+if not (1 <= duration <= 180):
+    raise SystemExit(f"{label}: invalid duration {duration:.3f}s")
+packets=json.loads(run(["ffprobe","-v","error","-select_streams","a:0","-show_packets","-show_entries","packet=pts_time,duration_time","-of","json",path])).get("packets",[])
+points=[]
+for packet in packets:
+    try:
+        pts=float(packet.get("pts_time"))
+        span=float(packet.get("duration_time") or 0)
+        points.append((pts, span))
+    except (TypeError, ValueError):
+        continue
+points.sort()
+if len(points) < 10:
+    raise SystemExit(f"{label}: too few audio packets ({len(points)})")
+if points[0][0] > 2.0 or points[-1][0] + points[-1][1] < duration - 2.0:
+    raise SystemExit(f"{label}: audio does not cover the full video duration")
+gaps=[points[i+1][0]-(points[i][0]+points[i][1]) for i in range(len(points)-1)]
+max_gap=max(gaps, default=0)
+if max_gap > 1.5:
+    raise SystemExit(f"{label}: audio packet gap {max_gap:.3f}s")
+vol=run(["ffmpeg","-hide_banner","-nostats","-i",path,"-vn","-af","volumedetect","-f","null","-"])
+mean=None
+for line in vol.splitlines():
+    if "mean_volume:" in line:
+        try: mean=float(line.split("mean_volume:",1)[1].strip().split()[0])
+        except (ValueError, IndexError): pass
+if mean is None or mean <= -60:
+    raise SystemExit(f"{label}: audio is silent or volume could not be measured")
+print(f"{label}: audio verified; packets={len(points)}, max_gap={max_gap:.3f}s, mean_volume={mean:.1f}dB, duration={duration:.3f}s")
+PYAUDIO
+}
+
+if ! audio_qa "$RAW" "raw capture"; then
+  echo "::warning::BIGO host $HOST held: raw capture failed audio-integrity QA; no upload or enrichment."
+  exit 0
+fi
+
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
 
@@ -268,7 +327,12 @@ if abs(fps-avg) > 0.5: raise SystemExit('QA CFR')
 if w < 720 or h < 1280 or not (0.55 <= w/h <= 0.75): raise SystemExit('QA aspect')
 if not (1 <= d <= 180): raise SystemExit('QA duration')
 if p != 'yuv420p': raise SystemExit('QA pixel format')
+if int(a) < 1: raise SystemExit('QA AUDIO_MISSING')
 PY
+if ! audio_qa "$FILE" "processed master"; then
+  echo "::warning::BIGO host $HOST held: processed master failed audio-integrity QA; no upload or enrichment."
+  exit 0
+fi
 
 # Google Business video posts are limited to 30 seconds. Preserve the master for
 # TikTok/YouTube and create a separate short variant only when required.
@@ -452,7 +516,14 @@ dropbox_ensure_host_dirs
 export FILE COVER
 BLOB_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
 GBP_URL=""
-if [ -s "$GBP_FILE" ]; then GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"; fi
+if [ -s "$GBP_FILE" ]; then
+  if ! audio_qa "$GBP_FILE" "Google Business derivative"; then
+    echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
+    rm -f "$GBP_FILE"
+  else
+    GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"
+  fi
+fi
 COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
 
 DRIVE_RAW=""
