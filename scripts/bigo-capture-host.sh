@@ -152,7 +152,7 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s streamlink --webbrowser yes --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --webbrowser yes --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -167,7 +167,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -209,7 +209,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -281,9 +281,11 @@ gaps=[points[i+1][0]-(points[i][0]+points[i][1]) for i in range(len(points)-1)]
 max_gap=max(gaps, default=0)
 if max_gap > 1.5:
     raise SystemExit(f"{label}: audio packet gap {max_gap:.3f}s")
-vol=run(["ffmpeg","-hide_banner","-nostats","-i",path,"-vn","-af","volumedetect","-f","null","-"])
+volproc=subprocess.run(["ffmpeg","-hide_banner","-nostats","-i",path,"-vn","-af","volumedetect","-f","null","-"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+if volproc.returncode:
+    raise SystemExit(f"{label}: audio level analysis failed")
 mean=None
-for line in vol.splitlines():
+for line in volproc.stderr.splitlines():
     if "mean_volume:" in line:
         try: mean=float(line.split("mean_volume:",1)[1].strip().split()[0])
         except (ValueError, IndexError): pass
@@ -301,7 +303,7 @@ fi
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
 
-if ! ffmpeg -hide_banner -loglevel error -i "$RAW" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$FILE"; then
+if ! ffmpeg -hide_banner -loglevel error -i "$RAW" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$FILE"; then
   echo "::warning::Normalization failed for $HOST"; exit 0
 fi
 if ! ffmpeg -hide_banner -loglevel error -i "$FILE" -map 0:v:0 -frames:v 1 -q:v 3 "$COVER"; then
@@ -338,7 +340,7 @@ fi
 # TikTok/YouTube and create a separate short variant only when required.
 GBP_DURATION=0
 if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = "True" ]; then
-  if ffmpeg -hide_banner -loglevel error -i "$FILE" -t 30 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$GBP_FILE"; then
+  if ffmpeg -hide_banner -loglevel error -i "$FILE" -t 30 -map 0:v:0 -map 0:a:0? -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$GBP_FILE"; then
     GBP_DURATION=30
   else
     rm -f "$GBP_FILE"
