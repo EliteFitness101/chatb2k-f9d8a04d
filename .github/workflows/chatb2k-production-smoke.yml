@@ -1,0 +1,76 @@
+name: ChatB2K Production Smoke Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatb2k-production-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify authenticated production routes
+        env:
+          CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CHATB2K_LIVE_INGEST_KEY:-}" ]]; then
+            echo "::error::Repository Actions secret CHATB2K_LIVE_INGEST_KEY is missing."
+            exit 1
+          fi
+
+          python3 <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+          token = os.environ["CHATB2K_LIVE_INGEST_KEY"]
+          base = "https://chatb2k.resofit.fit"
+
+          tests = [
+              ("authenticated media-router", "GET",
+               base + "/api/public/media-router", None),
+              ("ecosystem router → Edge Node health", "POST",
+               base + "/api/public/ecosystem-router",
+               {"route_id": "orchestration-resoflex-commerce-intelligence",
+                "action": "health", "payload": {}}),
+          ]
+
+          failed = False
+          for label, method, url, payload in tests:
+              headers = {"Authorization": "Bearer " + token,
+                         "Accept": "application/json"}
+              data = None
+              if payload is not None:
+                  headers["Content-Type"] = "application/json"
+                  data = json.dumps(payload).encode()
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=25) as resp:
+                      status, raw = resp.status, resp.read(1024 * 1024)
+              except urllib.error.HTTPError as e:
+                  status, raw = e.code, e.read(1024 * 1024)
+              except Exception as e:
+                  print(f"FAIL {label}: transport error ({type(e).__name__})")
+                  failed = True
+                  continue
+
+              try:
+                  body = json.loads(raw.decode("utf-8"))
+              except Exception:
+                  body = {}
+              # Emit only safe summary fields; never print headers, tokens, or full bodies.
+              keys = ",".join(sorted(str(k) for k in body.keys())[:20]) if isinstance(body, dict) else "non-object-json"
+              error = body.get("error") if isinstance(body, dict) else None
+              ok_flag = body.get("ok") if isinstance(body, dict) else None
+              success_flag = body.get("success") if isinstance(body, dict) else None
+              print(f"{'PASS' if 200 <= status < 300 and ok_flag is not False and success_flag is not False else 'FAIL'} {label}: HTTP {status}; response_keys={keys}; ok={ok_flag}; success={success_flag}; error={'present' if error else 'none'}")
+              if not (200 <= status < 300) or ok_flag is False or success_flag is False:
+                  failed = True
+
+          sys.exit(1 if failed else 0)
+          PY
