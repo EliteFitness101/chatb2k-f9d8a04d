@@ -51,7 +51,7 @@ jobs:
           VERIFIED_IDS_JSON="$(python3 - <<'PY'
           import json, os, re
           raw = os.environ.get("BIGO_VERIFIED_HOST_IDS", "")
-          ids = list(dict.fromkeys(x.strip() for x in re.split(r"[\\s,;]+", raw) if x.strip()))
+          ids = list(dict.fromkeys(x.strip() for x in re.split(r"[\s,;]+", raw) if x.strip()))
           print(json.dumps(ids))
           PY
           )"
