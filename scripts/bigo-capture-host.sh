@@ -538,7 +538,7 @@ if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
      DRIVE_COVER="$(drive_put "$COVER" "metadata" "image/jpeg" "BIGO-$HOST-$TS-cover.jpg")"; then
     DRIVE_SYNC_STATUS="media_verified_metadata_pending"
     if [ -s "$GBP_FILE" ]; then
-      if DRIVE_GBP="$(drive_put "$GBP_FILE" "processed" "video/mp4" "BIGO-$HOST-$TS-google-business-30s.mp4")"; then
+      if DRIVE_GBP="$(drive_put "$GBP_FILE" "google-business" "video/mp4" "BIGO-$HOST-$TS-google-business-30s.mp4")"; then
         echo "::notice::Google Drive Google Business short variant read-back check passed for $HOST"
       else
         DRIVE_SYNC_STATUS="partial"
