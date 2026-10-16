@@ -42,10 +42,26 @@ drive_put() {
   local SRC="$1" CLASS="$2" MIME="$3" NAME="$4"
   local SESSION UPLOAD_URL UPLOAD_RESULT FILE_ID SIZE MD5 VERIFY
   SESSION="$(python3 -c 'import json,sys; print(json.dumps({"action":"session","name":sys.argv[1],"mimeType":sys.argv[2],"archiveClass":sys.argv[3],"hostId":sys.argv[4]}))' "$NAME" "$MIME" "$CLASS" "$HOST")"
-  SESSION="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X POST "$DRIVE_UPLOAD_URL" -H "Authorization: Bearer $CHATB2K_LIVE_INGEST_KEY" -H "Content-Type: application/json" --data "$SESSION")"
-  UPLOAD_URL="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["uploadUrl"])' <<< "$SESSION")"
-  UPLOAD_RESULT="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$UPLOAD_URL" -H "Content-Type: $MIME" --data-binary "@$SRC")"
-  FILE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' <<< "$UPLOAD_RESULT")"
+  if ! SESSION="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X POST "$DRIVE_UPLOAD_URL" -H "Authorization: Bearer $CHATB2K_LIVE_INGEST_KEY" -H "Content-Type: application/json" --data "$SESSION")"; then
+    echo "Drive upload-session request failed; retaining verified Dropbox archive." >&2
+    return 1
+  fi
+  UPLOAD_URL="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("uploadUrl",""))' <<< "$SESSION")" || {
+    echo "Drive upload-session response was not valid JSON; retaining verified Dropbox archive." >&2
+    return 1
+  }
+  if [[ "$UPLOAD_URL" != https://www.googleapis.com/upload/drive/* ]]; then
+    echo "Drive upload-session response did not contain a valid Google resumable-upload URL; retaining verified Dropbox archive." >&2
+    return 1
+  fi
+  if ! UPLOAD_RESULT="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$UPLOAD_URL" -H "Content-Type: $MIME" --data-binary "@$SRC")"; then
+    echo "Drive media upload failed; retaining verified Dropbox archive." >&2
+    return 1
+  fi
+  FILE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' <<< "$UPLOAD_RESULT")" || {
+    echo "Drive media upload response was not valid JSON; retaining verified Dropbox archive." >&2
+    return 1
+  }
   [ -n "$FILE_ID" ] || { echo "Drive upload response did not include a file ID" >&2; return 1; }
   SIZE="$(stat -c '%s' "$SRC")"
   MD5="$(md5sum "$SRC" | awk '{print $1}')"
