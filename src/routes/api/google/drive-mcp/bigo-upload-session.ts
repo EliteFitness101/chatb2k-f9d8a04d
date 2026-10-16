@@ -95,14 +95,17 @@ export const Route = createFileRoute("/api/google/drive-mcp/bigo-upload-session"
           const name = typeof input.name === "string" ? input.name.trim() : "";
           const mimeType = typeof input.mimeType === "string" ? input.mimeType : "";
           const archiveClass = typeof input.archiveClass === "string" ? input.archiveClass : "";
+          const hostId = typeof input.hostId === "string" ? input.hostId.trim() : "";
           if (!name || name.length > 240 || name.includes("/") || name.includes("\\") ||
+              !/^[A-Za-z0-9_.-]{1,128}$/.test(hostId) ||
               !allowedMime.has(mimeType) || !allowedClasses.has(archiveClass)) {
             return json({ error: "Invalid upload metadata" }, 400);
           }
           const resofitId = await ensureFolder(token, "ResoFit");
           const bigoId = await ensureFolder(token, "BIGO", resofitId);
-          for (const folderName of allowedClasses) await ensureFolder(token, folderName, bigoId);
-          const folderId = await ensureFolder(token, archiveClass, bigoId);
+          const hostsId = await ensureFolder(token, "hosts", bigoId);
+          const hostFolderId = await ensureFolder(token, hostId, hostsId);
+          const folderId = await ensureFolder(token, archiveClass, hostFolderId);
           const session = await driveRequest(token,
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,webViewLink,size,md5Checksum,parents",
             { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8",
@@ -112,7 +115,7 @@ export const Route = createFileRoute("/api/google/drive-mcp/bigo-upload-session"
           if (!session.ok || !uploadUrl?.startsWith("https://www.googleapis.com/upload/drive/")) {
             return json({ error: `Drive upload session failed (${session.status})` }, 502);
           }
-          return json({ uploadUrl, archivePath: `ResoFit/BIGO/${archiveClass}/` });
+          return json({ uploadUrl, archivePath: `ResoFit/BIGO/hosts/${hostId}/${archiveClass}/` });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Drive archive request failed";
           console.error("BIGO Drive archive endpoint failed", { message });
