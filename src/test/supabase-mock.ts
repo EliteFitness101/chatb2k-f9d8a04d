@@ -36,6 +36,8 @@ export class MockDb {
   unique: Record<string, string[][]> = {
     payment_events: [["paystack_ref", "event"]],
     payment_event_processing: [["paystack_ref", "event_key"]],
+    revenue_events: [["payment_reference"]],
+    resofit_events: [["idempotency_key"]],
     ops_tasks: [["dedupe_key"]],
     recovery_workflows: [["dedupe_key"]],
     sla_timers: [["sla_type", "entity", "entity_id"]],
@@ -104,6 +106,7 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
   private mode: "select" | "insert" | "update" | "upsert" | "delete" = "select";
   private payload: Row | Row[] | null = null;
   private conflict: string[] = [];
+  private ignoreDuplicates = false;
   private headOnly = false;
   private wantCount = false;
   private limitN: number | null = null;
@@ -126,7 +129,7 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
   limit(n: number) { this.limitN = n; return this; }
   insert(payload: Row | Row[]) { this.mode = "insert"; this.payload = payload; return this; }
   update(payload: Row) { this.mode = "update"; this.payload = payload; return this; }
-  upsert(payload: Row | Row[], opts?: { onConflict?: string }) { this.mode = "upsert"; this.payload = payload; this.conflict = opts?.onConflict?.split(",").map((s) => s.trim()) ?? ["id"]; return this; }
+  upsert(payload: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }) { this.mode = "upsert"; this.payload = payload; this.conflict = opts?.onConflict?.split(",").map((s) => s.trim()) ?? ["id"]; this.ignoreDuplicates = opts?.ignoreDuplicates ?? false; return this; }
   delete() { this.mode = "delete"; return this; }
 
   private filtered(): Row[] {
@@ -163,7 +166,8 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
       const list = Array.isArray(this.payload) ? this.payload : [this.payload!];
       const out: Row[] = [];
       for (const p of list) {
-        const existing = this.db.rows(this.table).find((r) => this.conflict.every((c) => r[c] === p[c]));
+        const existing = this.db.rows(this.table).find((r) => this.conflict.every((c) => p[c] !== undefined && p[c] !== null && r[c] === p[c]));
+        if (existing && this.ignoreDuplicates) continue;
         if (existing) { Object.assign(existing, p); out.push(existing); }
         else { const row = { id: p.id ?? uuid(), created_at: new Date().toISOString(), ...p }; this.db.rows(this.table).push(row); out.push(row); }
       }
