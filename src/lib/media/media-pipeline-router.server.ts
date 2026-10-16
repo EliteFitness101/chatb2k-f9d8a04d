@@ -17,11 +17,11 @@ const MEDIA_SERVICE_TYPES = ["media_storage", "media_assets", "media_cdn"];
 
 const PURPOSE_POLICIES: Record<string, { preferredRouteIds: string[]; rationale: string }> = {
   public_product_media: {
-    preferredRouteIds: ["media-cloudflare-r2-cdn", "provider-imagekit", "media-imagekit", "media-vercel-blob", "media-supabase-catalog"],
+    preferredRouteIds: ["media-cloudflare-r2-cdn", "media-imagekit", "media-vercel-blob", "provider-imagekit", "media-supabase-catalog"],
     rationale: "Prefer a verified public CDN/transform provider; use R2 only after its custom domain, bucket binding and cache tests pass.",
   },
   educational_thumbnails: {
-    preferredRouteIds: ["media-cloudflare-r2-cdn", "provider-imagekit", "media-imagekit", "media-vercel-blob"],
+    preferredRouteIds: ["media-cloudflare-r2-cdn", "media-imagekit", "media-vercel-blob", "provider-imagekit"],
     rationale: "Public thumbnails may use a verified CDN/transform provider; private lesson files must use the private-delivery path.",
   },
   approved_promo_media: {
