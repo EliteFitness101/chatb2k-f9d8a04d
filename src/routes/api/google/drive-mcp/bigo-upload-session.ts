@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const allowedMime = new Set(["video/mp4", "image/jpeg", "application/json"]);
-const allowedClasses = new Set(["raw-captures", "processed", "metadata", "logs"]);
+const allowedClasses = new Set(["raw-captures", "processed", "google-business", "metadata", "logs"]);
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -105,7 +105,13 @@ export const Route = createFileRoute("/api/google/drive-mcp/bigo-upload-session"
           const bigoId = await ensureFolder(token, "BIGO", resofitId);
           const hostsId = await ensureFolder(token, "hosts", bigoId);
           const hostFolderId = await ensureFolder(token, hostId, hostsId);
-          const folderId = await ensureFolder(token, archiveClass, hostFolderId);
+          let folderId: string;
+          if (archiveClass === "google-business") {
+            const processedFolderId = await ensureFolder(token, "processed", hostFolderId);
+            folderId = await ensureFolder(token, "google-business", processedFolderId);
+          } else {
+            folderId = await ensureFolder(token, archiveClass, hostFolderId);
+          }
           const session = await driveRequest(token,
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,webViewLink,size,md5Checksum,parents",
             { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8",
@@ -115,7 +121,7 @@ export const Route = createFileRoute("/api/google/drive-mcp/bigo-upload-session"
           if (!session.ok || !uploadUrl?.startsWith("https://www.googleapis.com/upload/drive/")) {
             return json({ error: `Drive upload session failed (${session.status})` }, 502);
           }
-          return json({ uploadUrl, archivePath: `ResoFit/BIGO/hosts/${hostId}/${archiveClass}/` });
+          return json({ uploadUrl, archivePath: archiveClass === "google-business" ? `ResoFit/BIGO/hosts/${hostId}/processed/google-business/` : `ResoFit/BIGO/hosts/${hostId}/${archiveClass}/` });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Drive archive request failed";
           console.error("BIGO Drive archive endpoint failed", { message });
