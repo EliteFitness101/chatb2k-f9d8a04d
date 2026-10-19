@@ -62,6 +62,30 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
               },
               { onConflict: "reference", ignoreDuplicates: true },
             );
+
+          // Durable internal handoff; Make is not part of payment finalization.
+          const { error: eventError } = await supabaseAdmin.from("resofit_events").upsert({
+            event_name: "payment.succeeded",
+            contract_version: "1.0",
+            occurred_at: new Date().toISOString(),
+            source_system: "chatb2k-paystack-webhook",
+            idempotency_key: `paystack:payment.succeeded:${ref}`,
+            correlation_id: ref,
+            payload: {
+              payment_reference: ref,
+              amount: Number(event.data?.amount ?? 0) / 100,
+              currency: event.data?.currency ?? "NGN",
+              customer_email: event.data?.customer?.email ?? null,
+              sku: typeof meta.sku === "string" ? meta.sku : null,
+              rsid: typeof meta.rsid === "string" ? meta.rsid : null,
+              utm,
+              source: "chatb2k",
+            },
+          }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+          if (eventError) {
+            console.error("Canonical payment event write failed", eventError);
+            return new Response("Event persistence failed", { status: 500 });
+          }
         } else if (event.event === "charge.failed" && ref) {
           await supabaseAdmin
             .from("orders")
@@ -83,24 +107,6 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
             .from("orders")
             .update({ status: newStatus })
             .eq("reference", ref);
-        }
-
-        // Make automation bridge — fire-and-forget; do not block webhook ack.
-        // URL lives in an env secret (MAKE_WEBHOOK_URL) so it isn't committed
-        // to source. An optional MAKE_WEBHOOK_SECRET is forwarded as a shared
-        // header the Make.com scenario can verify.
-        const makeUrl = process.env.MAKE_WEBHOOK_URL;
-        if (makeUrl) {
-          try {
-            const headers: Record<string, string> = {
-              "Content-Type": "application/json",
-            };
-            const sharedSecret = process.env.MAKE_WEBHOOK_SECRET;
-            if (sharedSecret) headers["x-shared-secret"] = sharedSecret;
-            await fetch(makeUrl, { method: "POST", headers, body });
-          } catch (e) {
-            console.error("Make forward failed", e);
-          }
         }
 
         return new Response("ok");

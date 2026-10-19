@@ -117,28 +117,23 @@ export const Route = createFileRoute("/api/public/hooks/checkout-abandonment")({
           if (insErr) continue;
           emitted += 1;
 
-          // Optional Make.com bridge (fire-and-forget)
-          const makeUrl = process.env.MAKE_WEBHOOK_URL;
-          if (makeUrl) {
-            try {
-              const headers: Record<string, string> = {
-                "Content-Type": "application/json",
-              };
-              const sharedSecret = process.env.MAKE_WEBHOOK_SECRET;
-              if (sharedSecret) headers["x-shared-secret"] = sharedSecret;
-              await fetch(makeUrl, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({
-                  event: "checkout_abandoned",
-                  rsid,
-                  props: abandonedProps,
-                }),
-              });
-            } catch {
-              /* non-blocking */
-            }
-          }
+          // Durable first-party event; any downstream delivery is adapter-driven.
+          const { error: eventError } = await supabaseAdmin.from("resofit_events").upsert({
+            event_name: "checkout.abandoned",
+            contract_version: "1.0",
+            occurred_at: new Date().toISOString(),
+            source_system: "chatb2k-checkout-abandonment",
+            idempotency_key: `checkout.abandoned:${sessionId ?? c.id}`,
+            correlation_id: sessionId ?? c.id,
+            rsid,
+            funnel_origin: String(abandonedProps.funnel_origin ?? "resofit"),
+            payload: {
+              checkout_id: c.id,
+              rsid,
+              props: abandonedProps,
+            },
+          }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+          if (eventError) console.error("Canonical checkout-abandoned event write failed", eventError);
         }
 
         return Response.json({
