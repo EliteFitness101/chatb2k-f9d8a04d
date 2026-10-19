@@ -21,7 +21,7 @@ jobs:
           pipeline = Path('supabase/functions/bigo-live-pipeline/index.ts').read_text()
           capture = Path('scripts/bigo-capture-host.sh').read_text()
           assert 'async function resolveBigoRights' in pipeline
-          assert 'source?.active===true&&source?.capture_enabled===true&&allowlisted' in pipeline
+          assert 'allowed=!!source&&active&&allowlisted' in pipeline
           assert 'active_source_and_user_allowlist_required' in pipeline
           assert 'rights_evidence:rights.evidence' in pipeline
           assert 'independent_rights_verified:false' in pipeline
