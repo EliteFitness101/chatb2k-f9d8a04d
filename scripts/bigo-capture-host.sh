@@ -221,14 +221,15 @@ PY
   rm -f "$PAGE"
 fi
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
-  echo "::notice::BIGO host $HOST trying direct HLS fallback"
+  echo "::notice::BIGO host $HOST trying direct HLS fallback (FFmpeg opens manifest URL directly)"
+  # HLS manifests reference separate media segments. Do not pipe the downloaded .m3u8
+  # text into FFmpeg stdin: that removes the manifest's base URL and breaks segment
+  # resolution. FFmpeg must open the signed manifest URL itself.
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-    PIPE_RC=("${PIPESTATUS[@]}")
-    CURL_RC="${PIPE_RC[0]:-1}"
-    FFMPEG_RC="${PIPE_RC[1]:-1}"
+    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
     sleep "$ATTEMPT"
