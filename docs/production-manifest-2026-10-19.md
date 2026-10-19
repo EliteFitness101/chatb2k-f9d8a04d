@@ -106,3 +106,10 @@ Do not infer custom domains for the other repositories from GitHub App installat
 **Overall: D — INTEGRATION NOT PROVEN.** The ChatB2K domain and deployment artifact exist, and the Edge Node project is healthy. The proposed Omni-State table and matching cron jobs were not found; `pg_net` was not returned by the extension check; the durable inbox was empty at the time checked. The supplied sample does not authenticate, persist, or execute the described swarm and must not be used as proof of zero-flag publishing or “God Mode”.
 
 **Next action:** advance the canonical signed webhook implementation, reconcile the Vercel `live` discrepancy, then prove a real GitHub App delivery through Edge Node persistence, worker execution, and Reso-Dash telemetry. Do not apply the supplied SQL as-is.
+
+## Repair actions recorded after initial audit
+
+- Canonical webhook PR branch `feat/chatb2k101-durable-webhook-inbox-20261014` was patched to validate the configured GitHub App installation ID and allow only `pull_request`, `pull_request_review`, `check_run`, `check_suite`, and `status` events before inbox persistence.
+- CI source assertions were extended to cover installation and event-type allowlists. The trust-boundary document was updated.
+- Vercel Production and Preview now contain the non-secret `GITHUB_ALLOWED_INSTALLATION_IDS=153827553` allowlist. The webhook secret, Edge Node URL, Edge Node service-role credential, and repository allowlist were already present by variable name; their values were not read or exposed in this report.
+- Validation runs for the webhook branch are still in progress and Vercel reports the preview check as pending. This is a code/config patch, not a production deployment. The active production commit remains `173af7233f3b5d5050e0ded89fce6b64819361a4`, which does not contain the receiver route.
