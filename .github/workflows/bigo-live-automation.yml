@@ -27,6 +27,7 @@ env:
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+  HOSTS_PER_SHARD_PARALLEL: ${{ secrets.HOSTS_PER_SHARD_PARALLEL || '8' }}
   DRIVE_UPLOAD_URL: https://chatb2k.resofit.fit/api/google/drive-mcp/bigo-upload-session
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
 
@@ -123,12 +124,14 @@ jobs:
             fi
             return 0
           }
+          PARALLELISM="$(python3 -c 'import os; print(max(1, min(int(os.getenv("HOSTS_PER_SHARD_PARALLEL", "8")), 8)))')"
+          echo "::notice::Capture concurrency configured to ${PARALLELISM} (hard cap 8 per runner)."
           ACTIVE=0
           while IFS='|' read -r HOST_ID SOURCE_URL; do
             [ -z "${HOST_ID}" ] && continue
             run_capture "${HOST_ID}" "${SOURCE_URL}" &
             ACTIVE=$((ACTIVE + 1))
-            if [ "${ACTIVE}" -ge 8 ]; then
+            if [ "${ACTIVE}" -ge "${PARALLELISM}" ]; then
               wait -n || true
               ACTIVE=$((ACTIVE - 1))
             fi
