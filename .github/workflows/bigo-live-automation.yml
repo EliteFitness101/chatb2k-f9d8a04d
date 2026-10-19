@@ -136,28 +136,33 @@ jobs:
           wait
           python3 - <<'PY'
           import json,glob,os
-          out={"highlights":[],"limit":10,"capture_failures":[]}
+          out={"highlights":[],"limit":10,"capture_failures":[],"offline_hosts":[]}
           for p in glob.glob("/tmp/bigo-results/*.json"):
               try:
                   d=json.load(open(p))
                   if d.get("highlight"):
                       out["highlights"].append(d["highlight"])
                   elif p.endswith(".failure.json"):
-                      out["capture_failures"].append({"file":os.path.basename(p),"detail":d.get("reason","capture failed")})
+                      record={"file":os.path.basename(p),"detail":d.get("reason","capture failed")}
+                      if d.get("status")=="offline":
+                          out["offline_hosts"].append(record)
+                      else:
+                          out["capture_failures"].append(record)
               except Exception as e:
                   out["capture_failures"].append({"file":os.path.basename(p),"detail":str(e)})
           json.dump(out,open("/tmp/bigo-batch.json","w"))
-          print(f"Capture summary: {len(out['highlights'])} highlight(s), {len(out['capture_failures'])} host failure(s)")
+          print(f"Capture summary: {len(out['highlights'])} highlight(s), {len(out['offline_hosts'])} offline host(s), {len(out['capture_failures'])} capture failure(s)")
           if out["capture_failures"]:
               print("::warning::One or more BIGO host capture attempts failed; inspect the host capture logs for details.")
           PY
           if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
             FAILURES="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["capture_failures"]))')"
+            OFFLINE="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["offline_hosts"]))')"
             if [ "$FAILURES" -gt 0 ]; then
-              echo "::error::No highlights captured and $FAILURES host failure(s) were recorded."
+              echo "::error::No highlights captured; $FAILURES capture failure(s) and $OFFLINE offline host(s) were recorded."
               exit 1
             fi
-            echo "::notice::No live hosts captured this cycle; no capture errors were recorded."
+            echo "::notice::No live hosts captured this cycle; $OFFLINE offline host(s), no capture errors."
             exit 0
           fi
 

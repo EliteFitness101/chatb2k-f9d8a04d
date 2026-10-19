@@ -250,8 +250,12 @@ if [ "$CAPTURE_OK" -ne 1 ] || [ ! -s "$RAW" ]; then
 import json,sys,os
 d=json.loads(sys.argv[1]); p=sys.argv[2]
 try: tail=' '.join(open(p,errors='replace').read().splitlines()[-3:])
-except Exception: tail='no Streamlink log'
-print(json.dumps({'status':'capture_failed','reason':d.get('discovery_error') or tail or 'stream unavailable'}))
+except Exception: tail=''
+discovery=str(d.get('discovery_error') or '')
+reason=tail or discovery or 'stream unavailable'
+lower=reason.lower()
+status='offline' if ('channel is offline' in lower or 'no playable streams found' in lower) else 'capture_failed'
+print(json.dumps({'status':status,'reason':reason,'discovery_error':discovery or None}))
 PY
 )"
   echo "::warning::BIGO host $HOST capture failed after bounded retries: $REASON"
