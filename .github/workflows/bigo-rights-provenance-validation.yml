@@ -1,0 +1,35 @@
+name: BIGO rights and provenance validation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/bigo-capture-host.sh'
+      - 'supabase/functions/bigo-live-pipeline/index.ts'
+      - '.github/workflows/bigo-rights-provenance-validation.yml'
+permissions:
+  contents: read
+jobs:
+  validate-rights-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify explicit host allowlist gate and truthful rights evidence
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          pipeline = Path('supabase/functions/bigo-live-pipeline/index.ts').read_text()
+          capture = Path('scripts/bigo-capture-host.sh').read_text()
+          assert 'async function resolveBigoRights' in pipeline
+          assert 'allowed=!!source&&active&&allowlisted' in pipeline
+          assert 'active_source_and_user_allowlist_required' in pipeline
+          assert 'rights_evidence:rights.evidence' in pipeline
+          assert 'independent_rights_verified:false' in pipeline
+          assert 'ownership_verified:false' in pipeline
+          assert 'async function approveAllowlist(' not in pipeline
+          assert "'original_url':room_url" in capture
+          assert "'source_stream_url':source_stream_url" in capture
+          assert "'source_page_url':room_url" in capture
+          assert "'original_url':source_url" not in capture
+          print('PASS: publication requires active source + user allowlist; rights evidence is explicit; ownership is not falsely asserted; canonical room URL and signed stream URL remain separate.')
+          PY
