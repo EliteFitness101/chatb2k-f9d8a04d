@@ -1,3 +1,8 @@
+-- Provision the public bucket for safety-verified social video assets.
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values ('resofit-social-media','resofit-social-media',true,52428800,array['video/mp4','video/quicktime'])
+on conflict (id) do update set public=true,file_size_limit=52428800,allowed_mime_types=array['video/mp4','video/quicktime'];
+
 -- Allow only the dedicated public social-media bucket's verified BIGO MP4/MOV objects in the content queue.
 -- Existing allowlisted Blob and Dropbox patterns remain unchanged.
 alter table public.content_queue drop constraint if exists content_queue_asset_url_allowed_media_hosts;
