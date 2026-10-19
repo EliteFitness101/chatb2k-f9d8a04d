@@ -193,12 +193,21 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   done
 fi
 # Direct HLS is the fallback when Streamlink cannot resolve or capture the room.
-# Signed BIGO /sid/ pages are not media URLs. When direct probing returns HTML, extract the
-# current HLS manifest embedded in the signed page and reuse the proven direct-HLS fallback.
+# Signed BIGO /sid/ pages and room pages may embed a current HLS manifest even when
+# the tokenized room-info API omits its token field.
+PAGE_URL=""
+PAGE_KIND=""
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
-  PAGE="/tmp/bigo-${HOST}-signed.html"
+  PAGE_URL="$SOURCE_OVERRIDE"
+  PAGE_KIND="signed /sid/ page"
+elif [ "$CAPTURE_OK" -ne 1 ] && [[ "$SOURCE_URL" == https://www.bigo.tv/* ]] && [[ "$SOURCE_URL" != */sid/* ]] && [[ "$SOURCE_URL" != *.m3u8* ]]; then
+  PAGE_URL="$SOURCE_URL"
+  PAGE_KIND="room page"
+fi
+if [ -n "$PAGE_URL" ]; then
+  PAGE="/tmp/bigo-${HOST}-page.html"
   rm -f "$PAGE"
-  if curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$PAGE"; then
+  if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
     DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
 import re,sys
 p=sys.argv[1]
@@ -207,15 +216,16 @@ try:
 except Exception:
     s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
-urls=re.findall(r'https?://[^"\'<>\\s]+m3u8[^"\'<>\\s]*',s,re.I)
+urls=re.findall(r'https?://[^"\\'<>\\s]+m3u8[^"\\'<>\\s]*',s,re.I)
+urls=[u for u in urls if u.startswith("https://")]
 print(urls[0] if urls else "")
 PY
     )"
     if [ -n "$DISCOVERED_HLS" ]; then
       STREAM_URL="$DISCOVERED_HLS"
-      echo "::notice::BIGO host $HOST discovered HLS manifest from signed /sid/ page"
+      echo "::notice::BIGO host $HOST discovered HLS manifest from $PAGE_KIND"
     else
-      echo "::notice::BIGO host $HOST signed /sid/ page contained no discoverable HLS manifest"
+      echo "::notice::BIGO host $HOST $PAGE_KIND contained no discoverable HLS manifest"
     fi
   fi
   rm -f "$PAGE"
