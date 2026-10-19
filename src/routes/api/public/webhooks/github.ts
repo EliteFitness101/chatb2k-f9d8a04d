@@ -3,6 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const ALLOWED_EVENT_TYPES = new Set([
+  "pull_request",
+  "pull_request_review",
+  "check_run",
+  "check_suite",
+  "status",
+]);
 
 function unauthorized() {
   return new Response("Invalid webhook signature", { status: 401 });
@@ -21,9 +28,21 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
             .map((item) => item.trim().toLowerCase())
             .filter(Boolean),
         );
+        const allowedInstallationIds = new Set(
+          (process.env.GITHUB_ALLOWED_INSTALLATION_IDS ?? "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => /^\d+$/.test(item)),
+        );
 
         // Fail closed if production secrets/configuration are missing.
-        if (!secret || !edgeUrl || !serviceRoleKey || allowedRepositories.size === 0) {
+        if (
+          !secret ||
+          !edgeUrl ||
+          !serviceRoleKey ||
+          allowedRepositories.size === 0 ||
+          allowedInstallationIds.size === 0
+        ) {
           console.error("GitHub webhook receiver is not configured");
           return new Response("Webhook receiver not configured", { status: 503 });
         }
@@ -37,6 +56,9 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
         }
         if (!/^[a-z_]{1,64}$/i.test(eventType)) {
           return new Response("Invalid event type", { status: 400 });
+        }
+        if (!ALLOWED_EVENT_TYPES.has(eventType)) {
+          return new Response("Event type not allowlisted", { status: 403 });
         }
 
         const rawBody = await request.text();
@@ -61,6 +83,15 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
           payload = parsed as Record<string, unknown>;
         } catch {
           return new Response("Invalid JSON payload", { status: 400 });
+        }
+
+        const installation = payload.installation as { id?: unknown } | undefined;
+        const installationId =
+          typeof installation?.id === "number" || typeof installation?.id === "string"
+            ? String(installation.id)
+            : "";
+        if (!installationId || !allowedInstallationIds.has(installationId)) {
+          return new Response("GitHub App installation not allowlisted", { status: 403 });
         }
 
         const repository = payload.repository as { full_name?: unknown } | undefined;
