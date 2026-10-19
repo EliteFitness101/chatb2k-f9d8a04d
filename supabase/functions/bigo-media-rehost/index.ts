@@ -10,6 +10,7 @@ const out = (body: unknown, status = 200) => Response.json(body, { status, heade
 function same(a: string, b: string) { if (!a || !b || a.length !== b.length) return false; let d=0; for(let i=0;i<a.length;i++) d|=a.charCodeAt(i)^b.charCodeAt(i); return d===0; }
 async function expectedSecret() { const env=Deno.env.get("BUFFER_CRON_SECRET")||""; if(env)return env; const {data,error}=await db.rpc("get_buffer_cron_secret"); if(error||!data)throw new Error("Buffer cron secret unavailable"); return String(data); }
 function allowedDropbox(url: string) { try { const u=new URL(url); return u.protocol==="https:"&&(u.hostname==="www.dropbox.com"||u.hostname==="dl.dropboxusercontent.com")&&/^\/scl\/fi\/[A-Za-z0-9_-]+\/[^/]+$/.test(u.pathname)&&Boolean(u.searchParams.get("rlkey"))&&u.searchParams.get("dl")==="1"; } catch { return false; } }
+function allowedBlob(url: string) { try { const u=new URL(url); return u.protocol==="https:"&&u.hostname==="ab2ttlkn9no0tuoa.public.blob.vercel-storage.com"&&(/^\/buffer\/assets\/bigo_highlights\//.test(u.pathname)||/^\/bigo_highlights\//.test(u.pathname))&&/\.(mp4|mov)$/i.test(u.pathname); } catch { return false; } }
 
 Deno.serve(async(req:Request)=>{
  if(req.method!=="POST")return out({error:"POST required"},405);
@@ -33,7 +34,7 @@ Deno.serve(async(req:Request)=>{
     if(!check.ok||!(check.headers.get("content-type")||"").toLowerCase().startsWith("video/"))return out({error:"Existing public media object failed HEAD verification",status:check.status},502);
     bytes=Number(check.headers.get("content-length")||"0");
   }else{
-    if(!allowedDropbox(publicUrl))return out({error:"Source must be an allowlisted public Dropbox video URL"},400);
+    if(!allowedDropbox(publicUrl)&&!allowedBlob(publicUrl))return out({error:"Source must be an allowlisted public Dropbox or Vercel Blob video URL"},400);
     const source=await fetch(publicUrl,{redirect:"follow",signal:AbortSignal.timeout(30000)});
     if(!source.ok||!source.body)return out({error:"Source download failed",source_status:source.status},502);
     mime=(source.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
