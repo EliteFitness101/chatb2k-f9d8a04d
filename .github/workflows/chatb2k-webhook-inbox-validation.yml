@@ -63,6 +63,8 @@ jobs:
             ['constant-time comparison', /timingSafeEqual/.test(route)],
             ['fail-closed missing config', /return new Response\("Webhook receiver not configured", \{ status: 503 \}\)/.test(route)],
             ['repository allowlist', /GITHUB_ALLOWED_REPOSITORIES/.test(route) && /Repository not allowlisted/.test(route)],
+            ['installation allowlist', /GITHUB_ALLOWED_INSTALLATION_IDS/.test(route) && /GitHub App installation not allowlisted/.test(route)],
+            ['event-type allowlist', /ALLOWED_EVENT_TYPES/.test(route) && /Event type not allowlisted/.test(route)],
             ['durable insert before ack', /\.insert\(\{/.test(route) && /status: 202/.test(route)],
             ['retry on persistence failure', /Temporary inbox failure/.test(route) && /status: 503/.test(route)],
             ['unique delivery id', /delivery_id text not null unique/.test(migration)],
