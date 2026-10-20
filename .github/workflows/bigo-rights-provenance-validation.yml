@@ -47,6 +47,8 @@ jobs:
           assert 'global_clearance' in config_script and '"global_clearance": False' in config_script
           assert 'per_asset_rights_evidence_required_for_republication' in config_script
           assert 'store_session_cookies_or_tokens_in_dropbox' in config_script
+          assert 'comparable_current = dict(current)' in config_script
+          assert 'comparable_current = normalize(current, role, path)' not in config_script
           assert '--check-only' in config_script
           assert 'python3 scripts/reconcile-bigo-provenance-config.py --check-only' in workflow
           assert 'provenance-config.outcome' in workflow
