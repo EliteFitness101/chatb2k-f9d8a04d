@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/bigo-capture-host.sh'
+      - 'scripts/reconcile-bigo-provenance-config.py'
+      - '.github/workflows/bigo-live-automation.yml'
+      - '.github/workflows/bigo-provenance-config-sync.yml'
       - 'supabase/functions/bigo-live-pipeline/index.ts'
       - '.github/workflows/bigo-rights-provenance-validation.yml'
 permissions:
@@ -20,6 +23,9 @@ jobs:
           from pathlib import Path
           pipeline = Path('supabase/functions/bigo-live-pipeline/index.ts').read_text()
           capture = Path('scripts/bigo-capture-host.sh').read_text()
+          config_script = Path('scripts/reconcile-bigo-provenance-config.py').read_text()
+          workflow = Path('.github/workflows/bigo-live-automation.yml').read_text()
+          sync_workflow = Path('.github/workflows/bigo-provenance-config-sync.yml').read_text()
           assert 'async function resolveBigoRights' in pipeline
           assert 'allowed=!!source&&active&&allowlisted' in pipeline
           assert 'active_source_and_user_allowlist_required' in pipeline
@@ -36,5 +42,17 @@ jobs:
           assert 'https://www.bigo.tv/sid/*' not in capture
           assert 'SOURCE_OVERRIDE" == https://slink.bigovideo.tv/*' in capture
           assert "'original_url':source_url" not in capture
-          print('PASS: publication requires active source + user allowlist; rights evidence is explicit; ownership is not falsely asserted; canonical room URL is authoritative; signed /sid/ URLs cannot cause cross-host capture.')
+          assert 'global_clearance' in config_script and '"global_clearance": False' in config_script
+          assert 'per_asset_rights_evidence_required_for_republication' in config_script
+          assert 'store_session_cookies_or_tokens_in_dropbox' in config_script
+          assert '--check-only' in config_script
+          assert 'python3 scripts/reconcile-bigo-provenance-config.py --check-only' in workflow
+          assert 'provenance-config.outcome' in workflow
+          assert 'Reconcile BIGO provenance manifests in Dropbox' in sync_workflow
+          assert 'function canonicalBigoRoomUrl' in pipeline
+          assert 'rights_status:rights.explicit?"attested":"allowlist_only"' in pipeline
+          assert 'rights_verified:explicit&&allowed' in pipeline
+          assert 'rights_verified:true' not in pipeline
+          assert 'originality_verified:true' not in pipeline
+          print('PASS: canonical room/host identity is enforced; rights and ownership claims remain distinct; Dropbox manifests are reconciled; stale policy holds publishing; secrets are excluded from config.')
           PY
