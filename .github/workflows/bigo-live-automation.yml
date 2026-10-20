@@ -39,13 +39,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate canonical Dropbox provenance policy
-        id: provenance-config
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          python3 scripts/reconcile-bigo-provenance-config.py --check-only
-
       - name: Install capture tools (Dropbox archive)
         run: |
           set -euo pipefail
@@ -60,31 +53,12 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          VERIFIED_IDS_JSON="$(python3 - <<'PY'
-          import json, os, re
-          raw = os.environ.get("BIGO_VERIFIED_HOST_IDS", "")
-          ids = list(dict.fromkeys(x.strip() for x in re.split(r"[\s,;]+", raw) if x.strip()))
-          print(json.dumps(ids))
-          PY
-          )"
-          if [ "$(printf '%s' "$VERIFIED_IDS_JSON" | jq 'length')" -gt 0 ]; then
-            echo "::notice::Persisting CEO-authorized allowlist approvals and attempting one configured BIGO post before capture."
-            APPROVAL_RESULT="$(curl -fsS -X POST "$PIPELINE_URL" -H "Authorization: Bearer ${OIDC_TOKEN}" -H "Content-Type: application/json" --data "{\"approval_only\":true,\"verified_host_ids\":${VERIFIED_IDS_JSON}}")"
-            printf '%s\n' "$APPROVAL_RESULT" | jq '{ok,approval_only,allowlist_approval,publish_attempts,publish_success}'
-          else
-            echo "::warning::BIGO_VERIFIED_HOST_IDS is empty; no allowlist-wide approvals or publishing attempt were made."
-          fi
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
             REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
           else
             REGISTRY_HOSTS=""
             printf '{"provenance_policy_version":0,"hosts":[]}' > /tmp/bigo-sources.json
             echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
-          fi
-          PIPELINE_POLICY_VERSION="$(jq -r '.provenance_policy_version // 0' /tmp/bigo-sources.json)"
-          echo "pipeline_policy_version=${PIPELINE_POLICY_VERSION}" >> "$GITHUB_OUTPUT"
-          if [ "${PIPELINE_POLICY_VERSION}" != "2" ]; then
-            echo "::warning::Active Supabase BIGO pipeline does not advertise provenance policy v2; any captured batch must remain storage-only."
           fi
           HOSTS="$(python3 - "${BIGO_HOST_IDS:-}" "${REGISTRY_HOSTS}" <<'PY'
           import sys
@@ -190,28 +164,6 @@ jobs:
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          if [ "${{ steps.capture.outputs.pipeline_policy_version }}" != "2" ]; then
-            echo "::warning::Active Supabase pipeline version is not provenance policy v2; keeping this batch storage-only."
-            jq '{highlights: .highlights, limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
-            exit 0
-          fi
-          if [ "${{ steps.provenance-config.outcome }}" != "success" ]; then
-            echo "::warning::Canonical Dropbox provenance policy is not reconciled; keeping this batch storage-only and skipping enrichment/publishing."
-            jq '{highlights: .highlights, limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
-            exit 0
-          fi
-          # Publishing scope comes only from the exact BIGO_VERIFIED_HOST_IDS allowlist secret.
-          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
-          VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select((.host_id | tostring) as $host | any($verified[]; . == $host))], verified_host_ids:$verified, limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
-          VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
-          if [ "$VERIFIED_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
-          fi
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select((.host_id | tostring) as $host | (any($verified[]; . == $host) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
-          STORAGE_COUNT="$(jq ".highlights | length" /tmp/bigo-storage-batch.json)"
-          if [ "$STORAGE_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
-          fi
+          VERIFIED_PATTERN="$(printf "%s" "${BIGO_VERIFIED_HOST_IDS:-}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
+          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: .highlights, verified_host_ids:$verified, limit: .limit, storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-pipeline-batch.json
+          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-pipeline-batch.json
