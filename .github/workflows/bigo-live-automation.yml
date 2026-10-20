@@ -35,6 +35,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate canonical Dropbox provenance policy
+        id: provenance-config
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 scripts/reconcile-bigo-provenance-config.py --check-only
+
       - name: Install capture tools (Dropbox archive)
         run: |
           set -euo pipefail
