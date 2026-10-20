@@ -43,7 +43,7 @@ const published=[];
 for(const item of approved||[]){
  const hostId=String(item?.metadata?.host_id||"").trim();
  const rights=hostId?await resolveBigoRights(hostId,verifiedHostIds):{allowed:false,explicit:false};
- if(!verifiedHostIds.has(hostId)||!rights.allowed||!rights.explicit){published.push({queue_id:item.id,platform:item.platform,skipped:true,reason:"publication_requirements_not_met"});continue;}
+ if(!verifiedHostIds.has(hostId)||!rights.allowed||!rights.explicit||item?.metadata?.publication_eligibility?.source_identity_matches!==true||item?.metadata?.publication_eligibility?.technical_qa_passed!==true){published.push({queue_id:item.id,platform:item.platform,skipped:true,reason:"publication_requirements_not_met"});continue;}
  const br=await fetch(`${url}/functions/v1/chatb2k-publishing-router`,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${key}`},body:JSON.stringify({id:item.id})});
  const bt=await br.text();let bd:any;try{bd=JSON.parse(bt)}catch{bd={raw:bt}}
  published.push({queue_id:item.id,platform:item.platform,ok:br.ok,status:br.status,data:bd});
