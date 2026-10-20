@@ -71,7 +71,7 @@ drive_put() {
 }
 
 BIGO_ROOM_URL="https://www.bigo.tv/${HOST}"
-SOURCE_URL="${SOURCE_OVERRIDE:-${BIGO_ROOM_URL}}"
+SOURCE_URL="${BIGO_ROOM_URL}"
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
 # hls_src to the older unauthenticated getInternalStudioInfo request.
@@ -198,12 +198,12 @@ fi
 # the tokenized room-info API omits its token field.
 PAGE_URL=""
 PAGE_KIND=""
-if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
-  PAGE_URL="$SOURCE_OVERRIDE"
-  PAGE_KIND="signed /sid/ page"
-elif [ "$CAPTURE_OK" -ne 1 ] && [[ "$SOURCE_URL" == https://www.bigo.tv/* ]] && [[ "$SOURCE_URL" != */sid/* ]] && [[ "$SOURCE_URL" != *.m3u8* ]]; then
-  PAGE_URL="$SOURCE_URL"
-  PAGE_KIND="room page"
+if [ "$CAPTURE_OK" -ne 1 ] && [[ "$BIGO_ROOM_URL" == https://www.bigo.tv/* ]]; then
+  # Signed /sid/ registry URLs expire and Streamlink cannot treat them as room pages.
+  # Always inspect the canonical room URL for fresh HLS; retain the signed URL only
+  # as a secondary direct-capture attempt and provenance input.
+  PAGE_URL="$BIGO_ROOM_URL"
+  PAGE_KIND="canonical room page"
 fi
 if [ -n "$PAGE_URL" ]; then
   PAGE="/tmp/bigo-${HOST}-page.html"
