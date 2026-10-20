@@ -144,6 +144,19 @@ def normalize(current, role, path):
 
 def main():
     token = get_token()
+    if "--check-only" in sys.argv:
+        current, _ = download("/config/clearance.config.json", token)
+        normalized = normalize(current, "canonical", "/config/clearance.config.json")
+        current_cmp = dict(current)
+        normalized_cmp = dict(normalized)
+        for value in (current_cmp, normalized_cmp):
+            value.pop("updated_at", None)
+            value.pop("shipped_at", None)
+        if current_cmp != normalized_cmp:
+            print(json.dumps({"ok": False, "reason": "canonical Dropbox provenance config requires reconciliation"}))
+            return 1
+        print(json.dumps({"ok": True, "config": "/config/clearance.config.json", "policy_version": 2}))
+        return 0
     changed = []
     unchanged = []
     now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
