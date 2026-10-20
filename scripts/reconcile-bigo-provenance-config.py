@@ -108,8 +108,10 @@ def normalize(current, role, path):
     for unsafe in ("persistence_scope", "clearance_scope", "global_override"):
         data.pop(unsafe, None)
     # Preserve deployment labels as claims, but do not present them as verified infrastructure.
-    claimed_authority = data.pop("corporate_authority", None) or data.pop("principal", None)
-    origin_claim = data.pop("content_origin_authority", None)
+    prior_claims = data.get("authority_claims") or {}
+    prior_platform = data.get("platform_source") or {}
+    claimed_authority = data.pop("corporate_authority", None) or data.pop("principal", None) or prior_claims.get("corporate_entity")
+    origin_claim = data.pop("content_origin_authority", None) or prior_platform.get("attribution_claim")
     data["schema_version"] = 2
     data["config_role"] = role
     data["status"] = "configuration_only_not_global_clearance"
