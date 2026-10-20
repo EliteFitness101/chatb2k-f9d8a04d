@@ -170,7 +170,7 @@ def main():
         comparable_current.pop("shipped_at", None)
         comparable_desired.pop("shipped_at", None)
         # Normalize again for semantic comparison, including old global claims.
-        comparable_current = normalize(current, role, path)
+        comparable_current = dict(current)
         comparable_current.pop("updated_at", None)
         comparable_current.pop("shipped_at", None)
         comparable_desired.pop("updated_at", None)
