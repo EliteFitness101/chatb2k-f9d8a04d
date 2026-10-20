@@ -181,6 +181,12 @@ jobs:
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          if [ "${{ steps.provenance-config.outcome }}" != "success" ]; then
+            echo "::warning::Canonical Dropbox provenance policy is not reconciled; keeping this batch storage-only and skipping enrichment/publishing."
+            jq '{highlights: .highlights, limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
+            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
+            exit 0
+          fi
           # Publishing scope comes only from the exact BIGO_VERIFIED_HOST_IDS allowlist secret.
           VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
           VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
