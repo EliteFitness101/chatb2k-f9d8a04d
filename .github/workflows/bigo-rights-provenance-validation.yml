@@ -33,6 +33,8 @@ jobs:
           assert 'SOURCE_URL="${BIGO_ROOM_URL}"' in capture
           assert 'PAGE_URL="$BIGO_ROOM_URL"' in capture
           assert 'PAGE_KIND="canonical room page"' in capture
+          assert 'https://www.bigo.tv/sid/*' not in capture
+          assert 'SOURCE_OVERRIDE" == https://slink.bigovideo.tv/*' in capture
           assert "'original_url':source_url" not in capture
-          print('PASS: publication requires active source + user allowlist; rights evidence is explicit; ownership is not falsely asserted; canonical room URL and signed stream URL remain separate.')
+          print('PASS: publication requires active source + user allowlist; rights evidence is explicit; ownership is not falsely asserted; canonical room URL is authoritative; signed /sid/ URLs cannot cause cross-host capture.')
           PY

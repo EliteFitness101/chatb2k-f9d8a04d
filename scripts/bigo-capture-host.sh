@@ -177,9 +177,10 @@ for ATTEMPT in 1 2; do
   if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
   sleep "$ATTEMPT"
 done
-# Some registry sources are BIGO shortlinks/session URLs that Streamlink does not recognize.
-# Probe those supplied source URLs directly before falling back to BIGO API discovery.
-if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* || "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
+# A signed /sid/ URL is session-scoped and may point at a different room than HOST.
+# Never capture from it as a fallback: that can misattribute another host's live stream.
+# Keep the shortlink fallback only; canonical room/HLS discovery remains the source of truth.
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; then
   echo "::notice::BIGO host $HOST trying supplied source URL directly"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
