@@ -161,7 +161,8 @@ def main():
     unchanged = []
     now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     for path, role in FILES:
-        current, metadata = download(path, token)
+        current, _ = download(path, token)
+        metadata = json_api("files/get_metadata", token, {"path": path})
         desired = normalize(current, role, path)
         comparable_current = dict(current)
         comparable_desired = dict(desired)
