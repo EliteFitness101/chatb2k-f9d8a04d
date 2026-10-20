@@ -1,0 +1,34 @@
+name: Reconcile BIGO provenance manifests in Dropbox
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/reconcile-bigo-provenance-config.py'
+      - '.github/workflows/bigo-provenance-config-sync.yml'
+      - '.github/workflows/bigo-live-automation.yml'
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bigo-provenance-config-sync
+  cancel-in-progress: false
+
+jobs:
+  reconcile-dropbox-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconcile canonical, mirror and historical manifests
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/reconcile-bigo-provenance-config.py
