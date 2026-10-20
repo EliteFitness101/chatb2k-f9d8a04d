@@ -7,6 +7,8 @@ on:
     paths:
       - '.github/workflows/bigo-live-automation.yml'
       - 'scripts/bigo-capture-host.sh'
+      - 'scripts/reconcile-bigo-provenance-config.py'
+      - 'supabase/functions/bigo-live-pipeline/index.ts'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
