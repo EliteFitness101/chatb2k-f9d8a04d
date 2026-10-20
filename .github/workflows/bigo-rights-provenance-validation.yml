@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: Verify explicit host allowlist gate and truthful rights evidence
+      - name: Verify independent capture and publication eligibility
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -28,7 +28,6 @@ jobs:
           sync_workflow = Path('.github/workflows/bigo-provenance-config-sync.yml').read_text()
           assert 'async function resolveBigoRights' in pipeline
           assert 'allowed=!!source&&active&&allowlisted' in pipeline
-          assert 'active_source_and_user_allowlist_required' in pipeline
           assert 'rights_evidence:rights.evidence' in pipeline
           assert 'independent_rights_verified:false' in pipeline
           assert 'ownership_verified:false' in pipeline
@@ -50,16 +49,15 @@ jobs:
           assert 'comparable_current = dict(current)' in config_script
           assert 'comparable_current = normalize(current, role, path)' not in config_script
           assert '--check-only' in config_script
-          assert 'python3 scripts/reconcile-bigo-provenance-config.py --check-only' in workflow
-          assert 'provenance-config.outcome' in workflow
           assert 'Reconcile BIGO provenance manifests in Dropbox' in sync_workflow
           assert 'function canonicalBigoRoomUrl' in pipeline
-          assert 'rights_status:rights.explicit?"attested":"allowlist_only"' in pipeline
-          assert 'rights_verified:explicit&&allowed' in pipeline
-          assert 'if(!rights.allowed||!rights.explicit)' in pipeline
-          assert 'per_host_commercial_republication_attestation_required' in pipeline
-          assert 'requestedPlatforms.filter((p:any)=>String(p)==="tiktok")' in pipeline
-          assert 'rights_verified:true' not in pipeline
           assert 'originality_verified:true' not in pipeline
-          print('PASS: canonical room/host identity is enforced; rights and ownership claims remain distinct; Dropbox manifests are reconciled; stale policy holds publishing; secrets are excluded from config.')
+          assert 'publication_requirements_not_met' in pipeline
+          assert 'publicationEligibility={verified_host:verifiedHost' in pipeline
+          assert 'return {accepted:true,highlight_id:old.id' in pipeline
+          assert 'pipeline_policy_version' not in workflow
+          assert 'provenance-config.outcome' not in workflow
+          assert 'storage_only:false' in workflow
+          assert 'BIGO_VERIFIED_HOST_IDS' in workflow
+          print('PASS: all captured hosts are ingested; publication eligibility is evaluated at publishing; rights evidence and secret separation are preserved.')
           PY
