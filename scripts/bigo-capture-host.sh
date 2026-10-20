@@ -71,7 +71,7 @@ drive_put() {
 }
 
 BIGO_ROOM_URL="https://www.bigo.tv/${HOST}"
-SOURCE_URL="${SOURCE_OVERRIDE:-${BIGO_ROOM_URL}}"
+SOURCE_URL="${BIGO_ROOM_URL}"
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
 # hls_src to the older unauthenticated getInternalStudioInfo request.
@@ -198,12 +198,12 @@ fi
 # the tokenized room-info API omits its token field.
 PAGE_URL=""
 PAGE_KIND=""
-if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
-  PAGE_URL="$SOURCE_OVERRIDE"
-  PAGE_KIND="signed /sid/ page"
-elif [ "$CAPTURE_OK" -ne 1 ] && [[ "$SOURCE_URL" == https://www.bigo.tv/* ]] && [[ "$SOURCE_URL" != */sid/* ]] && [[ "$SOURCE_URL" != *.m3u8* ]]; then
-  PAGE_URL="$SOURCE_URL"
-  PAGE_KIND="room page"
+if [ "$CAPTURE_OK" -ne 1 ] && [[ "$BIGO_ROOM_URL" == https://www.bigo.tv/* ]]; then
+  # Signed /sid/ registry URLs expire and Streamlink cannot treat them as room pages.
+  # Always inspect the canonical room URL for fresh HLS; retain the signed URL only
+  # as a secondary direct-capture attempt and provenance input.
+  PAGE_URL="$BIGO_ROOM_URL"
+  PAGE_KIND="canonical room page"
 fi
 if [ -n "$PAGE_URL" ]; then
   PAGE="/tmp/bigo-${HOST}-page.html"
@@ -528,18 +528,32 @@ fi
 
 dropbox_ensure_host_dirs() {
   python3 - "${HOST_ROOT}" <<'PYDIR'
-import json, os, urllib.error, urllib.request, sys
+import json, os, urllib.error, urllib.request, sys, time
 token=os.environ.get("DROPBOX_ACCESS_TOKEN","")
 root=sys.argv[1].rstrip("/")
 def call(endpoint,payload):
-    req=urllib.request.Request("https://api.dropboxapi.com/2/"+endpoint,data=json.dumps(payload).encode(),headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"},method="POST")
-    try:
-        with urllib.request.urlopen(req,timeout=30) as r: return json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        if e.code==409 and endpoint=="files/create_folder_v2":
-            meta=call("files/get_metadata",{"path":payload["path"]})
-            if meta.get(".tag")=="folder": return meta
-        raise RuntimeError("Dropbox folder preparation failed: "+payload["path"]+" (HTTP "+str(e.code)+")")
+    # Dropbox may return 429 during parallel host-folder creation. Honor Retry-After
+    # and retry transient rate limits/server errors instead of failing the host capture.
+    body=json.dumps(payload).encode()
+    headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"}
+    for attempt in range(5):
+        req=urllib.request.Request("https://api.dropboxapi.com/2/"+endpoint,data=body,headers=headers,method="POST")
+        try:
+            with urllib.request.urlopen(req,timeout=30) as r: return json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            if e.code==409 and endpoint=="files/create_folder_v2":
+                meta=call("files/get_metadata",{"path":payload["path"]})
+                if meta.get(".tag")=="folder": return meta
+            if e.code in (429,500,502,503,504) and attempt<4:
+                try: delay=float(e.headers.get("Retry-After",""))
+                except (TypeError,ValueError): delay=min(2**(attempt+1),30)
+                time.sleep(max(1,min(delay,60)))
+                continue
+            raise RuntimeError("Dropbox folder preparation failed: "+payload["path"]+" (HTTP "+str(e.code)+")") from None
+        except urllib.error.URLError:
+            if attempt>=4: raise RuntimeError("Dropbox folder preparation failed after transient network retries: "+payload["path"]) from None
+            time.sleep(min(2**(attempt+1),30))
+    raise RuntimeError("Dropbox folder preparation failed after retries: "+payload["path"])
 for path in [root,root+"/raw-captures",root+"/processed",root+"/processed/google-business",root+"/metadata",root+"/logs"]:
     call("files/create_folder_v2",{"path":path,"autorename":False})
     print("Ensured Dropbox folder: "+path)
