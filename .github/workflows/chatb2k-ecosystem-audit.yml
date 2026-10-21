@@ -1,6 +1,13 @@
 name: ChatB2K Ecosystem Configuration Audit
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'GEMINI.md'
+      - '.github/workflows/chatb2k-ecosystem-audit.yml'
+      - '.github/workflows/bigo-live-automation.yml'
+      - 'scripts/bigo-capture-host.sh'
   push:
     branches: [main]
     paths:
@@ -22,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.GEMINI_AUTOMATION_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,8 +60,8 @@ jobs:
         if: ${{ env.GEMINI_API_KEY == '' }}
         shell: bash
         run: |
-          echo "GEMINI_API_KEY GitHub Actions secret is not configured; static repository audit completed."
-          printf '%s\n' '{"status":"static_audit_only","gemini_cli":"skipped_missing_GEMINI_API_KEY","note":"No secret values were inspected. Configure GEMINI_API_KEY in repository Actions secrets to enable the Gemini CLI audit."}' > gemini-audit.json
+          echo "Neither GEMINI_API_KEY nor GEMINI_AUTOMATION_API_KEY is configured in GitHub Actions; static repository audit completed."
+          printf '%s\n' '{"status":"static_audit_only","gemini_cli":"skipped_missing_GEMINI_API_KEY_and_GEMINI_AUTOMATION_API_KEY","note":"No secret values were inspected. Configure GEMINI_API_KEY or GEMINI_AUTOMATION_API_KEY in repository Actions secrets to enable the Gemini CLI audit."}' > gemini-audit.json
 
       - name: Upload audit report
         if: always()
