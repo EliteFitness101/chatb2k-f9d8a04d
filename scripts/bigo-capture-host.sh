@@ -606,12 +606,20 @@ r2_upload() {
   rm -f "$TMP"
   printf '%s' "$DEST"
 }
-# Keep the verified Dropbox archive as a recoverable copy. When the R2 writer
-# credential is configured, the public R2 URL becomes the downstream media URL.
+# Dropbox remains the verified archive. R2 becomes the delivery URL only after
+# the actual object passes production PUT + GET + byte-for-byte verification.
 DROPBOX_PROCESSED_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
 BLOB_URL="$DROPBOX_PROCESSED_URL"
+R2_VIDEO_STATUS="not_configured"
 if [ -n "${R2_WRITE_TOKEN:-}" ]; then
-  BLOB_URL="$(r2_upload "$FILE" "public/bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
+  if R2_VIDEO_URL="$(r2_upload "$FILE" "public/bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"; then
+    BLOB_URL="$R2_VIDEO_URL"
+    R2_VIDEO_STATUS="verified_object_readback"
+    echo "::notice::R2 video upload and byte-for-byte read-back verified for $HOST"
+  else
+    R2_VIDEO_STATUS="failed_fallback_dropbox"
+    echo "::warning::R2 video delivery failed verification; using verified Dropbox URL for this asset." >&2
+  fi
 else
   echo "::warning::R2_WRITE_TOKEN is not configured in GitHub Actions; this capture will use the verified Dropbox URL." >&2
 fi
@@ -623,14 +631,22 @@ if [ -s "$GBP_FILE" ]; then
   else
     GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"
     if [ -n "${R2_WRITE_TOKEN:-}" ]; then
-      GBP_URL="$(r2_upload "$GBP_FILE" "public/bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
+      if R2_GBP_URL="$(r2_upload "$GBP_FILE" "public/bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"; then
+        GBP_URL="$R2_GBP_URL"
+      else
+        echo "::warning::R2 Google Business derivative failed read-back; retaining verified Dropbox URL." >&2
+      fi
     fi
   fi
 fi
 DROPBOX_COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
 COVER_URL="$DROPBOX_COVER_URL"
 if [ -n "${R2_WRITE_TOKEN:-}" ]; then
-  COVER_URL="$(r2_upload "$COVER" "public/bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
+  if R2_COVER_URL="$(r2_upload "$COVER" "public/bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"; then
+    COVER_URL="$R2_COVER_URL"
+  else
+    echo "::warning::R2 cover failed read-back; retaining verified Dropbox cover URL." >&2
+  fi
 fi
 
 DRIVE_RAW=""
@@ -669,7 +685,7 @@ def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'cloudflare_r2' if blob.startswith('https://media.resofit.fit/') else 'dropbox','r2_object_readback_verified':blob.startswith('https://media.resofit.fit/'),'r2_write_token_present':bool(__import__('os').environ.get('R2_WRITE_TOKEN'))}}
 print(json.dumps({'highlight':hitem}))
 PY
 
@@ -692,10 +708,11 @@ fi
 
 # Save a per-host verification receipt after the primary archive uploads have passed Dropbox read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
-python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "${R2_VIDEO_STATUS}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
-host,ts,root,video,cover=sys.argv[1:]
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"archive_verified","dropbox_root":root,"processed_video":root+"/processed","raw_capture":root+"/raw-captures","metadata":root+"/metadata","logs":root+"/logs","video_url":video,"cover_url":cover,"verification":"Dropbox size and content_hash read-back"}))
+host,ts,root,video,cover,r2_status=sys.argv[1:]
+is_r2=video.startswith("https://media.resofit.fit/")
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"archive_verified","dropbox_root":root,"processed_video":root+"/processed","raw_capture":root+"/raw-captures","metadata":root+"/metadata","logs":root+"/logs","video_url":video,"cover_url":cover,"archive_verification":"Dropbox size and content_hash read-back","media_delivery_provider":"cloudflare_r2" if is_r2 else "dropbox","r2_object_readback_status":r2_status,"r2_object_readback_verified":is_r2 and r2_status=="verified_object_readback"}))
 PYSTATUS
 if ! dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json"; then
   echo "::error::Per-host archive verification receipt failed for $HOST."
