@@ -35,12 +35,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install capture tools (Dropbox archive)
+      - name: Install capture tools
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg chromium
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
+          ffmpeg -version | head -n 1
+          streamlink --version
 
       - name: Capture, normalize and prepare ChatB2K batch
         id: capture
