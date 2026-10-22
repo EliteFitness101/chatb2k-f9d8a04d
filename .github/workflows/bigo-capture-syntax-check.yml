@@ -1,0 +1,34 @@
+name: BIGO Capture Syntax Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/bigo-capture-host.sh'
+      - '.github/workflows/bigo-capture-syntax-check.yml'
+  pull_request:
+    paths:
+      - 'scripts/bigo-capture-host.sh'
+      - '.github/workflows/bigo-capture-syntax-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Bash syntax
+        run: bash -n scripts/bigo-capture-host.sh
+      - name: Validate embedded BIGO API resolver Python
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("scripts/bigo-capture-host.sh").read_text()
+          marker = 'INFO="$(python3 - "$HOST" <<\'PY\'\n'
+          start = source.index(marker) + len(marker)
+          end = source.index("\nPY\n)", start)
+          compile(source[start:end], "bigo-api-resolver", "exec")
+          print("Embedded BIGO API resolver syntax: OK")
+          PY
