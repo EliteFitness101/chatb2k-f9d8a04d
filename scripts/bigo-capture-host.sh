@@ -563,7 +563,41 @@ PYDIR
 dropbox_ensure_host_dirs
 
 export FILE COVER
-BLOB_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
+R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
+r2_upload() {
+  local SRC="$1" KEY="$2" MIME="$3" DEST TMP
+  [ -n "${R2_WRITE_TOKEN:-}" ] || { echo "R2_WRITE_TOKEN is not configured" >&2; return 2; }
+  DEST="${R2_MEDIA_BASE}/${KEY}"
+  TMP="$(mktemp)"
+  if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$DEST" \
+    -H "Authorization: Bearer ${R2_WRITE_TOKEN}" \
+    -H "Content-Type: ${MIME}" --data-binary "@${SRC}" -o /dev/null; then
+    rm -f "$TMP"
+    echo "R2 upload failed for ${KEY}" >&2
+    return 1
+  fi
+  if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "$DEST" -o "$TMP"; then
+    rm -f "$TMP"
+    echo "R2 read-back failed for ${KEY}" >&2
+    return 1
+  fi
+  if ! cmp -s "$SRC" "$TMP"; then
+    rm -f "$TMP"
+    echo "R2 read-back checksum mismatch for ${KEY}" >&2
+    return 1
+  fi
+  rm -f "$TMP"
+  printf '%s' "$DEST"
+}
+# Keep the verified Dropbox archive as a recoverable copy. When the R2 writer
+# credential is configured, the public R2 URL becomes the downstream media URL.
+DROPBOX_PROCESSED_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
+BLOB_URL="$DROPBOX_PROCESSED_URL"
+if [ -n "${R2_WRITE_TOKEN:-}" ]; then
+  BLOB_URL="$(r2_upload "$FILE" "public/bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
+else
+  echo "::warning::R2_WRITE_TOKEN is not configured in GitHub Actions; this capture will use the verified Dropbox URL." >&2
+fi
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
   if ! audio_qa "$GBP_FILE" "Google Business derivative"; then
@@ -571,9 +605,16 @@ if [ -s "$GBP_FILE" ]; then
     rm -f "$GBP_FILE"
   else
     GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"
+    if [ -n "${R2_WRITE_TOKEN:-}" ]; then
+      GBP_URL="$(r2_upload "$GBP_FILE" "public/bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
+    fi
   fi
 fi
-COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
+DROPBOX_COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
+COVER_URL="$DROPBOX_COVER_URL"
+if [ -n "${R2_WRITE_TOKEN:-}" ]; then
+  COVER_URL="$(r2_upload "$COVER" "public/bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
+fi
 
 DRIVE_RAW=""
 DRIVE_VIDEO=""
