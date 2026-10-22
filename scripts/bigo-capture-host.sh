@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+for BIN in python3 curl ffmpeg streamlink; do
+  command -v "$BIN" >/dev/null 2>&1 || { echo "::error::Missing required capture binary: $BIN" >&2; exit 127; }
+done
 
 HOST_INPUT="${1:-}"
 SOURCE_OVERRIDE="${2:-}"
