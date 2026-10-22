@@ -2,13 +2,6 @@ name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
 # Production capture workflow — Dropbox is canonical media storage; ChatB2K ingests verified Dropbox URLs for enrichment, Buffer, and Drive archive.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/bigo-live-automation.yml'
-      - 'scripts/bigo-capture-host.sh'
-      - 'scripts/reconcile-bigo-provenance-config.py'
-      - 'supabase/functions/bigo-live-pipeline/index.ts'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -25,6 +18,7 @@ concurrency:
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
+  BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   R2_WRITE_TOKEN: ${{ secrets.R2_WRITE_TOKEN }}
   R2_MEDIA_BASE: https://media.resofit.fit
@@ -53,6 +47,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${BIGO_SESSION_COOKIE:-}" ]; then
+            echo "::warning::BIGO_SESSION_COOKIE is not configured; BIGO rooms requiring login may fail capture."
+          fi
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
