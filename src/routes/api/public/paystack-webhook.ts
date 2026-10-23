@@ -28,6 +28,7 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
             status?: string;
             amount?: number;
             currency?: string;
+            id?: number;
             customer?: { email?: string };
             metadata?: Record<string, unknown> | null;
           };
@@ -62,6 +63,40 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
               },
               { onConflict: "reference", ignoreDuplicates: true },
             );
+
+          // Keep customer display price, actual Paystack charge, and payout
+          // settlement separate. Never calculate settlement from display FX.
+          const chargedCurrency = typeof event.data?.currency === "string" &&
+            /^[A-Z]{3}$/.test(event.data.currency) ? event.data.currency : "NGN";
+          const chargedAmount = Number.isSafeInteger(event.data?.amount) && (event.data?.amount ?? -1) >= 0
+            ? event.data!.amount!
+            : 0;
+          const displayCurrency = typeof meta.display_currency === "string" &&
+            /^[A-Z]{3}$/.test(meta.display_currency) ? meta.display_currency : chargedCurrency;
+          const metadataDisplayAmount = meta.display_amount_minor;
+          const displayAmount = typeof metadataDisplayAmount === "number" &&
+            Number.isSafeInteger(metadataDisplayAmount) && metadataDisplayAmount >= 0
+            ? metadataDisplayAmount : chargedAmount;
+
+          await supabaseAdmin.from("payment_currency_ledger").upsert(
+            {
+              payment_reference: ref,
+              paystack_transaction_id: event.data?.id ?? null,
+              customer_email: event.data?.customer?.email ?? null,
+              display_currency: displayCurrency,
+              display_amount_minor: displayAmount,
+              charged_currency: chargedCurrency,
+              charged_amount_minor: chargedAmount,
+              payment_status: "success",
+              reconciliation_status: "awaiting_settlement",
+              provider_event: {
+                event: event.event,
+                status: event.data?.status ?? "success",
+              },
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "payment_reference", ignoreDuplicates: true },
+          );
         } else if (event.event === "charge.failed" && ref) {
           await supabaseAdmin
             .from("orders")
@@ -83,6 +118,10 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
             .from("orders")
             .update({ status: newStatus })
             .eq("reference", ref);
+          await supabaseAdmin
+            .from("payment_currency_ledger")
+            .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
+            .eq("payment_reference", ref);
         }
 
         // Make automation bridge — fire-and-forget; do not block webhook ack.
