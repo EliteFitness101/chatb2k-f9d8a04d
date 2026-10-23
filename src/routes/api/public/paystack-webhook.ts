@@ -78,7 +78,7 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
             Number.isSafeInteger(metadataDisplayAmount) && metadataDisplayAmount >= 0
             ? metadataDisplayAmount : chargedAmount;
 
-          await supabaseAdmin.from("payment_currency_ledger").upsert(
+          const { error: ledgerError } = await supabaseAdmin.from("payment_currency_ledger").upsert(
             {
               payment_reference: ref,
               paystack_transaction_id: event.data?.id ?? null,
@@ -97,6 +97,12 @@ export const Route = createFileRoute("/api/public/paystack-webhook")({
             },
             { onConflict: "payment_reference", ignoreDuplicates: true },
           );
+          // Do not acknowledge a signed success event if the audit ledger write
+          // failed; Paystack can retry the webhook and preserve reconciliation.
+          if (ledgerError) {
+            console.error("[paystack-webhook] currency ledger write failed", ledgerError);
+            return new Response("Ledger write failed", { status: 500 });
+          }
         } else if (event.event === "charge.failed" && ref) {
           await supabaseAdmin
             .from("orders")
