@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - main
-      - "feat/persistent-baileys-worker"
     paths:
       - "services/whatsapp-baileys-worker/**"
       - ".github/workflows/whatsapp-baileys-worker-ci.yml"
