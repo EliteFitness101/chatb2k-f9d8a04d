@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - "feat/persistent-baileys-worker"
     paths:
       - "services/whatsapp-baileys-worker/**"
       - ".github/workflows/whatsapp-baileys-worker-ci.yml"
@@ -31,8 +32,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: services/whatsapp-baileys-worker/package.json
 
       - name: Install worker dependencies
         working-directory: services/whatsapp-baileys-worker
