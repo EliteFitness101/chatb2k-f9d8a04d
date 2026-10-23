@@ -1,0 +1,46 @@
+name: WhatsApp Baileys Worker CI
+
+on:
+  pull_request:
+    paths:
+      - "services/whatsapp-baileys-worker/**"
+      - ".github/workflows/whatsapp-baileys-worker-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "services/whatsapp-baileys-worker/**"
+      - ".github/workflows/whatsapp-baileys-worker-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whatsapp-baileys-worker-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/whatsapp-baileys-worker/package.json
+
+      - name: Install worker dependencies
+        working-directory: services/whatsapp-baileys-worker
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        working-directory: services/whatsapp-baileys-worker
+        run: npm run check
+
+      - name: Build worker container
+        run: docker build --tag resofit-whatsapp-baileys-worker:ci services/whatsapp-baileys-worker
