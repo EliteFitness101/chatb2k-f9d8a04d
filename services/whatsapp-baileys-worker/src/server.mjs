@@ -194,6 +194,7 @@ async function startSocket() {
         loggedIn = true;
         reconnectDelay = 1000;
         logger.info({ event: "whatsapp_connected" });
+        void recoverQueuedJobs();
       }
       if (connection === "close") {
         connected = false;
@@ -285,6 +286,7 @@ async function recoverQueuedJobs() {
 
 app.post("/jobs", auth(WORKER_API_KEY), async (req, res) => {
   let job;
+  if (!connected || !loggedIn) return res.status(503).json({ error: "whatsapp_session_not_ready" });
   try {
     job = validateJob(req.body);
   } catch (error) {
@@ -312,7 +314,6 @@ app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 app.listen(PORT, "0.0.0.0", () => {
   logger.info({ event: "http_listening", port: PORT });
   void startSocket();
-  void recoverQueuedJobs();
 });
 
 process.on("SIGTERM", () => {
