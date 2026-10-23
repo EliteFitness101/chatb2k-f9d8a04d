@@ -4,7 +4,8 @@
 - `POST /api/cron/paystack-settlement-reconcile`
 - Requires `x-reconciliation-secret` matching server-only `PAYSTACK_RECONCILIATION_CRON_SECRET`.
 - Requires server-only `PAYSTACK_SECRET_KEY`.
-- Configure a scheduler to call this endpoint periodically; never expose either secret to the browser.
+- `vercel.json` schedules a daily Vercel Cron call at 06:00 UTC. Vercel sends `GET` with `Authorization: Bearer $CRON_SECRET`; the route also accepts `POST` with `x-reconciliation-secret` for external schedulers.
+- A production-only sensitive `CRON_SECRET` has been configured in Vercel. `PAYSTACK_SECRET_KEY` and the Supabase service-role credentials are server-side environment variables; never expose them to the browser.
 
 ## Evidence semantics
 - Reads successful main-account settlements from Paystack `GET /settlement`.
