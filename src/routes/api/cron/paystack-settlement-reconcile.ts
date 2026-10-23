@@ -54,18 +54,24 @@ export const Route = createFileRoute("/api/cron/paystack-settlement-reconcile")(
         }
 
         try {
-          const settlementsEnvelope = await paystackGet<Settlement>(
-            "/settlement?perPage=50&page=1&status=success&subaccount=none",
-            paystackSecret,
-          );
-          const settlements = settlementsEnvelope.data ?? [];
+          const settlements: Settlement[] = [];
+          // Bound the invocation while actually advancing settlement pages.
+          for (let settlementPage = 1; settlementPage <= 5; settlementPage++) {
+            const settlementsEnvelope = await paystackGet<Settlement>(
+              `/settlement?perPage=50&page=${settlementPage}&status=success&subaccount=none`,
+              paystackSecret,
+            );
+            const pageRows = settlementsEnvelope.data ?? [];
+            settlements.push(...pageRows);
+            if (pageRows.length < 50 || settlementPage >= (settlementsEnvelope.meta?.pageCount ?? 1)) break;
+          }
           let settlementsChecked = 0;
           let transactionsChecked = 0;
           let ledgerRowsMatched = 0;
+          let ledgerRowsVariance = 0;
           let ledgerRowsSkipped = 0;
 
-          // Bounded pass; run repeatedly to walk recent successful settlements
-          // without an unbounded serverless invocation.
+          // Up to 250 successful settlements per invocation.
           for (const settlement of settlements) {
             if (!Number.isSafeInteger(settlement.id) || settlement.status !== "success") continue;
             settlementsChecked++;
@@ -120,7 +126,8 @@ export const Route = createFileRoute("/api/cron/paystack-settlement-reconcile")(
                   })
                   .eq("payment_reference", tx.reference);
                 if (updateError) throw updateError;
-                ledgerRowsMatched++;
+                if (exactChargeMatch) ledgerRowsMatched++;
+                else ledgerRowsVariance++;
               }
               if (txs.length < 100 || page >= (txEnvelope.meta?.pageCount ?? 1)) break;
             }
@@ -132,8 +139,9 @@ export const Route = createFileRoute("/api/cron/paystack-settlement-reconcile")(
             settlementsChecked,
             transactionsChecked,
             ledgerRowsMatched,
+            ledgerRowsVariance,
             ledgerRowsSkipped,
-            note: "Matched means included in a successful Paystack settlement and gross transaction amount/currency matched. Net payout allocation is not inferred.",
+            note: "Matched means included in a successful Paystack settlement and gross transaction amount/currency matched. Net payout allocation is not inferred. Up to 250 settlements are scanned per invocation.",
           }, { headers: { "cache-control": "no-store" } });
         } catch (error) {
           console.error("[paystack-settlement-reconcile] failed", error);
