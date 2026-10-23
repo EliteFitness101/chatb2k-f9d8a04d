@@ -19,7 +19,7 @@ const PORT = Number(process.env.PORT || 3000);
 const WORKER_API_KEY = required("WORKER_API_KEY");
 const ADMIN_TOKEN = required("ADMIN_TOKEN");
 const CALLBACK_URL = required("SUPABASE_CALLBACK_URL");
-const CALLBACK_SECRET = process.env.SUPABASE_CALLBACK_SECRET || "";
+
 const AUTH_DIR = process.env.AUTH_DIR || "/data/auth";
 const DATABASE_PATH = process.env.DATABASE_PATH || "/data/worker.sqlite";
 const MAX_MEDIA_BYTES = Math.max(1024, Number(process.env.MAX_MEDIA_BYTES || 16 * 1024 * 1024));
@@ -90,7 +90,7 @@ function validateJob(body) {
   const idempotencyKey = cleanString(body.idempotency_key, 200);
   if (!queueId || !destinationId || !idempotencyKey) throw new Error("missing_required_fields");
   if (body.action !== "publish") throw new Error("unsupported_action");
-  if (body.platform !== "whatsapp") throw new Error("unsupported_platform");
+  if (!["whatsapp", "whatsapp_group"].includes(body.platform)) throw new Error("unsupported_platform");
   if (body.callback_action !== "ack") throw new Error("unsupported_callback_action");
   if (body.callback_url !== CALLBACK_URL) throw new Error("callback_url_mismatch");
   const jid = destinations[destinationId];
@@ -144,7 +144,7 @@ async function acknowledge(job, status, messageId = null, errorCode = null) {
     ...(errorCode ? { error: errorCode } : {}),
   };
   const headers = { "content-type": "application/json" };
-  if (CALLBACK_SECRET) headers["x-baileys-worker-secret"] = CALLBACK_SECRET;
+  headers["x-baileys-worker-secret"] = WORKER_API_KEY;
   const response = await fetch(CALLBACK_URL, {
     method: "POST",
     headers,
