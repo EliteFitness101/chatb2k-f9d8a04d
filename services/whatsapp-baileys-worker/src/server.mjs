@@ -7,7 +7,6 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
 import fs from "node:fs/promises";
-import path from "node:path";
 import { timingSafeEqual } from "node:crypto";
 
 const logger = pino({ level: process.env.LOG_LEVEL || "info", redact: ["req.headers.authorization", "req.headers.x-baileys-worker-secret"] });
@@ -49,13 +48,18 @@ db.exec(`
     status TEXT NOT NULL,
     message_id TEXT,
     error_code TEXT,
+    payload_json TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `);
+// Migrate existing worker volumes without deleting durable idempotency records.
+const jobColumns = new Set(db.pragma("table_info(jobs)").map(column => column.name));
+if (!jobColumns.has("payload_json")) db.exec("ALTER TABLE jobs ADD COLUMN payload_json TEXT");
 const getJob = db.prepare("SELECT * FROM jobs WHERE idempotency_key = ?");
-const insertJob = db.prepare("INSERT INTO jobs (idempotency_key, queue_id, destination_id, status) VALUES (?, ?, ?, 'processing')");
+const insertJob = db.prepare("INSERT INTO jobs (idempotency_key, queue_id, destination_id, status, payload_json) VALUES (?, ?, ?, 'queued', ?)");
 const updateJob = db.prepare("UPDATE jobs SET status=?, message_id=?, error_code=?, updated_at=CURRENT_TIMESTAMP WHERE idempotency_key=?");
+const queuedJobs = db.prepare("SELECT * FROM jobs WHERE status = 'queued' AND payload_json IS NOT NULL ORDER BY created_at ASC");
 
 let sock;
 let connected = false;
@@ -102,7 +106,9 @@ function validateJob(body) {
   const caption = cleanString(content.caption, 4000);
   const assetUrl = cleanString(content.asset_url, 2000);
   if (!title && !caption && !assetUrl) throw new Error("empty_content");
-  return { queueId, destinationId, idempotencyKey, jid, title, caption, assetUrl };
+  if (body.platform === "whatsapp_group" && !jid.endsWith("@g.us")) throw new Error("group_platform_requires_group_jid");
+  if (body.platform === "whatsapp" && !jid.endsWith("@s.whatsapp.net")) throw new Error("direct_platform_requires_direct_jid");
+  return { queueId, destinationId, idempotencyKey, jid, platform: body.platform, title, caption, assetUrl };
 }
 async function downloadMedia(urlText) {
   const url = new URL(urlText);
@@ -139,7 +145,7 @@ async function acknowledge(job, status, messageId = null, errorCode = null) {
     idempotency_key: job.idempotencyKey,
     status,
     message_id: messageId,
-    platform: "whatsapp",
+    platform: job.platform,
     destination: destinations[job.destinationId],
     ...(errorCode ? { error: errorCode } : {}),
   };
@@ -237,23 +243,10 @@ app.post("/admin/pairing-code", auth(ADMIN_TOKEN), async (req, res) => {
   }
 });
 
-app.post("/jobs", auth(WORKER_API_KEY), async (req, res) => {
-  let job;
-  try {
-    job = validateJob(req.body);
-  } catch (error) {
-    return res.status(400).json({ error: error.message || "invalid_job" });
-  }
-  const existing = getJob.get(job.idempotencyKey);
-  if (existing) return res.status(202).json({ accepted: true, duplicate: true, status: existing.status });
-  try {
-    insertJob.run(job.idempotencyKey, job.queueId, job.destinationId);
-  } catch {
-    const duplicate = getJob.get(job.idempotencyKey);
-    if (duplicate) return res.status(202).json({ accepted: true, duplicate: true, status: duplicate.status });
-    return res.status(500).json({ error: "job_persistence_failed" });
-  }
-  res.status(202).json({ accepted: true, status: "processing" });
+async function processJob(job) {
+  // A crash while queued is safe to resume. Once sending starts, delivery
+  // outcome may be unknown, so never auto-send that job a second time.
+  updateJob.run("sending", null, null, job.idempotencyKey);
   try {
     const messageId = await handleJob(job);
     updateJob.run("published", messageId, null, job.idempotencyKey);
@@ -273,12 +266,53 @@ app.post("/jobs", auth(WORKER_API_KEY), async (req, res) => {
     }
     logger.warn({ event: "job_failed", queue_id: job.queueId, destination_id: job.destinationId, code });
   }
+}
+
+async function recoverQueuedJobs() {
+  for (const row of queuedJobs.all()) {
+    try {
+      const job = JSON.parse(row.payload_json);
+      logger.info({ event: "recovering_queued_job", queue_id: row.queue_id });
+      void processJob(job);
+    } catch {
+      updateJob.run("failed", null, "stored_payload_invalid", row.idempotency_key);
+      logger.error({ event: "queued_job_recovery_failed", queue_id: row.queue_id });
+    }
+  }
+  // Legacy rows from the pre-payload schema cannot safely be replayed.
+  db.prepare("UPDATE jobs SET status='uncertain', error_code='legacy_processing_outcome_unknown', updated_at=CURRENT_TIMESTAMP WHERE status='processing'");
+}
+
+app.post("/jobs", auth(WORKER_API_KEY), async (req, res) => {
+  let job;
+  try {
+    job = validateJob(req.body);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "invalid_job" });
+  }
+  const existing = getJob.get(job.idempotencyKey);
+  if (existing) {
+    const state = existing.status === "published" ? "published" :
+      existing.status === "failed" ? "failed" : "submitted";
+    return res.status(202).json({ accepted: true, duplicate: true, status: state,
+      ...(existing.message_id ? { message_id: existing.message_id } : {}) });
+  }
+  try {
+    insertJob.run(job.idempotencyKey, job.queueId, job.destinationId, JSON.stringify(job));
+  } catch {
+    const duplicate = getJob.get(job.idempotencyKey);
+    if (duplicate) return res.status(202).json({ accepted: true, duplicate: true, status: "submitted" });
+    return res.status(500).json({ error: "job_persistence_failed" });
+  }
+  res.status(202).json({ accepted: true, status: "submitted" });
+  void processJob(job);
 });
 
 app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 app.listen(PORT, "0.0.0.0", () => {
   logger.info({ event: "http_listening", port: PORT });
   void startSocket();
+  void recoverQueuedJobs();
 });
 
 process.on("SIGTERM", () => {
