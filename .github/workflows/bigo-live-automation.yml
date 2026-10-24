@@ -2,6 +2,12 @@ name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
 # Production capture workflow — Dropbox is canonical media storage; ChatB2K ingests verified Dropbox URLs for enrichment, Buffer, and Drive archive.
 
 on:
+  # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bigo-live-automation.yml'
+      - 'scripts/bigo-capture-host.sh'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -26,6 +32,7 @@ env:
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
   DRIVE_UPLOAD_URL: https://chatb2k.resofit.fit/api/google/drive-mcp/bigo-upload-session
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
+  CAPTURE_STORAGE_ONLY: ${{ github.event_name == 'push' }}
 
 jobs:
   capture-transform-publish:
@@ -193,5 +200,5 @@ jobs:
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           VERIFIED_PATTERN="$(printf "%s" "${BIGO_VERIFIED_HOST_IDS:-}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: .highlights, verified_host_ids:$verified, limit: .limit, storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-pipeline-batch.json
+          jq --argjson verified "$VERIFIED_PATTERN" --arg storage_only "${CAPTURE_STORAGE_ONLY:-false}" '{highlights: .highlights, verified_host_ids:$verified, limit: .limit, storage_only: ($storage_only == "true")}' /tmp/bigo-batch.json > /tmp/bigo-pipeline-batch.json
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-pipeline-batch.json
