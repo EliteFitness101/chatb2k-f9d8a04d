@@ -57,10 +57,10 @@ jobs:
             echo "::notice::BIGO authenticated-session secret is present; value is not logged."
           fi
           if [ -z "${R2_WRITE_TOKEN:-}" ]; then
-            echo "::warning::R2_WRITE_TOKEN is not configured in GitHub Actions; verified Dropbox storage fallback remains active."
-          else
-            echo "::notice::R2 writer secret is present; value is not logged."
+            echo "::error::R2_WRITE_TOKEN is required. Refusing to run BIGO capture without mandatory R2 delivery."
+            exit 1
           fi
+          echo "::notice::R2 writer secret is present; value is not logged."
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
@@ -109,7 +109,7 @@ jobs:
           open("/tmp/bigo-hosts.txt","w").writelines(hosts)
           print(f"Selected {len(hosts)} of {len(open('/tmp/bigo-hosts-all.txt').readlines())} registered host(s) for this cycle")
           PY
-          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
+          cp scripts/bigo-capture-host.sh /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
           run_capture() {
             local HOST_ID="$1"
