@@ -31,12 +31,13 @@ const redact = (value: any): any => {
   return out;
 };
 
-type Actor = { id: string; email: string; roles: string[]; isCEO: boolean; isFallback: boolean; isAdmin: boolean };
+type Actor = { id: string | null; email: string; roles: string[]; isCEO: boolean; isFallback: boolean; isAdmin: boolean; isInternal?: boolean };
 
 async function authenticate(req: Request): Promise<{ actor?: Actor; response?: Response }> {
   const auth = req.headers.get("authorization") || "";
   const token = auth.match(/^Bearer\s+(.+)$/i)?.[1] || "";
   if (!token || !SERVICE_KEY) return { response: json({ ok: false, error: "AUTH_REQUIRED" }, 401) };
+  if (token === SERVICE_KEY) return { actor: { id: null, email: "internal:service_role", roles: ["service_role"], isCEO: false, isFallback: false, isAdmin: true, isInternal: true } };
   const { data, error } = await db.auth.getUser(token);
   if (error || !data.user) return { response: json({ ok: false, error: "INVALID_SESSION" }, 401) };
   const email = String(data.user.email || "").toLowerCase();
