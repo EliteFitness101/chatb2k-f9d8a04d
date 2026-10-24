@@ -108,6 +108,29 @@ async function secretInventory(actor: Actor) {
   await audit(actor, "secret_reference_inventory", FUNCTION_NAME, { references_checked:references.length, values_returned:false });
   return { checked_at:isoNow(), values_exposed:false, cross_project_drift_detection:"not_proven_without provider-side secret metadata access", references };
 }
+async function probe(label:string,url:string,method:"GET"|"HEAD"="HEAD") {
+  const started=Date.now();
+  try {
+    const r=await fetch(url,{method,redirect:"follow",signal:AbortSignal.timeout(9000),headers:method==="GET"?{"Accept":"application/json"}:{}});
+    let details:any=null;
+    if(method==="GET"){const payload=await r.json().catch(()=>null);if(payload&&typeof payload==="object")details={service:payload.service??null,status:payload.status??null,ok:payload.ok??null,missing_secrets:Array.isArray(payload.missing_secrets)?payload.missing_secrets:undefined,channels:Array.isArray(payload.channels)?payload.channels:undefined};}
+    return {label,url,method,http_status:r.status,reachable:true,ok:r.ok,latency_ms:Date.now()-started,details};
+  } catch(e) { return {label,url,method,reachable:false,ok:false,latency_ms:Date.now()-started,error:safeError(e)}; }
+}
+async function integrationHealth() {
+  const targets=[
+    ["canonical_site","https://www.resofit.fit"],
+    ["dashboard","https://dashboard.resofit.fit"],
+    ["chatb2k","https://chatb2k.resofit.fit"],
+    ["storefront","https://store.resofit.fit"],
+    ["media_cdn","https://media.resofit.fit"],
+  ] as const;
+  const [sites,mediaRouter]=await Promise.all([
+    Promise.all(targets.map(([label,url])=>probe(label,url,"HEAD"))),
+    probe("resofit_media_control_plane",routeUrl("resofit-media-control-plane"),"GET"),
+  ]);
+  return {checked_at:isoNow(),sites,media_router:mediaRouter,interpretation:"HTTP reachability is not proof of authenticated provider integration, object presence, or end-to-end publishing."};
+}
 async function mediaRouting() {
   const { data, error } = await db.from("chatb2k_provider_routes").select("route_id,provider,service_type,status,endpoint_class,fallback_provider,config,updated_at").or("service_type.ilike.%media%,service_type.ilike.%storage%,service_type.ilike.%cdn%,service_type.ilike.%transform%");
   if (error) throw error;
@@ -123,6 +146,7 @@ async function mediaRouting() {
       {provider:"ChatB2K media router",use:"route selection, QA, processing and archive orchestration",endpoint:routeUrl("resofit-media-control-plane"),requires:"live route test and object-level result"},
     ],
     selection_policy:"Choose by verified object availability, provider health, permissions, latency, transformation support and cost; never by provider label alone.",
+    live_router_probe: await probe("resofit_media_control_plane",routeUrl("resofit-media-control-plane"),"GET"),
     no_media_write_performed:true,
   };
 }
@@ -147,7 +171,12 @@ async function statusSnapshot(actor: Actor) {
   const byPlatform:Record<string,Record<string,number>>={}, byProvider:Record<string,Record<string,number>>={};
   for(const q of queues.data||[]){const p=String(q.platform||"unknown"),s=String(q.status||"unknown");byPlatform[p]||={};byPlatform[p][s]=(byPlatform[p][s]||0)+1;}
   for(const a of attempts.data||[]){const p=String(a.provider||"unknown"),s=String(a.status||"unknown");byProvider[p]||={};byProvider[p][s]=(byProvider[p][s]||0)+1;}
-  const result={...report,publishing:{lookback_hours:168,queue_by_platform:byPlatform,attempts_by_provider:byProvider,errors:[queues.error?.message,attempts.error?.message].filter(Boolean)}};
+  const [budget,usage] = await Promise.all([
+    db.from("chatb2k_gemini_budget").select("daily_request_limit,monthly_request_limit,daily_token_limit,monthly_token_limit,daily_cost_limit_usd,monthly_cost_limit_usd,enabled,updated_at").eq("id",true).maybeSingle(),
+    db.from("chatb2k_gemini_usage").select("status,created_at").gte("created_at",since).limit(10000),
+  ]);
+  const usageByStatus:Record<string,number>={};for(const u of usage.data||[]){const s=String(u.status||"unknown");usageByStatus[s]=(usageByStatus[s]||0)+1;}
+  const result={...report,publishing:{lookback_hours:168,queue_by_platform:byPlatform,attempts_by_provider:byProvider,errors:[queues.error?.message,attempts.error?.message].filter(Boolean)},ai_governor:{limits:budget.data||null,usage_by_status_7d:usageByStatus,errors:[budget.error?.message,usage.error?.message].filter(Boolean)}};
   const run=await persistRun("snapshot:"+Date.now(),"completed",result,{sources:report.inventory.registered_sources,routes:report.inventory.provider_routes});
   await audit(actor,"ecosystem_status_snapshot",FUNCTION_NAME,{run_id:run.id,source_count:report.inventory.registered_sources,route_count:report.inventory.provider_routes});
   return {...result,persisted_run:run};
@@ -189,6 +218,7 @@ Deno.serve(async (req:Request)=>{
       return json({ok:true,action,db_inventory:dbInventory,deployed_inventory:deployed,persisted_run:run});
     }
     if(action==="media_routes")return json({ok:true,action,...await mediaRouting()});
+    if(action==="integration_health")return json({ok:true,action,...await integrationHealth()});
     if(action==="secret_inventory")return json({ok:true,action,...await secretInventory(actor!)});
     if(action==="kill_switch"){
       if(req.method!=="POST")return json({ok:false,error:"POST_REQUIRED"},405);
@@ -204,6 +234,6 @@ Deno.serve(async (req:Request)=>{
       await audit(actor!,"ecosystem_sync_snapshot",FUNCTION_NAME,{run_id:run.id});
       return json({ok:true,action,persisted_run:run,snapshot:snap,execution_claim:"registry_state_persisted; external_sync_not_claimed"});
     }
-    return json({ok:false,error:"UNKNOWN_ACTION",supported_actions:["health","status","snapshot","inventory","media_routes","secret_inventory","kill_switch","propose_function","sync_state"]},400);
+    return json({ok:false,error:"UNKNOWN_ACTION",supported_actions:["health","status","snapshot","inventory","integration_health","media_routes","secret_inventory","kill_switch","propose_function","sync_state"]},400);
   }catch(e){return json({ok:false,error:"CONTROL_PLANE_ERROR",detail:safeError(e),endpoint:FUNCTION_NAME,checked_at:isoNow()},500);}
 });
