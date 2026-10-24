@@ -18,10 +18,11 @@ Authenticated control-plane surface for ecosystem inventory snapshots, publishin
 ## Actions
 Send JSON `POST` with `action`:
 - `health` — authenticated runtime health.
-- `status` / `snapshot` — registered-source/route/agent state and 7-day publishing telemetry; snapshot persisted in `chatb2k_automation_runs`.
+- `status` / `snapshot` — registered-source/route/agent state and 7-day publishing telemetry and Gemini budget/usage state; snapshot persisted in `chatb2k_automation_runs`.
 - `inventory` — database registry plus live Supabase Management API function inventory only when `SUPABASE_ACCESS_TOKEN` is configured in this server runtime.
 - `sync_state` — persist a registry snapshot and attribution/RSID preservation policy; does not claim that external connectors are synced.
-- `media_routes` — list configured media/storage/CDN routes and explain what needs object-level verification; does not upload or publish media.
+- `media_routes` — list configured media/storage/CDN routes and probe the existing media control plane; does not upload or publish media.
+- `integration_health` — bounded HEAD probes for canonical ResoFit, dashboard, ChatB2K, storefront and media CDN URLs plus a GET probe of the existing R2 control plane. Reachability is not end-to-end proof.
 - `secret_inventory` — reports variable names and presence in this function runtime only; never returns values. Cross-project/Vault drift is not proven by this check.
 - `kill_switch` — `{ "action": "kill_switch", "enabled": true|false, "reason": "..." }`. Global flag mutation is restricted to the two named accounts and is audited. Consumers must enforce the canonical flag; this action does not pause individual fan-outs.
 - `propose_function` — `{ "action": "propose_function", "slug": "...", "purpose": "...", "integrations": [] }`. Persists a scaffold proposal; code creation, CI, review, and deployment remain separate steps.
