@@ -102,7 +102,7 @@ jobs:
           import os, time
           all_hosts=[line.strip() for line in open("/tmp/bigo-hosts-all.txt") if line.strip()]
           # Keep kisexy in every scheduled capture cycle; retain rotation for the remaining pool.
-          priority_ids=[x.strip() for x in os.getenv("BIGO_PRIORITY_HOST_IDS","kisexy").replace(",", "\\n").splitlines() if x.strip()]
+          priority_ids=[x.strip() for x in os.getenv("BIGO_PRIORITY_HOST_IDS","kisexy").replace(",", "\n").splitlines() if x.strip()]
           for host_id in priority_ids:
               if not any(line.split("|",1)[0].strip()==host_id for line in all_hosts):
                   all_hosts.append(host_id+"|https://www.bigo.tv/"+host_id)
@@ -120,7 +120,7 @@ jobs:
           else:
               selected=remaining
           hosts=priority+selected
-          open("/tmp/bigo-hosts.txt","w").writelines(line+"\\n" for line in hosts)
+          open("/tmp/bigo-hosts.txt","w").writelines(line+"\n" for line in hosts)
           print(f"Selected {len(hosts)} of {len(all_hosts)} host(s) for this cycle; priority hosts: {', '.join(priority_ids)}")
           PY
           cp scripts/bigo-capture-host.sh /tmp/bigo-capture-host.sh
