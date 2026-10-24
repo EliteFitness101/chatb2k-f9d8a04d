@@ -224,10 +224,12 @@ Deno.serve(async (req:Request)=>{
     if(action==="integration_health")return json({ok:true,action,...await integrationHealth()});
     if(action==="secret_inventory")return json({ok:true,action,...await secretInventory(actor!)});
     if(action==="kill_switch"){
+      if(actor!.isInternal)return json({ok:false,error:"HUMAN_CEO_OR_FALLBACK_SESSION_REQUIRED"},403);
       if(req.method!=="POST")return json({ok:false,error:"POST_REQUIRED"},405);
       return await setKillSwitch(actor!,(body as any)?.enabled===true,String((body as any)?.reason||""));
     }
     if(action==="propose_function"){
+      if(actor!.isInternal)return json({ok:false,error:"HUMAN_ADMIN_SESSION_REQUIRED"},403);
       if(req.method!=="POST")return json({ok:false,error:"POST_REQUIRED"},405);
       return await proposeFunction(actor!,body as Record<string,unknown>);
     }
