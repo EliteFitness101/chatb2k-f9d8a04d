@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "config_role": "operational_host_inventory_and_capture_provenance",
+  "status": "persisted_in_repository",
+  "updated_at": "2026-10-24T19:00:00Z",
+  "source_of_truth": {
+    "active_host_inventory": "Supabase public.bigo_sources returned by the BIGO live pipeline source-registry endpoint",
+    "additional_capture_ids": [
+      "GitHub Actions secret BIGO_HOST_IDS",
+      "GitHub Actions secret BIGO_VERIFIED_HOST_IDS"
+    ],
+    "merge_policy": "Deduplicate the union of active registry host IDs, BIGO_HOST_IDS, and BIGO_VERIFIED_HOST_IDS; retain registry source URLs where present and use https://www.bigo.tv/{host_id} only as a URL fallback.",
+    "allowlist_semantics": "BIGO_VERIFIED_HOST_IDS is included in the capture inventory; it does not replace active source-registry checks or per-host rights evidence."
+  },
+  "capture_method_observed": {
+    "workflow": ".github/workflows/bigo-live-automation.yml",
+    "capture_script": "scripts/bigo-capture-host.sh",
+    "method": "Resolve room metadata using BIGO webjs token flow and attempt Streamlink capture; normalize/process media; upload to Dropbox and read back to verify content hash; R2/Drive are secondary providers.",
+    "session_cookie": {
+      "required": false,
+      "behavior_when_absent": "Warn only; proceed with the existing tokenized capture flow. Do not fail the whole workflow solely because BIGO_SESSION_COOKIE is absent.",
+      "persistence": false,
+      "storage_location_if_configured": "GitHub Actions encrypted secret only"
+    },
+    "credential_storage": "Keep Dropbox OAuth credentials and any optional BIGO session cookie in GitHub Actions encrypted secrets; never store their values in Dropbox manifests or this config."
+  },
+  "provenance_fields": [
+    "host_id",
+    "canonical_room_url",
+    "captured_at",
+    "workflow_run_id",
+    "source_asset_fingerprint",
+    "dropbox_path",
+    "dropbox_content_hash",
+    "rights_evidence_status",
+    "rights_evidence_source",
+    "authorization_checked_at",
+    "qa_status",
+    "publish_target"
+  ],
+  "capture_status_policy": {
+    "archive_verified": "Dropbox upload and read-back content hash match verified",
+    "captured_not_published": "Media archived but downstream publishing not confirmed",
+    "published_verified": "Downstream platform returns a publication identifier or URL and the post is read back/verified",
+    "failed_or_offline": "Record per-host outcome and continue processing other hosts"
+  },
+  "rights_policy": {
+    "global_clearance": false,
+    "blanket_rights_from_manifest_flags": false,
+    "require_per_host_commercial_republication_attestation_for_republication": true,
+    "require_active_source_and_capture_enabled_registry_record": true,
+    "allowlist_alone_proves_rights": false
+  }
+}
