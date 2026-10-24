@@ -108,10 +108,12 @@ async function secretInventory(actor: Actor) {
   await audit(actor, "secret_reference_inventory", FUNCTION_NAME, { references_checked:references.length, values_returned:false });
   return { checked_at:isoNow(), values_exposed:false, cross_project_drift_detection:"not_proven_without provider-side secret metadata access", references };
 }
-async function probe(label:string,url:string,method:"GET"|"HEAD"="HEAD") {
+async function probe(label:string,url:string,method:"GET"|"HEAD"="HEAD",internalAuth=false) {
   const started=Date.now();
   try {
-    const r=await fetch(url,{method,redirect:"follow",signal:AbortSignal.timeout(9000),headers:method==="GET"?{"Accept":"application/json"}:{}});
+    const headers:Record<string,string>=method==="GET"?{"Accept":"application/json"}:{};
+    if(internalAuth&&SERVICE_KEY){headers["Authorization"]="Bearer "+SERVICE_KEY;headers["apikey"]=SERVICE_KEY;}
+    const r=await fetch(url,{method,redirect:"follow",signal:AbortSignal.timeout(9000),headers});
     let details:any=null;
     if(method==="GET"){const payload=await r.json().catch(()=>null);if(payload&&typeof payload==="object")details={service:payload.service??null,status:payload.status??null,ok:payload.ok??null,missing_secrets:Array.isArray(payload.missing_secrets)?payload.missing_secrets:undefined,channels:Array.isArray(payload.channels)?payload.channels:undefined};}
     return {label,url,method,http_status:r.status,reachable:true,ok:r.ok,latency_ms:Date.now()-started,details};
@@ -127,7 +129,7 @@ async function integrationHealth() {
   ] as const;
   const [sites,mediaRouter]=await Promise.all([
     Promise.all(targets.map(([label,url])=>probe(label,url,"HEAD"))),
-    probe("resofit_media_control_plane",routeUrl("resofit-media-control-plane"),"GET"),
+    probe("resofit_media_control_plane",routeUrl("resofit-media-control-plane"),"GET",true),
   ]);
   return {checked_at:isoNow(),sites,media_router:mediaRouter,interpretation:"HTTP reachability is not proof of authenticated provider integration, object presence, or end-to-end publishing."};
 }
@@ -146,7 +148,7 @@ async function mediaRouting() {
       {provider:"ChatB2K media router",use:"route selection, QA, processing and archive orchestration",endpoint:routeUrl("resofit-media-control-plane"),requires:"live route test and object-level result"},
     ],
     selection_policy:"Choose by verified object availability, provider health, permissions, latency, transformation support and cost; never by provider label alone.",
-    live_router_probe: await probe("resofit_media_control_plane",routeUrl("resofit-media-control-plane"),"GET"),
+    live_router_probe: await probe("resofit_media_control_plane",routeUrl("resofit-media-control-plane"),"GET",true),
     no_media_write_performed:true,
   };
 }
