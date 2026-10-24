@@ -3,12 +3,32 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+// Only events that carry both an installation and a repository identity are
+// accepted here. Account-wide events (ping, installation, installation_repositories)
+// are intentionally excluded because this inbox schema requires repository_full_name.
 const ALLOWED_EVENT_TYPES = new Set([
+  "push",
   "pull_request",
   "pull_request_review",
+  "pull_request_review_comment",
+  "issues",
+  "issue_comment",
   "check_run",
   "check_suite",
   "status",
+  "commit_comment",
+  "create",
+  "delete",
+  "deployment",
+  "deployment_status",
+  "fork",
+  "label",
+  "milestone",
+  "release",
+  "repository_dispatch",
+  "workflow_run",
+  "workflow_job",
 ]);
 
 function unauthorized() {
@@ -35,7 +55,6 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
             .filter((item) => /^\d+$/.test(item)),
         );
 
-        // Fail closed if production secrets/configuration are missing.
         if (
           !secret ||
           !edgeUrl ||
@@ -116,7 +135,6 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
         });
 
         if (error?.code === "23505") {
-          // GitHub retries are safe: the delivery ID is the idempotency key.
           return Response.json(
             { accepted: true, duplicate: true, delivery_id: deliveryId },
             { status: 202 },
@@ -127,7 +145,6 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
             code: error.code,
             delivery_id: deliveryId,
           });
-          // 503 asks GitHub to retry; never acknowledge a delivery that was not persisted.
           return new Response("Temporary inbox failure", { status: 503 });
         }
 
