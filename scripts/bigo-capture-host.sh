@@ -580,10 +580,10 @@ PYDIR
 dropbox_ensure_host_dirs
 
 export FILE COVER
-R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
+R2_MEDIA_BASE="${R2_MEDIA_BASE:-}"
 r2_upload() {
   local SRC="$1" KEY="$2" MIME="$3" DEST TMP
-  [ -n "${R2_WRITE_TOKEN:-}" ] || { echo "::warning::R2 writer unavailable; retaining verified Dropbox archive." >&2; return 2; }
+  [ -n "${R2_WRITE_TOKEN:-}" ] && [ -n "${R2_MEDIA_BASE:-}" ] || { echo "::warning::No configured R2 route; retaining verified Dropbox archive." >&2; return 2; }
   DEST="${R2_MEDIA_BASE}/${KEY}"
   TMP="$(mktemp)"
   if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$DEST" \
