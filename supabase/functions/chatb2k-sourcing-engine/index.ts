@@ -61,7 +61,7 @@ async function processOne(req:any){
   
 const domain=new URL(sourceUrl).hostname.replace(/^www\./,"");
   const sourceType=provider==="registered_supplier"?"registered_supplier":(providers.find(x=>domain.includes(x))||"local_storefront");
-  const code=sourceType.toUpperCase().slice(0,40);
+  const code=("WEB_"+domain.toUpperCase().replace(/[^A-Z0-9]+/g,"_")).slice(0,40);
   const sup=await db.from("suppliers").upsert({name:domain,code,integration_type:"web_discovery",status:"active",base_url:new URL(sourceUrl).origin,resale_authorized:false,media_authorized:false,updated_at:new Date().toISOString()},{onConflict:"code"}).select().single();
   if(sup.error) throw sup.error;
   const supplier=sup.data;
@@ -77,7 +77,7 @@ const domain=new URL(sourceUrl).hostname.replace(/^www\./,"");
     const ins=await db.from("products").insert({handle,title:String(candidate.title||req.query).slice(0,180),body_html:String(candidate.description||"Externally sourced candidate pending verification.").slice(0,10000),vendor:"ResoFlex",product_type:"Externally Sourced",tags:["ChatB2K","externally-sourced",sourceType],published,variant_price:Math.max(0,Math.round(Number(candidate.price)||0)),variant_inventory_qty:0,image_src:candidate.image_url||null,sku:"SRC-"+req.id.slice(0,8).toUpperCase(),fulfillment_mode:"external_source"}).select("id").single();
     if(ins.error) throw ins.error; product=ins.data;
   }
-  await db.from("product_sources").insert({product_id:product.id,supplier_product_id:sp.id,source_type:sourceType,source_url:sourceUrl,source_product_id:sourceUrl,resale_authorized:supplier.resale_authorized,media_authorized:supplier.media_authorized,status:"pending"});
+  const existingLink=await db.from("product_sources").select("id").eq("product_id",product.id).eq("supplier_product_id",sp.id).maybeSingle();\n  if(!existingLink.data){const link=await db.from("product_sources").insert({product_id:product.id,supplier_product_id:sp.id,source_type:sourceType,source_url:sourceUrl,source_product_id:sourceUrl,resale_authorized:supplier.resale_authorized,media_authorized:supplier.media_authorized,status:"pending"});if(link.error)throw link.error;}
   await db.from("resofit_sourcing_requests").update({status:"candidate_found",selected_source:{...candidate,source_type:sourceType},selected_supplier_product_id:sp.id,generated_product_id:product.id,next_attempt_at:null,updated_at:new Date().toISOString()}).eq("id",req.id);
   await db.from("admin_audit_logs").insert({action:"external_product_candidate_found",resource:"resofit_sourcing_requests",metadata:{request_id:req.id,fulfillment_order_id:req.fulfillment_order_id,product_id:product.id,source_url:sourceUrl,source_type:sourceType,published}});
   if(req.customer_id) await db.from("chatb2k_automation_tasks").upsert({user_id:req.customer_id,task_type:"external_product_sourcing_update",channel:"dashboard",due_at:new Date().toISOString(),priority:80,status:"queued",dedupe_key:"sourcing-update:"+req.id,payload:{request_id:req.id,product_id:product.id,status:"candidate_found",source_type:sourceType}},{onConflict:"dedupe_key"});
