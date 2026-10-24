@@ -583,7 +583,7 @@ export FILE COVER
 R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
 r2_upload() {
   local SRC="$1" KEY="$2" MIME="$3" DEST TMP
-  [ -n "${R2_WRITE_TOKEN:-}" ] || { echo "R2_WRITE_TOKEN is not configured" >&2; return 2; }
+  [ -n "${R2_WRITE_TOKEN:-}" ] || { echo "::error::R2_WRITE_TOKEN is required; refusing to archive a publishable highlight without R2." >&2; return 2; }
   DEST="${R2_MEDIA_BASE}/${KEY}"
   TMP="$(mktemp)"
   if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$DEST" \
@@ -610,18 +610,15 @@ r2_upload() {
 # the actual object passes production PUT + GET + byte-for-byte verification.
 DROPBOX_PROCESSED_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
 BLOB_URL="$DROPBOX_PROCESSED_URL"
-R2_VIDEO_STATUS="not_configured"
-if [ -n "${R2_WRITE_TOKEN:-}" ]; then
-  if R2_VIDEO_URL="$(r2_upload "$FILE" "public/bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"; then
-    BLOB_URL="$R2_VIDEO_URL"
-    R2_VIDEO_STATUS="verified_object_readback"
-    echo "::notice::R2 video upload and byte-for-byte read-back verified for $HOST"
-  else
-    R2_VIDEO_STATUS="failed_fallback_dropbox"
-    echo "::warning::R2 video delivery failed verification; using verified Dropbox URL for this asset." >&2
-  fi
+R2_VIDEO_STATUS="required"
+[ -n "${R2_WRITE_TOKEN:-}" ] || { echo "::error::R2_WRITE_TOKEN is required; stopping before highlight metadata can be ingested." >&2; exit 1; }
+if R2_VIDEO_URL="$(r2_upload "$FILE" "public/bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"; then
+  BLOB_URL="$R2_VIDEO_URL"
+  R2_VIDEO_STATUS="verified_object_readback"
+  echo "::notice::R2 video upload and byte-for-byte read-back verified for $HOST"
 else
-  echo "::warning::R2_WRITE_TOKEN is not configured in GitHub Actions; this capture will use the verified Dropbox URL." >&2
+  echo "::error::R2 video upload/read-back failed for $HOST; refusing to publish or ingest a Dropbox-only highlight." >&2
+  exit 1
 fi
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
@@ -630,23 +627,21 @@ if [ -s "$GBP_FILE" ]; then
     rm -f "$GBP_FILE"
   else
     GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"
-    if [ -n "${R2_WRITE_TOKEN:-}" ]; then
-      if R2_GBP_URL="$(r2_upload "$GBP_FILE" "public/bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"; then
-        GBP_URL="$R2_GBP_URL"
-      else
-        echo "::warning::R2 Google Business derivative failed read-back; retaining verified Dropbox URL." >&2
-      fi
+    if R2_GBP_URL="$(r2_upload "$GBP_FILE" "public/bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"; then
+      GBP_URL="$R2_GBP_URL"
+    else
+      echo "::error::R2 Google Business derivative upload/read-back failed for $HOST." >&2
+      exit 1
     fi
   fi
 fi
 DROPBOX_COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
 COVER_URL="$DROPBOX_COVER_URL"
-if [ -n "${R2_WRITE_TOKEN:-}" ]; then
-  if R2_COVER_URL="$(r2_upload "$COVER" "public/bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"; then
-    COVER_URL="$R2_COVER_URL"
-  else
-    echo "::warning::R2 cover failed read-back; retaining verified Dropbox cover URL." >&2
-  fi
+if R2_COVER_URL="$(r2_upload "$COVER" "public/bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"; then
+  COVER_URL="$R2_COVER_URL"
+else
+  echo "::error::R2 cover upload/read-back failed for $HOST." >&2
+  exit 1
 fi
 
 DRIVE_RAW=""
