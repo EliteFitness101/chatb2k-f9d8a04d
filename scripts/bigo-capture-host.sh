@@ -251,7 +251,7 @@ PY
 fi
 # A supplied BIGO /sid/ page is only a playback-discovery fallback when its h= identity
 # exactly matches the requested host. Never treat the signed URL as canonical provenance.
-if [ "$CAPTURE_OK" -ne 1 ] && [ -z "$STREAM_URL" ] && [ -n "$SOURCE_OVERRIDE" ]; then
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ]; then
   SID_MATCH="$(python3 - "$SOURCE_OVERRIDE" "$HOST" <<'PYSID'
 import sys
 from urllib.parse import urlparse,parse_qs
