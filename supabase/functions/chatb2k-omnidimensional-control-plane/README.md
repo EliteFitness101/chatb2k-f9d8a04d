@@ -10,8 +10,9 @@ Authenticated control-plane surface for ecosystem inventory snapshots, publishin
 
 ## Authentication
 - Supabase user session JWT required in `Authorization: Bearer <session>`.
-- Caller must be CEO, fallback administrator, or a user with `admin` / `super_admin` role.
-- Global kill-switch mutation is restricted to `ceo@resofit.fit` and `resonancefitnesswork@gmail.com`.
+- Human callers must be CEO, fallback administrator, or a user with `admin` / `super_admin` role.
+- The internal ChatB2K tool gateway may call the endpoint with the server-side service-role credential for inventory and snapshot operations only; that internal identity cannot change the kill switch or propose function code.
+- Global kill-switch mutation is restricted to human sessions for `ceo@resofit.fit` and `resonancefitnesswork@gmail.com`.
 - Never send service-role keys, provider tokens, cookies, or secret values to a browser or in chat.
 - The function is deployed with platform JWT verification disabled because it validates the user session itself. Requests without a valid user session are rejected.
 
