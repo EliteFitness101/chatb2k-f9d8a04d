@@ -89,7 +89,7 @@ async function inventory() {
     global_control: control.data || { kill_switch_enabled: null, note: "Control-plane row not found." },
     routes: rt.map(safeRoute),
     agents: ag.map((a: any) => ({ agent_id:a.agent_id,agent_code:a.agent_code,name:a.name,domain:a.domain,status:a.status,enabled:a.enabled,health_status:a.health_status,kill_switch_enabled:a.kill_switch_enabled,updated_at:a.updated_at })),
-    sources: src.map((s: any) => ({ theme:s.theme,canonical_url:s.canonical_url,runtime_ok:s.runtime_ok,runtime_status:s.runtime_status,verified_at:s.verified_at,verification_method:s.verification_method,updated_at:s.updated_at,metadata:redact(s.metadata) })),
+    sources: src.map((s: any) => ({ theme:s.theme,canonical_url:s.canonical_url,runtime_ok:s.runtime_ok,runtime_status:s.runtime_status,verified_at:s.verified_at,verification_method:s.verification_method,updated_at:s.updated_at,metadata_keys:Object.keys(s.metadata||{}) })),
     errors,
   };
 }
