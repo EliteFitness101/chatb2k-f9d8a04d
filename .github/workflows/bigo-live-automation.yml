@@ -57,10 +57,10 @@ jobs:
             echo "::notice::BIGO authenticated-session secret is present; value is not logged."
           fi
           if [ -z "${R2_WRITE_TOKEN:-}" ]; then
-            echo "::error::R2_WRITE_TOKEN is required. Refusing to run BIGO capture without mandatory R2 delivery."
-            exit 1
+            echo "::notice::R2 writer secret is absent; capture and verified archive will continue using available providers."
+          else
+            echo "::notice::R2 writer secret is present; value is not logged."
           fi
-          echo "::notice::R2 writer secret is present; value is not logged."
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
