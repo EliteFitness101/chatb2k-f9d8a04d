@@ -64,6 +64,11 @@ jobs:
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
             REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
+          elif [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ] && curl -fsS -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
+            # The Edge Function explicitly permits this legacy key for source-registry GETs.
+            # Keep the key out of logs and never use it for publishing ingestion.
+            REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
+            echo "::notice::Supabase BIGO source registry read succeeded via configured legacy read credential."
           else
             REGISTRY_HOSTS=""
             printf '{"provenance_policy_version":0,"hosts":[]}' > /tmp/bigo-sources.json
