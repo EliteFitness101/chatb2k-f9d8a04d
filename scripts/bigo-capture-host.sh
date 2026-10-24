@@ -249,6 +249,41 @@ PY
   fi
   rm -f "$PAGE"
 fi
+# A supplied BIGO /sid/ page is only a playback-discovery fallback when its h= identity
+# exactly matches the requested host. Never treat the signed URL as canonical provenance.
+if [ "$CAPTURE_OK" -ne 1 ] && [ -z "$STREAM_URL" ] && [ -n "$SOURCE_OVERRIDE" ]; then
+  SID_MATCH="$(python3 - "$SOURCE_OVERRIDE" "$HOST" <<'PYSID'
+import sys
+from urllib.parse import urlparse,parse_qs
+try:
+ u=urlparse(sys.argv[1]); q=parse_qs(u.query)
+ ok=(u.scheme=="https" and u.hostname=="www.bigo.tv" and u.path.startswith("/sid/") and q.get("h",[""])[0].strip().lower()==sys.argv[2].strip().lower())
+ print("yes" if ok else "no")
+except Exception:
+ print("no")
+PYSID
+)"
+  if [ "$SID_MATCH" = "yes" ]; then
+    SID_PAGE="/tmp/bigo-${HOST}-sid-page.html"
+    if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
+      DISCOVERED_HLS="$(python3 - "$SID_PAGE" <<'PYSIDHLS'
+import re,sys
+try: s=open(sys.argv[1],errors="replace").read()
+except Exception: s=""
+ s=s.replace("\\\\/","/").replace("\\u0026","&")
+urls=re.findall(r"""https?://[^\\"'<>\s]+m3u8[^\\"'<>\s]*""",s,re.I)
+urls=[u for u in urls if u.startswith("https://")]
+print(urls[0] if urls else "")
+PYSIDHLS
+)"
+      if [ -n "$DISCOVERED_HLS" ]; then
+        STREAM_URL="$DISCOVERED_HLS"
+        echo "::notice::BIGO host $HOST discovered HLS from identity-matched sid page"
+      fi
+    fi
+    rm -f "$SID_PAGE"
+  fi
+fi
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   echo "::notice::BIGO host $HOST trying direct HLS fallback (FFmpeg opens manifest URL directly)"
   # HLS manifests reference separate media segments. Do not pipe the downloaded .m3u8
