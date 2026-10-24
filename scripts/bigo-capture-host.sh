@@ -235,7 +235,7 @@ try:
 except Exception:
     s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
-urls=re.findall(r"https?://[^\"'<>\s]+m3u8[^\"'<>\s]*",s,re.I)
+urls=re.findall(r"""https?://[^\s"'<>]+m3u8[^\s"'<>]*""",s,re.I)
 urls=[u for u in urls if u.startswith("https://")]
 print(urls[0] if urls else "")
 PY
