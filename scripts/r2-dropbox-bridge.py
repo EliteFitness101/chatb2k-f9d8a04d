@@ -214,10 +214,14 @@ def upload_and_verify(token: str, entry: dict, temp_dir: Path) -> None:
     )
 
 
-def save_cursor(cursor: str) -> None:
+def save_cursor(cursor: str, bootstrap_cutoff: datetime | None) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    state = {
+        "cursor": cursor,
+        "bootstrap_cutoff": bootstrap_cutoff.isoformat() if bootstrap_cutoff else None,
+    }
     tmp = CURSOR_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"cursor": cursor}), encoding="utf-8")
+    tmp.write_text(json.dumps(state), encoding="utf-8")
     tmp.replace(CURSOR_PATH)
 
 
@@ -247,9 +251,13 @@ def process_page(token: str, entries: list[dict], bootstrap_cutoff: datetime | N
 def poll_once(token: str) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     bootstrap = not CURSOR_PATH.exists()
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS) if bootstrap else None
     if bootstrap:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
         log.info("initial scan limited to eligible media modified in the last %s hour(s)", LOOKBACK_HOURS)
+    else:
+        state = json.loads(CURSOR_PATH.read_text(encoding="utf-8"))
+        raw_cutoff = state.get("bootstrap_cutoff")
+        cutoff = datetime.fromisoformat(raw_cutoff) if raw_cutoff else None
         page = db_api(token, "files/list_folder", {
             "path": DROPBOX_ROOT,
             "recursive": True,
@@ -265,7 +273,8 @@ def poll_once(token: str) -> None:
         # If an upload or read-back fails, do not save this page's cursor.
         # The next poll retries the page; already-uploaded objects are safe to overwrite.
         process_page(token, page.get("entries", []), cutoff)
-        save_cursor(page["cursor"])
+        next_cutoff = cutoff if page.get("has_more") else None
+        save_cursor(page["cursor"], next_cutoff)
         if not page.get("has_more"):
             break
         page = db_api(token, "files/list_folder/continue", {"cursor": page["cursor"]})
