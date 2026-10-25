@@ -171,8 +171,6 @@ FFMPEG_DURATION_ARGS=()
 if [ -n "${BIGO_CAPTURE_DURATION_SECONDS:-}" ]; then
   FFMPEG_DURATION_ARGS=(-t "${BIGO_CAPTURE_DURATION_SECONDS}")
 fi
-# BIGO began requiring authenticated sessions for some rooms. Read a private session cookie
-# from GitHub Actions secrets; never log it or store it in capture metadata.
 STREAMLINK_COOKIE_ARGS=()
 CURL_COOKIE_ARGS=()
 FFMPEG_COOKIE_ARGS=()
