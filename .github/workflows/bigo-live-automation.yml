@@ -40,7 +40,7 @@ env:
 jobs:
   capture-transform-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -60,11 +60,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${BIGO_SESSION_COOKIE:-}" ]; then
-            echo "::warning::BIGO_SESSION_COOKIE is not configured; BIGO rooms requiring login may fail capture."
-          else
-            echo "::notice::BIGO authenticated-session secret is present; value is not logged."
-          fi
           if [ -z "${R2_WRITE_TOKEN:-}" ]; then
             echo "::notice::R2 writer secret is absent; capture and verified archive will continue using available providers."
           else
@@ -111,31 +106,18 @@ jobs:
             exit 1
           fi
           printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts-all.txt
-          # Rotate through a bounded subset each five-minute cycle to avoid overrunning the runner.
+          # Every eligible configured/registered host is included. No implicit priority or per-cycle cap.
           python3 - <<'PY'
-          import os, time
           all_hosts=[line.strip() for line in open("/tmp/bigo-hosts-all.txt") if line.strip()]
-          # Keep kisexy in every scheduled capture cycle; retain rotation for the remaining pool.
-          priority_ids=[x.strip() for x in os.getenv("BIGO_PRIORITY_HOST_IDS","kisexy").replace(",", "\n").splitlines() if x.strip()]
-          for host_id in priority_ids:
-              if not any(line.split("|",1)[0].strip()==host_id for line in all_hosts):
-                  all_hosts.append(host_id+"|https://www.bigo.tv/"+host_id)
-          priority=[line for host_id in priority_ids for line in all_hosts if line.split("|",1)[0].strip()==host_id]
-          priority_ids_present={line.split("|",1)[0].strip() for line in priority}
-          remaining=[line for line in all_hosts if line.split("|",1)[0].strip() not in priority_ids_present]
-          limit=max(1,min(int(os.getenv("BIGO_HOSTS_PER_CYCLE","32")),32))
-          if len(priority)>limit:
-              priority=priority[:limit]
-          slots=limit-len(priority)
-          if len(remaining)>slots:
-              start=((int(time.time())//300)*max(1,slots))%len(remaining)
-              rotated=remaining+remaining
-              selected=rotated[start:start+slots]
-          else:
-              selected=remaining
-          hosts=priority+selected
+          hosts=[]
+          seen=set()
+          for line in all_hosts:
+              host_id=line.split("|",1)[0].strip()
+              if host_id and host_id not in seen:
+                  seen.add(host_id)
+                  hosts.append(line)
           open("/tmp/bigo-hosts.txt","w").writelines(line+"\n" for line in hosts)
-          print(f"Selected {len(hosts)} of {len(all_hosts)} host(s) for this cycle; priority hosts: {', '.join(priority_ids)}")
+          print(f"Selected all {len(hosts)} eligible host(s) from the complete pool.")
           PY
           cp scripts/bigo-capture-host.sh /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
@@ -158,7 +140,7 @@ jobs:
             [ -z "${HOST_ID}" ] && continue
             run_capture "${HOST_ID}" "${SOURCE_URL}" &
             ACTIVE=$((ACTIVE + 1))
-            if [ "${ACTIVE}" -ge 8 ]; then
+            if [ "${ACTIVE}" -ge 16 ]; then
               wait -n || true
               ACTIVE=$((ACTIVE - 1))
             fi
