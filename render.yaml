@@ -3,6 +3,7 @@
 services:
   - type: worker
     name: resofit-bigo-r2-bridge
+    repo: https://github.com/EliteFitness101/chatb2k-f9d8a04d
     runtime: python
     plan: starter
     region: frankfurt
