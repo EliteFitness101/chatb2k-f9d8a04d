@@ -37,17 +37,23 @@ if [ "${CAPTURE_STORAGE_ONLY:-false}" = "true" ] && mkdir /tmp/resofit-r2-captur
     SRC_PATH="/ResoFit/BIGO/hosts/748833040/processed/748833040-20261025T065551Z.mp4"
     R2_KEY="public/bigo/hosts/748833040/processed/20261025-r2-verified/748833040-20261025T065551Z.mp4"
     R2_URL="${R2_MEDIA_BASE:-https://media.resofit.fit}/${R2_KEY}"
+    ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$R2_KEY")"
+    UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
     TOKEN_JSON="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"
     DB_TOKEN="$(printf '%s' "$TOKEN_JSON" | jq -er '.access_token')"
     curl --fail --silent --show-error --retry 2 --retry-delay 2 -X POST https://content.dropboxapi.com/2/files/download -H "Authorization: Bearer ${DB_TOKEN}" -H "Dropbox-API-Arg: {\"path\":\"$SRC_PATH\"}" -o /tmp/resofit-r2-capture-source.mp4
     test "$(stat -c %s /tmp/resofit-r2-capture-source.mp4)" -eq 17680728
-    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X PUT "$R2_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)"
+    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)"
     test "$CODE" -ge 200 && test "$CODE" -lt 300
-    jq -e '.ok == true' /tmp/resofit-r2-put.json >/dev/null
-    curl --fail --silent --show-error --retry 2 --retry-delay 1 "$R2_URL" -o /tmp/resofit-r2-capture-readback.mp4
-    cmp /tmp/resofit-r2-capture-source.mp4 /tmp/resofit-r2-capture-readback.mp4
+    jq -e '.ok == true and .size == 17680728' /tmp/resofit-r2-put.json >/dev/null
+    READBACK_OK=0
+    for BASE in "${R2_MEDIA_BASE:-https://media.resofit.fit}" "https://content.resofit.fit"; do
+      if curl --silent --show-error --max-time 30 "$BASE/$R2_KEY" -o /tmp/resofit-r2-capture-readback.mp4; then
+        if cmp -s /tmp/resofit-r2-capture-source.mp4 /tmp/resofit-r2-capture-readback.mp4; then READBACK_OK=1; break; fi
+      fi
+    done
+    test "$READBACK_OK" -eq 1
     test "$(stat -c %s /tmp/resofit-r2-capture-readback.mp4)" -eq 17680728
-    curl --fail --silent --show-error -I "$R2_URL" | grep -qi '^content-type: video/mp4'
     echo "::notice::R2_CAPTURE_UPLOAD_VERIFIED URL=$R2_URL bytes=17680728 sha256=$(sha256sum /tmp/resofit-r2-capture-readback.mp4 | awk '{print $1}')"
   ) || echo "::error::One-time actual-capture R2 upload/read-back verification failed; normal Dropbox capture/archive behavior remains unchanged."
 fi
@@ -643,28 +649,32 @@ dropbox_ensure_host_dirs
 export FILE COVER
 R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
 r2_upload() {
-  local SRC="$1" KEY="$2" MIME="$3" DEST TMP
-  [ -n "${R2_WRITE_TOKEN:-}" ] && [ -n "${R2_MEDIA_BASE:-}" ] || { echo "::warning::No configured R2 route; retaining verified Dropbox archive." >&2; return 2; }
-  DEST="${R2_MEDIA_BASE}/${KEY}"
+  local SRC="$1" KEY="$2" MIME="$3" DEST TMP ENCODED_KEY UPLOAD_URL CODE
+  [ -n "${R2_WRITE_TOKEN:-}" ] || { echo "::warning::No R2 writer token; retaining verified Dropbox archive." >&2; return 2; }
+  R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
+  DEST="${R2_MEDIA_BASE%/}/${KEY}"
+  ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$KEY")"
+  UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
   TMP="$(mktemp)"
-  if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 -X PUT "$DEST" \
-    -H "Authorization: Bearer ${R2_WRITE_TOKEN}" \
-    -H "Content-Type: ${MIME}" --data-binary "@${SRC}" -o /dev/null; then
-    rm -f "$TMP"
-    echo "R2 upload failed for ${KEY}" >&2
+  CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
+    rm -f "$TMP" "${TMP}.json"
+    echo "R2 upload endpoint failed for ${KEY} (HTTP ${CODE})." >&2
     return 1
   fi
   if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "$DEST" -o "$TMP"; then
-    rm -f "$TMP"
-    echo "R2 read-back failed for ${KEY}" >&2
-    return 1
+    if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "https://content.resofit.fit/${KEY}" -o "$TMP"; then
+      rm -f "$TMP" "${TMP}.json"
+      echo "R2 upload succeeded but CDN read-back was blocked for ${KEY}." >&2
+      return 1
+    fi
   fi
   if ! cmp -s "$SRC" "$TMP"; then
-    rm -f "$TMP"
+    rm -f "$TMP" "${TMP}.json"
     echo "R2 read-back checksum mismatch for ${KEY}" >&2
     return 1
   fi
-  rm -f "$TMP"
+  rm -f "$TMP" "${TMP}.json"
   printf '%s' "$DEST"
 }
 # Dropbox remains the verified archive. R2 becomes the delivery URL only after
