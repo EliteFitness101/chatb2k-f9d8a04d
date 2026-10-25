@@ -254,10 +254,6 @@ def poll_once(token: str) -> None:
     if bootstrap:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
         log.info("initial scan limited to eligible media modified in the last %s hour(s)", LOOKBACK_HOURS)
-    else:
-        state = json.loads(CURSOR_PATH.read_text(encoding="utf-8"))
-        raw_cutoff = state.get("bootstrap_cutoff")
-        cutoff = datetime.fromisoformat(raw_cutoff) if raw_cutoff else None
         page = db_api(token, "files/list_folder", {
             "path": DROPBOX_ROOT,
             "recursive": True,
@@ -266,8 +262,10 @@ def poll_once(token: str) -> None:
             "include_non_downloadable_files": False,
         })
     else:
-        cursor_data = json.loads(CURSOR_PATH.read_text(encoding="utf-8"))
-        page = db_api(token, "files/list_folder/continue", {"cursor": cursor_data["cursor"]})
+        state = json.loads(CURSOR_PATH.read_text(encoding="utf-8"))
+        raw_cutoff = state.get("bootstrap_cutoff")
+        cutoff = datetime.fromisoformat(raw_cutoff) if raw_cutoff else None
+        page = db_api(token, "files/list_folder/continue", {"cursor": state["cursor"]})
 
     while True:
         # If an upload or read-back fails, do not save this page's cursor.
