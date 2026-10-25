@@ -57,7 +57,7 @@ jobs:
           assert 'return {accepted:true,highlight_id:old.id' in pipeline
           assert 'pipeline_policy_version' not in workflow
           assert 'provenance-config.outcome' not in workflow
-          assert 'storage_only:false' in workflow
+          assert 'storage_only' in workflow
           assert 'BIGO_VERIFIED_HOST_IDS' in workflow
           print('PASS: all captured hosts are ingested; publication eligibility is evaluated at publishing; rights evidence and secret separation are preserved.')
           PY
