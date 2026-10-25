@@ -25,6 +25,32 @@ print(value)
 PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
+
+# One-time production proof: rehost a real archived capture during a push-triggered
+# storage-only run, then download it from the public R2 route and compare exact bytes.
+# The lock ensures concurrent per-host workers perform this probe only once per runner.
+if [ "${CAPTURE_STORAGE_ONLY:-false}" = "true" ] && mkdir /tmp/resofit-r2-capture-proof.lock 2>/dev/null; then
+  (
+    set -euo pipefail
+    test -n "${DROPBOX_APP_KEY:-}" && test -n "${DROPBOX_APP_SECRET:-}" && test -n "${DROPBOX_REFRESH_TOKEN:-}"
+    test -n "${R2_WRITE_TOKEN:-}"
+    SRC_PATH="/ResoFit/BIGO/hosts/748833040/processed/748833040-20261025T065551Z.mp4"
+    R2_KEY="public/bigo/hosts/748833040/processed/20261025-r2-verified/748833040-20261025T065551Z.mp4"
+    R2_URL="${R2_MEDIA_BASE:-https://media.resofit.fit}/${R2_KEY}"
+    TOKEN_JSON="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"
+    DB_TOKEN="$(printf '%s' "$TOKEN_JSON" | jq -er '.access_token')"
+    curl --fail --silent --show-error --retry 2 --retry-delay 2 -X POST https://content.dropboxapi.com/2/files/download -H "Authorization: Bearer ${DB_TOKEN}" -H "Dropbox-API-Arg: {\"path\":\"$SRC_PATH\"}" -o /tmp/resofit-r2-capture-source.mp4
+    test "$(stat -c %s /tmp/resofit-r2-capture-source.mp4)" -eq 17680728
+    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X PUT "$R2_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)"
+    test "$CODE" -ge 200 && test "$CODE" -lt 300
+    jq -e '.ok == true' /tmp/resofit-r2-put.json >/dev/null
+    curl --fail --silent --show-error --retry 2 --retry-delay 1 "$R2_URL" -o /tmp/resofit-r2-capture-readback.mp4
+    cmp /tmp/resofit-r2-capture-source.mp4 /tmp/resofit-r2-capture-readback.mp4
+    test "$(stat -c %s /tmp/resofit-r2-capture-readback.mp4)" -eq 17680728
+    curl --fail --silent --show-error -I "$R2_URL" | grep -qi '^content-type: video/mp4'
+    echo "::notice::R2_CAPTURE_UPLOAD_VERIFIED URL=$R2_URL bytes=17680728 sha256=$(sha256sum /tmp/resofit-r2-capture-readback.mp4 | awk '{print $1}')"
+  ) || echo "::error::One-time actual-capture R2 upload/read-back verification failed; normal Dropbox capture/archive behavior remains unchanged."
+fi
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
