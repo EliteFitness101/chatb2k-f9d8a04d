@@ -573,11 +573,7 @@ else:
 PYDROP
 }
 
-if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
-  dropbox_ensure_host_dirs
-else
-  echo "::notice::Dropbox directory preparation skipped; R2 primary path remains available."
-fi() {
+dropbox_ensure_host_dirs() {
   python3 - "${HOST_ROOT}" <<'PYDIR'
 import json, os, urllib.error, urllib.request, sys, time
 token=os.environ.get("DROPBOX_ACCESS_TOKEN","")
@@ -610,7 +606,11 @@ for path in [root,root+"/raw-captures",root+"/processed",root+"/processed/google
     print("Ensured Dropbox folder: "+path)
 PYDIR
 }
-dropbox_ensure_host_dirs
+if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  dropbox_ensure_host_dirs
+else
+  echo "::notice::Dropbox directory preparation skipped; R2 primary path remains available."
+fi
 
 export FILE COVER
 R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
