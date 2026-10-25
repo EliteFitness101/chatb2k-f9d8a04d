@@ -29,13 +29,15 @@ Use the status taxonomy in `AGENTS.md`. Do not insert simulated success telemetr
 
 ## Media ingest contract
 
-- Target endpoint contract in open PR #87: `POST https://upload.resofit.fit/api/ingest-media?key=<object-key>`. It is not production-verified until the Worker route deploy succeeds.
+- Target endpoint contract in open PR #94: `POST https://upload.resofit.fit/api/ingest-media?key=<object-key>`. It is not production-verified until the Cloudflare Worker route deploy succeeds.
+- The Worker handles this hostname directly and writes through its existing `MEDIA_BUCKET → resofit-cdn` binding; it does not proxy through Vercel or depend on `process.env` for the R2 binding.
 - Request body: raw binary media, not JSON containing an arbitrary remote URL.
-- Intended authentication: Supabase bearer token for an administrator; server-side `R2_WRITE_TOKEN` authorizes the upstream R2 write.
+- Authentication: `Authorization: Bearer <R2_WRITE_TOKEN>`, validated against the Cloudflare Worker secret. Never expose this token in browser code or logs.
 - Object key namespace: `public/<path>` or `chatb2k/<path>`.
-- Intended route enforces media type and size limits, and returns `ok`, key, size, and the canonical public media URL only after a successful R2 write.
+- The Worker enforces media type and size limits, and returns `ok`, key, size, and the canonical public media URL only after a successful R2 write.
+- `GET https://upload.resofit.fit/` returns a non-secret health response with binding/secret-presence flags. It is not a substitute for upload/readback verification.
 - Delivery must be verified separately with a GET to the returned public URL. A successful POST alone is not enough.
-- The endpoint code accepts uploaded bytes and intentionally does not fetch arbitrary `mediaUrl` values. Capture agents should stream/download the selected source and POST the bytes, avoiding an unrestricted server-side URL fetch/SSRF path.
+- The endpoint accepts uploaded bytes and intentionally does not fetch arbitrary `mediaUrl` values. Capture agents should stream/download the selected source and POST the bytes, avoiding an unrestricted server-side URL fetch/SSRF path.
 
 ## Publisher router contract
 
@@ -72,7 +74,7 @@ Use accessible pill CTAs and responsive luxury cards; honor reduced-motion prefe
 - `buffer_channels` currently has 11 active registry channels under one organization (`6a7cfd9705e59fe6e2a3bf71`) and two inactive channels under a second organization (`6ab8562cbe1175318febe0f6`). The Buffer connector itself returned a rate-limit response, so the provider-side live state of these channels was not freshly verified.
 - The asset registry has 62 BIGO video assets with verified rights, approved QA, authorized commercial use, and approved origin review; other BIGO video rows remain in `unknown`, `unverified`, or `hold` states and must not bypass rights/QA gates.
 - Commerce registry audit: 58 Jumia offers have `availability=unknown`; 10 ResoFit digital offers are marked `in_stock`; 38 canonical Paystack purchase routes are active. No canonical routes for Selar, Konga, Jiji, or crypto were found in the queried route registry. Do not present those endpoints as integrated until real URLs, provider IDs, and a live transaction/test verify them.
-- The current UI/upload PR is `EliteFitness101/shopb2k#87`, branch `ops/upload-host-and-ecosystem-contract`. A Vercel preview for an earlier branch commit reached READY; later commits were queued at the latest check. The preview is not production. Main build-gate run `40165825412` passed, and ecosystem audit workflow run `40165825409` passed; neither verifies the pending Cloudflare route or R2/BIGO readback.
+- The current UI/upload PR is `EliteFitness101/shopb2k#94`, branch `ops/upload-host-and-ecosystem-contract`. A Vercel preview for an earlier branch commit reached READY; later commits were queued at the latest check. The preview is not production. Main build-gate run `40165825412` passed, and ecosystem audit workflow run `40165825409` passed; neither verifies the pending Cloudflare route or R2/BIGO readback.
 - These are active blockers, not fixed items. Re-run each check after patch/deploy and update this ledger with new evidence.
 
 ## Required verification after merge
