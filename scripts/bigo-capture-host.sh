@@ -615,7 +615,7 @@ PYDIR
 dropbox_ensure_host_dirs
 
 export FILE COVER
-R2_MEDIA_BASE="${R2_MEDIA_BASE:-}"
+R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
 r2_upload() {
   local SRC="$1" KEY="$2" MIME="$3" DEST TMP
   [ -n "${R2_WRITE_TOKEN:-}" ] && [ -n "${R2_MEDIA_BASE:-}" ] || { echo "::warning::No configured R2 route; retaining verified Dropbox archive." >&2; return 2; }
