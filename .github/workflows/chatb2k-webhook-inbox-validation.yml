@@ -1,0 +1,90 @@
+name: ChatB2K webhook inbox validation
+
+on:
+  pull_request:
+    paths:
+      - 'src/routes/api/public/webhooks/github.ts'
+      - 'ops/resoflex-edge/migrations/**'
+      - 'docs/ops/chatb2k101-orchestration-trust-boundary.md'
+      - 'docs/ops/github-app-setup.md'
+      - '.github/workflows/chatb2k-webhook-inbox-validation.yml'
+  push:
+    branches:
+      - feat/chatb2k101-durable-webhook-inbox-20261014
+    paths:
+      - 'src/routes/api/public/webhooks/github.ts'
+      - 'ops/resoflex-edge/migrations/**'
+      - 'docs/ops/chatb2k101-orchestration-trust-boundary.md'
+      - 'docs/ops/github-app-setup.md'
+      - '.github/workflows/chatb2k-webhook-inbox-validation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatb2k-webhook-inbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies for validation
+        run: npm install --legacy-peer-deps
+      - name: Lint changed webhook route (blocking)
+        run: npx eslint src/routes/api/public/webhooks/github.ts
+      - name: Audit repository-wide lint debt (non-blocking)
+        continue-on-error: true
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Report package-lock drift separately
+        if: always()
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            echo '::warning::package-lock.json differs from the dependency graph; reconcile and commit the lockfile before production release.'
+          fi
+      - name: Trust-boundary source assertions
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const route = readFileSync('src/routes/api/public/webhooks/github.ts', 'utf8');
+          const migration = readFileSync('ops/resoflex-edge/migrations/20261014080000_github_webhook_inbox.sql', 'utf8');
+          const docs = readFileSync('docs/ops/github-app-setup.md', 'utf8');
+          const requiredEvents = [
+            'push', 'pull_request', 'pull_request_review', 'pull_request_review_comment',
+            'issues', 'issue_comment', 'check_run', 'check_suite', 'status', 'commit_comment',
+            'create', 'delete', 'deployment', 'deployment_status', 'fork', 'label',
+            'milestone', 'release', 'repository_dispatch', 'workflow_run', 'workflow_job',
+          ];
+          const routeEventBlock = route.match(/const ALLOWED_EVENT_TYPES = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? '';
+          const routeEvents = [...routeEventBlock.matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
+          const docEventBlock = docs.split('## Repository-scoped webhook events')[1]?.split('## Vercel Production variables')[0] ?? '';
+          const docEvents = [...docEventBlock.matchAll(/^- `([a-z_]+)`$/gm)].map((match) => match[1]);
+          const checks = [
+            ['HMAC SHA-256', /createHmac\(["']sha256["']/.test(route)],
+            ['constant-time comparison', /timingSafeEqual/.test(route)],
+            ['fail-closed missing config', /return new Response\("Webhook receiver not configured", \{ status: 503 \}\)/.test(route)],
+            ['repository allowlist', /GITHUB_ALLOWED_REPOSITORIES/.test(route) && /Repository not allowlisted/.test(route)],
+            ['installation allowlist', /GITHUB_ALLOWED_INSTALLATION_IDS/.test(route) && /GitHub App installation not allowlisted/.test(route)],
+            ['event-type allowlist', /ALLOWED_EVENT_TYPES/.test(route) && /Event type not allowlisted/.test(route)],
+            ['all required repository events enabled', requiredEvents.every((event) => routeEvents.includes(event))],
+            ['event docs match route allowlist', JSON.stringify(routeEvents) === JSON.stringify(docEvents)],
+            ['account-level/non-webhook events excluded', !routeEvents.some((event) => ['ping', 'installation', 'installation_repositories', 'workflow_dispatch'].includes(event))],
+            ['durable insert before ack', /\.insert\(\{/.test(route) && /status: 202/.test(route)],
+            ['retry on persistence failure', /Temporary inbox failure/.test(route) && /status: 503/.test(route)],
+            ['unique delivery id', /delivery_id text not null unique/.test(migration)],
+            ['RLS enabled', /enable row level security/i.test(migration)],
+            ['anon access revoked', /revoke all on table public\.github_webhook_inbox from public, anon, authenticated/i.test(migration)],
+          ];
+          for (const [name, pass] of checks) console.log(`${pass ? 'PASS' : 'FAIL'} ${name}`);
+          if (checks.some(([, pass]) => !pass)) process.exit(1);
+          NODE
