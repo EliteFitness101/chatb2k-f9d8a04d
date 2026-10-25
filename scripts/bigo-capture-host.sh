@@ -671,16 +671,22 @@ r2_upload() {
   DEST="${R2_MEDIA_BASE%/}/${KEY}"
   ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$KEY")"
   UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
+  # workers.dev provides an authenticated upload ingress that bypasses zone-level custom-hostname challenges.
+  # Existing custom-domain paths remain first; Dropbox remains canonical until read-back verification passes.
+  WORKERS_DEV_URL="${R2_WORKERS_DEV_URL:-https://shopb2k2k.resonancefitnessng.workers.dev}"
   TMP="$(mktemp)"
   DIRECT_URL="${R2_MEDIA_BASE%/}/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$KEY")"
-  CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
-  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
-    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
+    CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
   fi
   if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
-    rm -f "$TMP" "${TMP}.json"
+    CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "${WORKERS_DEV_URL%/}/api/ingest-media?key=${ENCODED_KEY}" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  fi
+  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
     echo "R2 upload failed for ${KEY} (HTTP ${CODE}); response follows without credentials:" >&2
     cat "${TMP}.json" >&2
+    rm -f "$TMP" "${TMP}.json"
     return 1
   fi
   if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "$DEST" -o "$TMP"; then
