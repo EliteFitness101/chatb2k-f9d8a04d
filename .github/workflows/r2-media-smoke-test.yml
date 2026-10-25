@@ -1,0 +1,68 @@
+name: R2 media write/read-back smoke test
+run-name: R2 media verification — ${{ github.event_name }} — run ${{ github.run_number }}
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/r2-media-smoke-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  r2-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify configured media route with a temporary text object
+        shell: bash
+        env:
+          R2_WRITE_TOKEN: ${{ secrets.R2_WRITE_TOKEN }}
+          R2_MEDIA_BASE: ${{ secrets.PRODUCTION_MEDIA_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${R2_WRITE_TOKEN:-}" ]; then
+            echo "::error::R2_WRITE_TOKEN is not configured."
+            exit 1
+          fi
+          if [ -z "${R2_MEDIA_BASE:-}" ]; then
+            echo "::error::PRODUCTION_MEDIA_URL is not configured; no R2 route to test."
+            exit 1
+          fi
+          BASE="${R2_MEDIA_BASE%/}"
+          KEY="public/bigo/_healthchecks/chatb2k-r2-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
+          URL="${BASE}/${KEY}"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          printf 'ChatB2K R2 smoke test\nrun=%s\nattempt=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > "$TMP/expected.txt"
+          echo "::notice::Testing configured media route with a temporary non-media object; credentials are not logged."
+          if ! PUT_CODE="$(curl -sS --retry 1 --retry-delay 1 -o "$TMP/put.txt" -w '%{http_code}' -X PUT "$URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H 'Content-Type: text/plain; charset=utf-8' --data-binary @"$TMP/expected.txt")"; then
+            echo "::error::R2 PUT request failed at transport level."
+            exit 1
+          fi
+          if [ "$PUT_CODE" -lt 200 ] || [ "$PUT_CODE" -ge 300 ]; then
+            echo "::error::R2 PUT rejected with HTTP $PUT_CODE. The configured base may be a read-only CDN URL rather than a write-enabled Worker route."
+            exit 1
+          fi
+          if ! GET_CODE="$(curl -sS --retry 1 --retry-delay 1 -o "$TMP/actual.txt" -w '%{http_code}' "$URL")"; then
+            echo "::error::R2 GET request failed at transport level after accepted PUT."
+            exit 1
+          fi
+          if [ "$GET_CODE" -lt 200 ] || [ "$GET_CODE" -ge 300 ]; then
+            echo "::error::R2 read-back rejected with HTTP $GET_CODE after accepted PUT."
+            exit 1
+          fi
+          if ! cmp -s "$TMP/expected.txt" "$TMP/actual.txt"; then
+            echo "::error::R2 byte-for-byte read-back mismatch."
+            exit 1
+          fi
+          echo "::notice::R2 PUT + GET + byte-for-byte read-back verified for temporary smoke object."
+          # Cleanup is best-effort: some media gateways intentionally do not expose DELETE.
+          DELETE_CODE="$(curl -sS --max-time 10 -o "$TMP/delete.txt" -w '%{http_code}' -X DELETE "$URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" || true)"
+          if [ "$DELETE_CODE" = "200" ] || [ "$DELETE_CODE" = "202" ] || [ "$DELETE_CODE" = "204" ]; then
+            echo "::notice::Temporary smoke object deleted."
+          else
+            echo "::warning::Gateway did not confirm smoke-object deletion (HTTP ${DELETE_CODE:-transport-error}); remove the small _healthchecks object through the authorized R2 dashboard if DELETE is unsupported."
+          fi
