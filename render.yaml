@@ -1,0 +1,38 @@
+# Non-destructive sidecar: bridges eligible Dropbox BIGO processed media to R2.
+# It does not capture rooms, delete Dropbox objects, publish posts, or replace GitHub Actions.
+services:
+  - type: worker
+    name: resofit-bigo-r2-bridge
+    repo: https://github.com/EliteFitness101/chatb2k-f9d8a04d
+    runtime: python
+    plan: starter
+    region: frankfurt
+    branch: render-r2-media-worker
+    buildCommand: pip install -r requirements-r2-worker.txt
+    startCommand: python scripts/r2-dropbox-bridge.py
+    autoDeploy: false
+    disk:
+      name: resofit-bigo-r2-bridge-state
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DROPBOX_APP_KEY
+        sync: false
+      - key: DROPBOX_APP_SECRET
+        sync: false
+      - key: DROPBOX_REFRESH_TOKEN
+        sync: false
+      - key: R2_WRITE_TOKEN
+        sync: false
+      - key: DROPBOX_ROOT
+        value: /ResoFit/BIGO/hosts
+      - key: R2_MEDIA_BASE
+        value: https://media.resofit.fit
+      - key: R2_UPLOAD_URL
+        value: https://upload.resofit.fit/api/ingest-media
+      - key: STATE_DIR
+        value: /var/data
+      - key: POLL_INTERVAL_SECONDS
+        value: "300"
+      - key: R2_REPLAY_LOOKBACK_HOURS
+        value: "24"
