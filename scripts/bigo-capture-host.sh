@@ -43,7 +43,12 @@ if [ "${CAPTURE_STORAGE_ONLY:-false}" = "true" ] && mkdir /tmp/resofit-r2-captur
     DB_TOKEN="$(printf '%s' "$TOKEN_JSON" | jq -er '.access_token')"
     curl --fail --silent --show-error --retry 2 --retry-delay 2 -X POST https://content.dropboxapi.com/2/files/download -H "Authorization: Bearer ${DB_TOKEN}" -H "Dropbox-API-Arg: {\"path\":\"$SRC_PATH\"}" -o /tmp/resofit-r2-capture-source.mp4
     test "$(stat -c %s /tmp/resofit-r2-capture-source.mp4)" -eq 17680728
-    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)"
+    DIRECT_URL="https://media.resofit.fit/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$R2_KEY")"
+    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
+    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
+      CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
+    fi
+    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then echo "R2 proof upload failed (HTTP $CODE); response follows:" >&2; cat /tmp/resofit-r2-put.json >&2; exit 1; fi
     test "$CODE" -ge 200 && test "$CODE" -lt 300
     jq -e '.ok == true and .size == 17680728' /tmp/resofit-r2-put.json >/dev/null
     READBACK_OK=0
@@ -656,10 +661,15 @@ r2_upload() {
   ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$KEY")"
   UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
   TMP="$(mktemp)"
-  CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  DIRECT_URL="${R2_MEDIA_BASE%/}/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$KEY")"
+  CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
+    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  fi
   if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
     rm -f "$TMP" "${TMP}.json"
-    echo "R2 upload endpoint failed for ${KEY} (HTTP ${CODE})." >&2
+    echo "R2 upload failed for ${KEY} (HTTP ${CODE}); response follows without credentials:" >&2
+    cat "${TMP}.json" >&2
     return 1
   fi
   if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "$DEST" -o "$TMP"; then
