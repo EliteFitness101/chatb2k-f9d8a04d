@@ -673,7 +673,7 @@ r2_upload() {
   UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
   # workers.dev provides an authenticated upload ingress that bypasses zone-level custom-hostname challenges.
   # Existing custom-domain paths remain first; Dropbox remains canonical until read-back verification passes.
-  WORKERS_DEV_URL="${R2_WORKERS_DEV_URL:-https://shopb2k2k.resonancefitnessng.workers.dev}"
+  WORKERS_DEV_URL="${R2_WORKERS_DEV_URL:-https://shopb2k.resonancefitnessng.workers.dev}"
   TMP="$(mktemp)"
   DIRECT_URL="${R2_MEDIA_BASE%/}/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$KEY")"
   CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
