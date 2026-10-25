@@ -1,3 +1,4 @@
+
 name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
 run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
 # Production capture workflow — Dropbox is canonical media storage; ChatB2K ingests verified Dropbox URLs for enrichment, Buffer, and Drive archive.
@@ -28,6 +29,7 @@ env:
   BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   R2_WRITE_TOKEN: ${{ secrets.R2_WRITE_TOKEN }}
+  R2_MEDIA_BASE: ${{ secrets.PRODUCTION_MEDIA_URL }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
