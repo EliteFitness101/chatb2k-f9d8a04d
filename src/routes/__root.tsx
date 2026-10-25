@@ -9,16 +9,16 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 ember-bg">
       <div className="max-w-md text-center glass rounded-md p-10">
         <div className="text-xs tracking-[0.3em] uppercase text-gold mb-3">404</div>
-        <h2 className="font-display text-4xl text-foreground">Off the grid.</h2>
+        <h2 className="font-display text-4xl text-foreground">Route not found.</h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          This sanctuary doesn't exist. Return to the global hub.
+          This ChatB2K route does not exist. Return to ChatB2K.
         </p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-sm bg-gold-gradient px-5 py-2.5 text-sm font-semibold text-[var(--ink)]"
           >
-            Return home
+            Return to ChatB2K
           </Link>
         </div>
       </div>
@@ -31,26 +31,34 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ResoFlex™ — The Global Mechanical Authority" },
+      { title: "ChatB2K — ResoFit Intelligence" },
       {
         name: "description",
         content:
-          "ResoFlex™ Global Sanctuary. Cast iron, ancestral doctrine, and white-glove fulfilment from hubs in Nigeria, the United States and Canada.",
+          "ChatB2K by ResoFit: governed AI orchestration for wellness, commerce, content, media and ecosystem operations.",
       },
-      { name: "author", content: "ResoFlex" },
+      { name: "author", content: "ResoFit" },
+      { name: "application-name", content: "ChatB2K" },
       { name: "theme-color", content: "#0A0A0A" },
-      { property: "og:title", content: "ResoFlex™ — The Global Mechanical Authority" },
-      { property: "og:description", content: "ResoFlex™ Global Sanctuary. Cast iron, ancestral doctrine, and white-glove fulfilment from hubs in Nigeria, the United States and Canada." },
+      { property: "og:title", content: "ChatB2K — ResoFit Intelligence" },
+      {
+        property: "og:description",
+        content:
+          "Governed AI orchestration for ResoFit wellness, commerce, content, media and ecosystem operations.",
+      },
       { property: "og:type", content: "website" },
-      { property: "og:site_name", content: "ResoFlex™" },
+      { property: "og:site_name", content: "ChatB2K" },
+      { property: "og:url", content: "https://chatb2k.resofit.fit/" },
       { property: "og:locale", content: "en_US" },
-      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@resofit" },
       { name: "twitter:creator", content: "@resofit" },
-      { name: "twitter:title", content: "ResoFlex™ — The Global Mechanical Authority" },
-      { name: "twitter:description", content: "ResoFlex™ Global Sanctuary. Cast iron, ancestral doctrine, and white-glove fulfilment from hubs in Nigeria, the United States and Canada." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/bdcgAbwS2IeBihMh9SoqBMc7zVy1/social-images/social-1784221290838-resoflex-hero-banner-101.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/bdcgAbwS2IeBihMh9SoqBMc7zVy1/social-images/social-1784221290838-resoflex-hero-banner-101.webp" },
+      { name: "twitter:title", content: "ChatB2K — ResoFit Intelligence" },
+      {
+        name: "twitter:description",
+        content:
+          "Governed AI orchestration for ResoFit wellness, commerce, content, media and ecosystem operations.",
+      },
     ],
     links: [
       {
@@ -72,37 +80,17 @@ export const Route = createRootRoute({
           "@graph": [
             {
               "@type": "Organization",
-              "@id": "https://resoflex-global.lovable.app/#organization",
-              name: "ResoFlex™",
-              alternateName: "ResoFit",
-              url: "https://resoflex-global.lovable.app",
-              logo: "https://resoflex-global.lovable.app/logo.png",
-              sameAs: [
-                "https://reso-fit.lovable.app",
-                "https://joy-funnel-ai.lovable.app",
-              ],
-            },
-            {
-              "@type": "Brand",
-              "@id": "https://resoflex-global.lovable.app/#brand",
-              name: "ResoFlex™",
-              slogan: "The global mechanical authority.",
+              "@id": "https://www.resofit.fit/#organization",
+              name: "ResoFit",
+              alternateName: ["Resonance Fitness", "ChatB2K"],
+              url: "https://www.resofit.fit",
             },
             {
               "@type": "WebSite",
-              "@id": "https://resoflex-global.lovable.app/#website",
-              url: "https://resoflex-global.lovable.app",
-              name: "ResoFlex™ Global Sanctuary",
-              publisher: { "@id": "https://resoflex-global.lovable.app/#organization" },
-              potentialAction: {
-                "@type": "SearchAction",
-                target: {
-                  "@type": "EntryPoint",
-                  urlTemplate:
-                    "https://resoflex-global.lovable.app/products?q={search_term_string}",
-                },
-                "query-input": "required name=search_term_string",
-              },
+              "@id": "https://chatb2k.resofit.fit/#website",
+              url: "https://chatb2k.resofit.fit/",
+              name: "ChatB2K",
+              publisher: { "@id": "https://www.resofit.fit/#organization" },
             },
           ],
         }),
