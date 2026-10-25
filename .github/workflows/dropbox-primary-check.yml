@@ -1,4 +1,4 @@
-name: BIGO Dropbox-primary migration checks
+name: BIGO R2-primary fallback checks
 
 on:
   push:
@@ -18,14 +18,14 @@ permissions:
   contents: read
 
 jobs:
-  dropbox-primary-static:
+  r2-primary-fallback-static:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - name: Validate capture shell syntax
         run: bash -n scripts/bigo-capture-host.sh
-      - name: Assert Dropbox is the canonical capture path
+      - name: Assert R2 primary delivery and verified Dropbox fallback
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -38,15 +38,21 @@ jobs:
               "files/get_metadata",
               "metadata.get(\"content_hash\") != expected_hash",
               "create_shared_link_with_settings",
-              "Dropbox raw capture archive failed",
-              "Dropbox metadata archive failed",
+              "R2 primary upload and byte-for-byte read-back verified",
+              "R2 primary delivery unavailable",
+              "raw-captures",
+              "metadata archive skipped",
           ]
           missing = [item for item in required if item not in script]
-          assert not missing, f"Missing Dropbox archive controls: {missing}"
+          assert not missing, f"Missing R2/fallback controls: {missing}"
           assert "@vercel/blob" not in script, "Blob SDK remains in capture script"
           assert "BLOB_READ_WRITE_TOKEN" not in script, "Blob token remains in capture script"
           assert "@vercel/blob" not in workflow, "Blob SDK remains in BIGO workflow"
           assert "BLOB_READ_WRITE_TOKEN" not in workflow, "Blob token remains in BIGO workflow"
-          assert 'dropbox_upload "$FILE"' in script and 'dropbox_upload "$COVER"' in script
-          print("PASS: Dropbox resumable upload, hash/size read-back, public media links, raw/metadata archiving; no Blob SDK/token dependency.")
+          r2_primary = script.index('r2_upload "$FILE"')
+          dropbox_fallback = script.index('dropbox_upload "$FILE"')
+          assert r2_primary < dropbox_fallback, "R2 must be attempted before Dropbox for processed media"
+          assert 'if [ -z "$BLOB_URL" ] && [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then' in script
+          assert "748833040-20261025T065551Z.mp4" not in script, "Pinned historical test asset must not gate live captures"
+          print("PASS: R2 primary upload/read-back; Dropbox fallback; Dropbox hash/size integrity retained; Google Drive remains optional.")
           PY
