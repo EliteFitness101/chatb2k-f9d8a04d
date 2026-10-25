@@ -40,8 +40,8 @@ jobs:
               "create_shared_link_with_settings",
               "R2 primary upload and byte-for-byte read-back verified",
               "R2 primary delivery unavailable",
-              "Dropbox raw capture archive",
-              "Dropbox metadata archive",
+              "raw-captures",
+              "metadata archive skipped",
           ]
           missing = [item for item in required if item not in script]
           assert not missing, f"Missing R2/fallback controls: {missing}"
