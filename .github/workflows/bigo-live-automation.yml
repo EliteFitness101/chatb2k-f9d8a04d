@@ -116,7 +116,7 @@ jobs:
               if host_id and host_id not in seen:
                   seen.add(host_id)
                   hosts.append(line)
-          open("/tmp/bigo-hosts.txt","w").writelines(line+"\\n" for line in hosts)
+          open("/tmp/bigo-hosts.txt","w").writelines(line+"\n" for line in hosts)
           print(f"Selected all {len(hosts)} eligible host(s) from the complete pool.")
           PY
           cp scripts/bigo-capture-host.sh /tmp/bigo-capture-host.sh
