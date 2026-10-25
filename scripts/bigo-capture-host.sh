@@ -46,9 +46,20 @@ if [ "${CAPTURE_STORAGE_ONLY:-false}" = "true" ] && mkdir /tmp/resofit-r2-captur
     DIRECT_URL="https://media.resofit.fit/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$R2_KEY")"
     CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
     if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
-      CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
+      echo "R2 proof direct PUT failed (HTTP $CODE); sanitized response follows:" >&2
+      head -c 2000 /tmp/resofit-r2-put.json >&2 || true
+      printf '\\n' >&2
+      CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-post.json -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
+      if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
+        echo "R2 proof upload POST failed (HTTP $CODE); sanitized response follows:" >&2
+        head -c 2000 /tmp/resofit-r2-post.json >&2 || true
+        printf '\\n' >&2
+        cp /tmp/resofit-r2-post.json /tmp/resofit-r2-put.json
+      else
+        cp /tmp/resofit-r2-post.json /tmp/resofit-r2-put.json
+      fi
     fi
-    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then echo "R2 proof upload failed (HTTP $CODE); response follows:" >&2; cat /tmp/resofit-r2-put.json >&2; exit 1; fi
+    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then echo "R2 proof upload failed (HTTP $CODE); both upload paths were attempted." >&2; exit 1; fi
     test "$CODE" -ge 200 && test "$CODE" -lt 300
     jq -e '.ok == true and .size == 17680728' /tmp/resofit-r2-put.json >/dev/null
     READBACK_OK=0
