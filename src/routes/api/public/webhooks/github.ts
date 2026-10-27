@@ -52,7 +52,8 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
             GITHUB_ALLOWED_REPOSITORIES: process.env.GITHUB_ALLOWED_REPOSITORIES,
             GITHUB_ALLOWED_INSTALLATION_IDS: process.env.GITHUB_ALLOWED_INSTALLATION_IDS,
             RESOFLEX_EDGE_SUPABASE_URL: process.env.RESOFLEX_EDGE_SUPABASE_URL,
-            RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY: process.env.RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY,
+            RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY:
+              process.env.RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY,
           });
           secret = bridge.getGitHubWebhookSecret();
           edgeUrl = bridge.getSupabaseUrl();
