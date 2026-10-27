@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
+import { createSecretsBridge } from "@/lib/secrets-bridge";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -39,29 +40,26 @@ export const Route = createFileRoute("/api/public/webhooks/github")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.GITHUB_WEBHOOK_SECRET?.trim();
-        const edgeUrl = process.env.RESOFLEX_EDGE_SUPABASE_URL?.trim();
-        const serviceRoleKey = process.env.RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY?.trim();
-        const allowedRepositories = new Set(
-          (process.env.GITHUB_ALLOWED_REPOSITORIES ?? "")
-            .split(",")
-            .map((item) => item.trim().toLowerCase())
-            .filter(Boolean),
-        );
-        const allowedInstallationIds = new Set(
-          (process.env.GITHUB_ALLOWED_INSTALLATION_IDS ?? "")
-            .split(",")
-            .map((item) => item.trim())
-            .filter((item) => /^\d+$/.test(item)),
-        );
-
-        if (
-          !secret ||
-          !edgeUrl ||
-          !serviceRoleKey ||
-          allowedRepositories.size === 0 ||
-          allowedInstallationIds.size === 0
-        ) {
+        // Explicit Node/Vercel adapter: the bridge itself never reads process.env.
+        let secret: string;
+        let edgeUrl: string;
+        let serviceRoleKey: string;
+        let allowedRepositories: Set<string>;
+        let allowedInstallationIds: Set<string>;
+        try {
+          const bridge = createSecretsBridge({
+            GITHUB_WEBHOOK_SECRET: process.env.GITHUB_WEBHOOK_SECRET,
+            GITHUB_ALLOWED_REPOSITORIES: process.env.GITHUB_ALLOWED_REPOSITORIES,
+            GITHUB_ALLOWED_INSTALLATION_IDS: process.env.GITHUB_ALLOWED_INSTALLATION_IDS,
+            RESOFLEX_EDGE_SUPABASE_URL: process.env.RESOFLEX_EDGE_SUPABASE_URL,
+            RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY: process.env.RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY,
+          });
+          secret = bridge.getGitHubWebhookSecret();
+          edgeUrl = bridge.getSupabaseUrl();
+          serviceRoleKey = bridge.getSupabaseServiceRoleKey();
+          allowedRepositories = new Set(bridge.getAllowedRepositories());
+          allowedInstallationIds = new Set(bridge.getAllowedInstallationIds());
+        } catch {
           console.error("GitHub webhook receiver is not configured");
           return new Response("Webhook receiver not configured", { status: 503 });
         }
