@@ -47,48 +47,66 @@ export const Route = createFileRoute("/api/google/drive-mcp/access-token")({
             .maybeSingle();
 
           if (error) throw new Error("Stored Google Drive credential lookup failed");
-          const refreshToken =
-            data?.refresh_token ??
-            process.env.GOOGLE_DRIVE_REFRESH_TOKEN ??
-            process.env.GOOGLE_REFRESH_TOKEN ??
-            "";
+          const refreshTokens = [
+            data?.refresh_token,
+            process.env.GOOGLE_DRIVE_REFRESH_TOKEN,
+            process.env.GOOGLE_REFRESH_TOKEN,
+          ].filter((value): value is string => typeof value === "string" && value.length > 0)
+            .filter((value, index, all) => all.indexOf(value) === index);
 
-          if (!refreshToken) {
+          if (!refreshTokens.length) {
             return Response.json({ ok: false, error: "Google Drive refresh token is not stored" }, {
               status: 503,
               headers: { "Cache-Control": "no-store" },
             });
           }
 
-          const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              client_id: GOOGLE_CLIENT_ID,
-              client_secret: GOOGLE_CLIENT_SECRET,
-              refresh_token: refreshToken,
-              grant_type: "refresh_token",
-            }),
-          });
-          const tokens = await tokenResponse.json().catch(() => ({}));
+          const refreshFailures: string[] = [];
+          for (const refreshToken of refreshTokens) {
+            const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: GOOGLE_CLIENT_ID,
+                client_secret: GOOGLE_CLIENT_SECRET,
+                refresh_token: refreshToken,
+                grant_type: "refresh_token",
+              }),
+              cache: "no-store",
+            });
+            const tokens = await tokenResponse.json().catch(() => ({}));
 
-          if (!tokenResponse.ok || !tokens.access_token) {
-            console.error("Google Drive token refresh failed", {
+            if (tokenResponse.ok && tokens.access_token) {
+              return Response.json({
+                ok: true,
+                access_token: tokens.access_token,
+                token_type: tokens.token_type ?? "Bearer",
+                expires_in: tokens.expires_in ?? null,
+              }, { headers: { "Cache-Control": "no-store" } });
+            }
+
+            const reason = String(tokens.error ?? "token_response_missing_access_token");
+            refreshFailures.push(reason);
+            console.warn("Google Drive refresh-token candidate rejected", {
               status: tokenResponse.status,
-              error: tokens.error ?? "token_response_missing_access_token",
+              error: reason,
+              source: refreshToken === data?.refresh_token ? "database" :
+                refreshToken === process.env.GOOGLE_DRIVE_REFRESH_TOKEN ? "GOOGLE_DRIVE_REFRESH_TOKEN" : "GOOGLE_REFRESH_TOKEN",
             });
-            return Response.json({ ok: false, error: "Google Drive token refresh failed" }, {
-              status: 502,
-              headers: { "Cache-Control": "no-store" },
-            });
+            if (reason !== "invalid_grant" && tokenResponse.status !== 429 && tokenResponse.status < 500) break;
           }
 
+          console.error("Google Drive token refresh failed", { failures: refreshFailures });
+          const reauthorizationRequired = refreshFailures.length > 0 && refreshFailures.every(reason => reason === "invalid_grant");
           return Response.json({
-            ok: true,
-            access_token: tokens.access_token,
-            token_type: tokens.token_type ?? "Bearer",
-            expires_in: tokens.expires_in ?? null,
-          }, { headers: { "Cache-Control": "no-store" } });
+            ok: false,
+            error: reauthorizationRequired
+              ? "Google Drive refresh token was rejected; reauthorization is required"
+              : "Google Drive token refresh failed",
+          }, {
+            status: 502,
+            headers: { "Cache-Control": "no-store" },
+          });
         } catch (error) {
           console.error("Google Drive access-token proxy failed", {
             message: error instanceof Error ? error.message : "unknown_error",
