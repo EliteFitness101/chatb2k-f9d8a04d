@@ -111,32 +111,11 @@ jobs:
             exit 1
           fi
           printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts-all.txt
-          # Capture the full deduplicated eligible host inventory each cycle; do not silently skip hosts by rotating a fixed-size subset.
-          python3 - <<'PY'
-          import os, time
-          all_hosts=[line.strip() for line in open("/tmp/bigo-hosts-all.txt") if line.strip()]
-          # Keep kisexy in every scheduled capture cycle; retain rotation for the remaining pool.
-          priority_ids=[x.strip() for x in os.getenv("BIGO_PRIORITY_HOST_IDS","kisexy").replace(",", "\n").splitlines() if x.strip()]
-          for host_id in priority_ids:
-              if not any(line.split("|",1)[0].strip()==host_id for line in all_hosts):
-                  all_hosts.append(host_id+"|https://www.bigo.tv/"+host_id)
-          priority=[line for host_id in priority_ids for line in all_hosts if line.split("|",1)[0].strip()==host_id]
-          priority_ids_present={line.split("|",1)[0].strip() for line in priority}
-          remaining=[line for line in all_hosts if line.split("|",1)[0].strip() not in priority_ids_present]
-          limit=max(1,min(int(os.getenv("BIGO_HOSTS_PER_CYCLE",str(len(all_hosts)))),len(all_hosts)))
-          if len(priority)>limit:
-              priority=priority[:limit]
-          slots=limit-len(priority)
-          if len(remaining)>slots:
-              start=((int(time.time())//300)*max(1,slots))%len(remaining)
-              rotated=remaining+remaining
-              selected=rotated[start:start+slots]
-          else:
-              selected=remaining
-          hosts=priority+selected
-          open("/tmp/bigo-hosts.txt","w").writelines(line+"\n" for line in hosts)
-          print(f"Selected {len(hosts)} of {len(all_hosts)} host(s) for this cycle; priority hosts: {', '.join(priority_ids)}")
-          PY
+          # Process only the deduplicated approved pool assembled above. Do not inject
+          # a hardcoded host or silently cap the pool; concurrency is bounded below.
+          cp /tmp/bigo-hosts-all.txt /tmp/bigo-hosts.txt
+          HOST_COUNT="$(wc -l < /tmp/bigo-hosts.txt | tr -d ' ')"
+          echo "::notice::Processing the full approved BIGO host pool: ${HOST_COUNT} host(s)."
           cp scripts/bigo-capture-host.sh /tmp/bigo-capture-host.sh
           chmod +x /tmp/bigo-capture-host.sh
           run_capture() {
