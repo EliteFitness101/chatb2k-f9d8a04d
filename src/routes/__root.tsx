@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/hooks/use-auth";
+import CoachB2KAssist from "@/components/CoachB2KAssist";
 import "@/lib/i18n";
 
 function NotFoundComponent() {
