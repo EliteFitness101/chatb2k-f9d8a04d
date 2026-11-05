@@ -30,7 +30,7 @@ jobs:
         with:
           deno-version: v2.x
       - name: Type-check Edge Function
-        run: deno check --no-lock supabase/functions/chatb2k-registry-sync/index.ts
+        run: deno check --config supabase/functions/chatb2k-registry-sync/deno.json --no-lock supabase/functions/chatb2k-registry-sync/index.ts
       - name: Validate OIDC trust boundary
         run: |
           set -euo pipefail
