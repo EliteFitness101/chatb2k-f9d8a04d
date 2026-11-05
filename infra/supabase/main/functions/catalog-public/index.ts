@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
             fulfillment_ready: fulfillmentReady,
             purchase_enabled: purchaseEnabled,
             price_visibility: purchaseEnabled ? "visible" : "hidden",
-            status_label: purchaseEnabled ? "Supplier offer verified" : sourcePageVerified ? "Verified supplier listing · direct supplier purchase only" : "Supplier review pending",
+            status_label: purchaseEnabled ? "Supplier offer verified" : sourcePageVerified ? "Supplier listing page checked · checkout not verified" : "Supplier review pending",
             block_reason: purchaseEnabled ? null : reasons.join("; ")
           };
         }) : [];
