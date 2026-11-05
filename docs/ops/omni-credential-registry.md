@@ -18,6 +18,10 @@ All 25 configured nodes are mirrored as `node.chatb2k101` through `node.chatb2k1
 
 A configured node is not proof of a live worker. Runtime status is preserved separately from manifest sync.
 
+## Supabase Cron inventory
+
+The manifest includes the 32 active Supabase Cron jobs, their schedules, linked Edge Function slugs where present, assigned orchestration node, and recent scheduler evidence. A `runtime_verified` cron status means the scheduler has successfully executed recently; it does not prove that a downstream worker produced an asset or completed a business action. The active `elite-host-lifecycle-sweep-v2` job is currently blocked by a SQL error: its command references the missing `first_live_at` column. That failure is recorded, not hidden or auto-disabled.
+
 ## Credential separation
 
 - Main Vault `GEMINI_API_KEY`: existing provider key used by RPC-based consumers.
