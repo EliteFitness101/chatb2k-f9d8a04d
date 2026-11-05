@@ -33,7 +33,7 @@ async function authorize(req: Request) {
 function base64UrlEncode(value: Uint8Array): string {
   let binary = "";
   for (const byte of value) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  return btoa(binary).replace(/=/g, "").replaceAll("+", "-").replaceAll("/", "_");
 }
 async function createScopedMcpToken(userId: string, email: string, roles: string[]) {
   const now = Math.floor(Date.now() / 1000);
