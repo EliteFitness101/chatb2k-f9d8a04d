@@ -72,3 +72,45 @@ jobs:
               sys.exit(1)
           print("PASS authenticated read-only export; no product, checkout, price, inventory or publication writes performed")
           PY
+
+      - name: Verify public catalogue search excludes discovery-only Jumia offers
+        env:
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]]; then
+            echo "::warning::SUPABASE_PUBLISHABLE_KEY/SUPABASE_ANON_KEY is not configured; public-search smoke skipped."
+            exit 0
+          fi
+          python3 <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+          url = "https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/catalog-public/search?q=dumbbell&limit=12"
+          key = os.environ["SUPABASE_PUBLISHABLE_KEY"]
+          req = urllib.request.Request(
+              url,
+              headers={"apikey": key, "Authorization": "Bearer " + key, "Accept": "application/json"},
+              method="GET",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  status, raw = response.status, response.read(1_000_000)
+          except urllib.error.HTTPError as error:
+              status, raw = error.code, error.read(1_000_000)
+          if not 200 <= status < 300:
+              print(f"FAIL public catalogue search: HTTP {status}")
+              sys.exit(1)
+          body = json.loads(raw.decode("utf-8"))
+          results = body.get("results") or []
+          jumia_links = [
+              item for item in results
+              if str(item.get("href") or "").lower().find("jumia.com.ng") >= 0
+          ]
+          if jumia_links:
+              print(f"FAIL public catalogue search exposed {len(jumia_links)} Jumia link(s)")
+              sys.exit(1)
+          if not any(item.get("type") == "product" for item in results):
+              print("FAIL public catalogue search did not return the internal product control")
+              sys.exit(1)
+          print("PASS public search excludes Jumia discovery offers and retains first-party product results")
+          PY
