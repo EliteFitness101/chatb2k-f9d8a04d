@@ -67,7 +67,7 @@ const domain=new URL(sourceUrl).hostname.replace(/^www\./,"");
   const supplier=sup.data;
   let sp=(await db.from("supplier_products").select("id").eq("supplier_id",supplier.id).eq("external_product_id",sourceUrl).maybeSingle()).data;
   if(!sp){
-    const ins=await db.from("supplier_products").insert({supplier_id:supplier.id,external_product_id:sourceUrl,title:String(candidate.title||req.query).slice(0,250),description:candidate.description||null,product_url:sourceUrl,currency:candidate.currency||"NGN",supplier_price:Math.max(0,Math.round(Number(candidate.price)||0)),stock_qty:0,image_url:candidate.image_url||null,image_rights_status:"unknown",resale_status:"pending",last_source_update:new Date().toISOString(),last_verified_at:new Date().toISOString(),raw_payload:candidate}).select("id").single();
+    const ins=await db.from("supplier_products").insert({supplier_id:supplier.id,external_product_id:sourceUrl,title:String(candidate.title||req.query).slice(0,250),description:candidate.description||null,product_url:sourceUrl,currency:candidate.currency||"NGN",supplier_price:Math.max(0,Math.round(Number(candidate.price)||0)),stock_qty:0,image_url:candidate.image_url||null,image_rights_status:"unknown",resale_status:"pending",last_source_update:new Date().toISOString(),last_verified_at:null,raw_payload:candidate}).select("id").single();
     if(ins.error) throw ins.error; sp=ins.data;
   }
   const handle=("sourced-"+req.id.slice(0,8)+"-"+String(candidate.title||req.query).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50)).slice(0,100);
