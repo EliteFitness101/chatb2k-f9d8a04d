@@ -50,7 +50,7 @@ function score(p: Product, terms: string[]) {
 }
 function intentFor(domain: string, intent: string) {
   const value = (intent + " " + domain).toLowerCase();
-  if (/creator|stream|bigo|tiktok|youtube|studio|media/.test(value)) return "creator";
+  if (/creator|stream|bigo|tiktok|youtube|studio|media|elite\\.resofit\\.fit/.test(value)) return "creator";
   if (/coach|booking|consult/.test(value)) return "coaching";
   if (/digital|course|masterclass|template|meal plan/.test(value)) return "digital";
   return "fitness";
@@ -75,19 +75,36 @@ Deno.serve(async (req: Request) => {
     if (error) throw error;
     const products = (data || []) as Product[];
     const terms = rules[intent] || rules.fitness;
-    const ranked = products.map(p => ({ p, score: score(p, terms) }))
+    const candidateProducts = products.map(p => ({ p, score: score(p, terms) }))
       .filter(x => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
-      .map(({ p, score: relevance }) => ({
+      .slice(0, limit);
+    let inventoryRows: any[] = [];
+    if (candidateProducts.length) {
+      const { data: inventory, error: inventoryError } = await db.from("resofit_catalog_inventory_sources")
+        .select("sku,quantity,reserved_quantity,availability_status")
+        .in("sku", candidateProducts.map(x => x.p.sku));
+      if (inventoryError) throw inventoryError;
+      inventoryRows = inventory || [];
+    }
+    const availableBySku = new Map<string, number>();
+    for (const row of inventoryRows) {
+      if (row.availability_status !== "available") continue;
+      const available = Math.max(0, Number(row.quantity || 0) - Number(row.reserved_quantity || 0));
+      availableBySku.set(row.sku, (availableBySku.get(row.sku) || 0) + available);
+    }
+    const ranked = candidateProducts.map(({ p, score: relevance }) => {
+      const inventoryAvailable = availableBySku.get(p.sku) || 0;
+      const requiresInventory = p.fulfillment_mode === "physical" || p.fulfillment_mode === "hybrid";
+      return {
         sku: p.sku, title: p.title, handle: p.handle, vendor: p.vendor,
         product_type: p.product_type, fulfillment_mode: p.fulfillment_mode,
-        price_ngn: p.variant_price, inventory_qty: p.variant_inventory_qty,
+        price_ngn: p.variant_price, inventory_qty: inventoryAvailable,
         product_path: "/product/" + p.handle, relevance,
         checkout_eligible: p.variant_price !== null && p.variant_price > 0 &&
-          (p.fulfillment_mode === "digital" || p.fulfillment_mode === "service" ||
-           (Number(p.variant_inventory_qty || 0) > 0)),
-      }));
+          (!requiresInventory || inventoryAvailable > 0),
+      };
+    });
     let trial: Record<string, unknown> | null = null;
     const auth = req.headers.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
@@ -118,7 +135,7 @@ Deno.serve(async (req: Request) => {
     }
     return json({
       ok: true, engine: "ChatB2K Omni commerce recommendations",
-      version: 2, intent, arrival_domain: host,
+      version: 3, intent, arrival_domain: host,
       destination: routes[host] || "https://resofit.fit/shop",
       recommendations: ranked,
       catalog_gap: intent === "creator" && ranked.length === 0
