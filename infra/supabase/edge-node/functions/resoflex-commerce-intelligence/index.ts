@@ -46,13 +46,25 @@ const results:any[]=[];
 for(const item of items){
 const url=String(item.product_url||item.source_url||""),title=clean(item.title,500);
 if(!publicHttps(url)||!title){results.push({status:"blocked",reason:!publicHttps(url)?"https_public_url_required":"title_required",url:url||null});continue;}
-const u=new URL(url),code=String(item.source_code||u.hostname.replace(/^www\./i,"").replace(/[^a-z0-9]+/gi,"_").replace(/^_|_$/g,"").toUpperCase()).slice(0,40);
-let {data:source}=await db.from("resoflex_commerce_sources").select("*").eq("source_code",code).maybeSingle();
+const u=new URL(url),requestedCode=String(item.source_code||"").trim(),proposedCode=(requestedCode||u.hostname.replace(/^www\\./i,"").replace(/[^a-z0-9]+/gi,"_").replace(/^_|_$/g,"").toUpperCase()).slice(0,40);
+let source:any=null;
+if(requestedCode){
+const {data:byCode,error:codeError}=await db.from("resoflex_commerce_sources").select("*").eq("source_code",requestedCode).maybeSingle();
+if(codeError){results.push({status:"error",url,reason:String(codeError).slice(0,250)});continue;}
+source=byCode;
+}
+const normalizedHost=(host:string)=>host.toLowerCase().replace(/^www\\./,"");
+if(!source){
+const {data:registered,error:registeredError}=await db.from("resoflex_commerce_sources").select("*").eq("source_status","active").limit(100);
+if(registeredError){results.push({status:"error",url,reason:String(registeredError).slice(0,250)});continue;}
+source=(registered||[]).find((candidate:any)=>{try{return normalizedHost(new URL(candidate.base_url).hostname)===normalizedHost(u.hostname);}catch{return false;}})||null;
+}
+const code=String(source?.source_code||proposedCode).slice(0,40);
 if(!source){
 const {data:created,error:ce}=await db.from("resoflex_commerce_sources").insert({source_code:code,source_name:clean(item.source_name,200)||u.hostname,source_type:"marketplace",base_url:u.origin,integration_mode:"search_discovery",source_status:"active",resale_authorized:false,media_authorized:false,automated_collection_authorized:false,access_policy_notes:"Search-discovered candidate only. No direct crawl or automated page extraction performed; source and media rights remain unapproved."}).select("*").single();
 if(ce){results.push({status:"error",url,reason:String(ce).slice(0,250)});continue;}source=created;
 }
-if(new URL(source.base_url).hostname.toLowerCase()!==u.hostname.toLowerCase()){results.push({status:"blocked",url,reason:"host_must_match_registered_source"});continue;}
+if(normalizedHost(new URL(source.base_url).hostname)!==normalizedHost(u.hostname)){results.push({status:"blocked",url,reason:"host_must_match_registered_source"});continue;}
 const price=Number(item.price),priceObserved=item.evidence?.price_observed===true&&Number.isFinite(price)&&price>=0?price:null;
 const image=String(item.image_url||"");
 const facts={title,description:clean(item.description,4000),source_price:priceObserved,currency:priceObserved?String(item.currency||"NGN"):null,availability:"unknown",cod_status:"unknown",delivery_fee:null,delivery_eta:null,pickup_locations:[],image_reference:image&&publicHttps(image)?image:null,features:Array.isArray(item.features)?item.features.slice(0,50):[],source_sku:item.external_product_id||null};
