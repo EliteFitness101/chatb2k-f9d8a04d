@@ -32,7 +32,5 @@ jobs:
         run: node --check scripts/sync-omni-registry.mjs && node scripts/sync-omni-registry.mjs --validate
       - name: Reconcile infrastructure manifest using GitHub OIDC
         env:
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
           SUPABASE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co
         run: node scripts/sync-omni-registry.mjs
