@@ -7,7 +7,13 @@
 
 ## Current registry facts
 
-The Edge Node contains 58 Jumia discovery rows. The registry read returned:
+The Edge Node contains 58 Jumia discovery rows. The full row-level snapshots are committed with this PR:
+
+- `docs/commerce/jumia-58-registry-snapshot.csv` — all 45 Edge Node registry columns, including IDs, page URLs, prices, stock/rights/authorization fields, variants, delivery, ratings, source metadata and timestamps.
+- `docs/commerce/jumia-58-main-commerce-offers.csv` — all 58 main-project offer mirrors, including external IDs, links, prices, availability, checkout metadata and source metadata.
+- `docs/commerce/jumia-58-supplier-products.csv` — all 58 main-project supplier mirror rows, including raw payload, supplier price, stock quantity, media rights and resale status.
+
+The registry read returned:
 
 - 58/58 have a source URL, but 0/58 have a canonical direct product URL.
 - 58/58 are `category_page_only_unverified`; the recorded links are category surfaces, not product detail pages.
@@ -15,6 +21,7 @@ The Edge Node contains 58 Jumia discovery rows. The registry read returned:
 - The 58 rows collapse to 55 normalized titles. Three probable duplicate groups need manual identity confirmation: 5-in-1 resistance band (2), yoga mat (2), and Roll Max 4-wheel ab roller (2).
 - 0 seller names, 0 brand values, 0 image URLs, 0 variants, 0 verified pickup locations, and 0 verified delivery/COD/returns/warranty details.
 - 0 are resale-authorized, 0 are publish-eligible, and all have unknown stock.
+- The main-project `supplier_products` mirror also has 58 rows: all 58 are `resale_status=pending`, `stock_qty=0`, and have a source URL. The matching main-project `commerce_offers` mirror has 58 Jumia rows, all `availability=unknown` and `discovery_only=true`.
 - The source registry explicitly records `resale_authorized=false`, `media_authorized=false`, and `automated_collection_authorized=false`.
 
 The existing source policy therefore blocks automated Jumia crawling and media reuse until written permission or an authorized API/feed and its evidence URL are recorded. Do not use Firecrawl or direct fetch to bypass this source-level authorization gate.
@@ -31,7 +38,9 @@ The main project's public `catalog-public/search` implementation currently queri
 
 ## Commerce boundary
 
-The main ResoFit catalogue remains the authority for customer-visible products and checkout. Current `products` catalogue snapshot: 539 rows, 138 published; modes: digital 73 (25 published), hybrid 24 (22 published), physical 437 (87 published), service 5 (4 published). The main project also has 68 `commerce_offers`, including the same 58 Jumia discovery offers; all 58 Jumia offers are `availability=unknown`, `discovery_only=true`, and `stock_verified=false`. The Jumia `commerce_sources` record is enabled for discovery but is `platform_recommendation_only`, with resale/media authorization false and stock verification not connected.
+The main ResoFit catalogue remains the authority for customer-visible products and checkout. Current `products` catalogue snapshot: 539 rows, 138 published; modes: digital 73 (25 published), hybrid 24 (22 published), physical 437 (87 published), service 5 (4 published).
+
+Two published first-party physical products are currently in the inventory source as available: the 9.1ft adjustable jump rope (₦5,999) and the 11-piece resistance-band set (₦14,999). Each has seven 1,000-unit location rows, including Port Harcourt, Lagos, Aba, Umuahia, Ottawa, China and Jersey City. Those rows are `user_confirmed` / `ceo_confirmed_minimum` and were last updated 2026-09-16; treat them as historical user-confirmed inventory, not a live supplier stock feed or proof of pickup/delivery at every location. The main project also has 68 `commerce_offers`, including the same 58 Jumia discovery offers; all 58 Jumia offers are `availability=unknown`, `discovery_only=true`, and `stock_verified=false`. The Jumia `commerce_sources` record is enabled for discovery but is `platform_recommendation_only`, with resale/media authorization false and stock verification not connected.
 
 Jumia candidates remain discovery-only. Do not copy them into the customer-facing `products` table, create a Paystack SKU, publish a product page, or place them in a purchasable bundle until all of the following are evidenced per item:
 
