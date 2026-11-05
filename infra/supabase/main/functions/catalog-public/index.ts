@@ -53,7 +53,28 @@ async function searchEcosystem(rawQuery: string, limit: number) {
       && offerMeta.stock_verified === true
       && Boolean(o.external_url);
   }).slice(0, limit);
-  add(eligibleOffers, o => ({ id: "offer:" + o.id, type: "offer", title: o.title, description: [o.currency, o.price, o.fulfillment_mode].filter(Boolean).join(" · "), href: o.external_url || "/shop", source: "commerce", metadata: { availability: o.availability, product_id: o.product_id } }));
+  add(eligibleOffers, o => {
+    const source: any = offerSourceById.get(o.source_id);
+    const sourceMeta = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+    const offerMeta = o.metadata && typeof o.metadata === "object" ? o.metadata : {};
+    return {
+      id: "offer:" + o.id,
+      type: "offer",
+      title: o.title,
+      description: [o.currency, o.price, o.fulfillment_mode].filter(Boolean).join(" · "),
+      href: o.external_url || "/shop",
+      source: "commerce",
+      metadata: {
+        availability: o.availability,
+        product_id: o.product_id,
+        checkout_mode: source?.checkout_mode ?? "unknown",
+        external_checkout_enabled: sourceMeta.external_checkout_enabled === true,
+        checkout_flow_verified: sourceMeta.checkout_flow_verified === true,
+        direct_product_url_verified: offerMeta.direct_product_url_verified === true,
+        stock_verified: offerMeta.stock_verified === true
+      }
+    };
+  });
   add(network.data, n => ({ id: "network:" + n.id, type: "network", title: n.name, description: [n.tagline, n.description, n.public_location_label].filter(Boolean).join(" · ").slice(0, 220), href: "/network", source: "network directory", metadata: { entity_type: n.entity_type, verification_status: n.verification_status } }));
   add(hubs.data, h => ({ id: "hub:" + h.id, type: "wellness_location", title: h.name, description: [h.description, h.address].filter(Boolean).join(" · ").slice(0, 220), href: h.slug ? "/wellness/hubs/" + h.slug : "/wellness", source: "wellness registry", metadata: { verification_status: h.verification_status } }));
   add(services.data, s => ({ id: "service:" + s.id, type: "service", title: s.service_name, description: s.description, href: "/wellness", source: "wellness services", metadata: { price: s.price, currency: s.currency, hub_id: s.hub_id } }));
