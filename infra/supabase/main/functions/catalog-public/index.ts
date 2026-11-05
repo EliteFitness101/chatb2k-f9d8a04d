@@ -127,7 +127,95 @@ Deno.serve(async (req) => {
       if (slug) query = query.eq("slug", safeTerm(slug));
       const { data, error } = await query.order("slug", { ascending: true }).limit(100);
       if (error) return json({ error: "collection_lookup_failed" }, 500);
-      return json({ data: data ?? [], total: (data ?? []).length }, 200, "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
+      const pages = data ?? [];
+      const candidates = pages.flatMap((page: any) =>
+        Array.isArray(page.manifest?.items) ? page.manifest.items.filter((item: any) => item?.kind === "external_candidate") : []
+      );
+      const offerIds = [...new Set(candidates.map((item: any) => item.source_offer_id).filter((id: any) => typeof id === "string" && id))];
+      const externalIds = [...new Set(candidates.map((item: any) => item.external_product_id).filter((id: any) => typeof id === "string" && id))];
+      const offerQueries: any[] = [];
+      if (offerIds.length) offerQueries.push(supabase.from("commerce_offers")
+        .select("id,source_id,external_id,external_url,price,currency,availability,fulfillment_mode,metadata")
+        .in("id", offerIds));
+      if (externalIds.length) offerQueries.push(supabase.from("commerce_offers")
+        .select("id,source_id,external_id,external_url,price,currency,availability,fulfillment_mode,metadata")
+        .in("external_id", externalIds));
+      const offerResults = await Promise.all(offerQueries);
+      if (offerResults.some((result: any) => result.error)) return json({ error: "collection_offer_resolution_failed" }, 500);
+      const offerById = new Map<string, any>();
+      const offerByExternalId = new Map<string, any>();
+      for (const result of offerResults) for (const offer of result.data ?? []) {
+        offerById.set(offer.id, offer);
+        if (offer.external_id) offerByExternalId.set(offer.external_id, offer);
+      }
+      const sourceIds = [...new Set([...offerById.values()].map((offer: any) => offer.source_id).filter(Boolean))];
+      const { data: sourceRows, error: sourceError } = sourceIds.length
+        ? await supabase.from("commerce_sources").select("id,enabled,checkout_mode,metadata").in("id", sourceIds)
+        : { data: [], error: null };
+      if (sourceError) return json({ error: "collection_source_resolution_failed" }, 500);
+      const sourceById = new Map((sourceRows ?? []).map((source: any) => [source.id, source]));
+      const resolved = pages.map((page: any) => {
+        const manifest = page.manifest && typeof page.manifest === "object" ? page.manifest : {};
+        const items = Array.isArray(manifest.items) ? manifest.items.map((item: any) => {
+          if (item?.kind !== "external_candidate") return item;
+          const offer = (item.source_offer_id && offerById.get(item.source_offer_id))
+            || (item.external_product_id && offerByExternalId.get(item.external_product_id))
+            || null;
+          const source: any = offer ? sourceById.get(offer.source_id) : null;
+          const offerMeta = offer?.metadata && typeof offer.metadata === "object" ? offer.metadata : {};
+          const sourceMeta = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+          const rawUrl = offer?.external_url || item.source_product_url || item.href || "";
+          let sourceUrl = "";
+          try {
+            const parsed = new URL(String(rawUrl));
+            if (parsed.protocol === "https:") sourceUrl = parsed.toString();
+          } catch { /* An invalid supplier URL is not rendered as a link. */ }
+          const sourcePageVerified = Boolean(sourceUrl) && offerMeta.direct_product_url_verified === true;
+          const externalCheckoutEnabled = source?.enabled === true
+            && source.checkout_mode === "external"
+            && sourceMeta.external_checkout_enabled === true
+            && sourceMeta.checkout_flow_verified === true;
+          const resaleAuthorized = sourceMeta.resale_authorized === true && offerMeta.resale_authorized === true;
+          const fulfillmentReady = offer?.availability === "available"
+            && offerMeta.stock_verified === true
+            && offerMeta.fulfillment_ready === true;
+          const purchaseEnabled = sourcePageVerified
+            && externalCheckoutEnabled
+            && resaleAuthorized
+            && fulfillmentReady
+            && Number(offer?.price) > 0;
+          const reasons = [
+            !sourcePageVerified ? "direct product page not verified" : "",
+            !externalCheckoutEnabled ? "supplier checkout flow not verified" : "",
+            !resaleAuthorized ? "resale authorization not recorded" : "",
+            !fulfillmentReady ? "live stock and fulfilment evidence not verified" : ""
+          ].filter(Boolean);
+          return {
+            ...item,
+            source_product_url: sourceUrl || null,
+            source_page_verified: sourcePageVerified,
+            external_checkout_enabled: externalCheckoutEnabled,
+            resale_authorized: resaleAuthorized,
+            fulfillment_ready: fulfillmentReady,
+            purchase_enabled: purchaseEnabled,
+            price_visibility: purchaseEnabled ? "visible" : "hidden",
+            status_label: purchaseEnabled ? "Supplier offer verified" : "Supplier review pending",
+            block_reason: purchaseEnabled ? null : reasons.join("; ")
+          };
+        }) : [];
+        const externalItemsAllowed = items.some((item: any) => item?.kind === "external_candidate" && item.purchase_enabled === true);
+        const checkout = manifest.checkout && typeof manifest.checkout === "object" ? manifest.checkout : {};
+        return {
+          ...page,
+          manifest: {
+            ...manifest,
+            items,
+            checkout: { ...checkout, external_candidate_purchase_enabled: externalItemsAllowed }
+          },
+          commerce: { ...(page.commerce && typeof page.commerce === "object" ? page.commerce : {}), external_items_allowed: externalItemsAllowed }
+        };
+      });
+      return json({ data: resolved, total: resolved.length }, 200, "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
     }
     if (resource === "context") return json({ data: context(url.searchParams.get("country")) }, 200, "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400");
     if (resource === "search") return json(await searchEcosystem(url.searchParams.get("q") ?? "", Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8), 1), 12)), 200, "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
