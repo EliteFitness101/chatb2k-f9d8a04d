@@ -90,7 +90,7 @@ Deno.serve(async (req: Request) => {
 
     const evidence = {
       ...(existing?.evidence && typeof existing.evidence === "object" ? existing.evidence : {}),
-      ...safeEvidence,
+      manifest: safeEvidence,
       registry_sync: { repository: REPOSITORY, workflow_ref: WORKFLOW_REF, run_id: runId, commit_sha: commitSha, synced_at: new Date().toISOString() }
     };
     if (existing) {
