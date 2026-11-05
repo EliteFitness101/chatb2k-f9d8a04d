@@ -81,7 +81,7 @@ Each collection item must expose explicit `fulfillment_mode`, seller/vendor, sou
 - `chatb2k118`: source ingestion.
 - `chatb2k121`: dynamic experience/page generation.
 - `chatb2k122`: commerce transaction/fulfilment.
-- `chatb2k126` and `chatb2k173`: not present in the current live `chatb2k_orchestration_nodes` query; do not claim they are registered or synced until provisioned and verified.
+- `chatb2k126` and `chatb2k173`: absent from both the live `chatb2k_orchestration_nodes` table and `resofit_v12_engine_registry`; do not claim they are registered or synced until provisioned with roles, event contracts, health and heartbeat evidence.
 
 ## Release gates
 
