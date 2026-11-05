@@ -26,7 +26,7 @@ const ROOT_WRITE_TOOLS: Record<string,{permission:string;description:string}> = 
  "github.workflow.dispatch":{permission:"run",description:"Dispatch GitHub Actions workflows through the installed ChatB2K GitHub App."},
  "ecosystem.dispatch":{permission:"orchestrate",description:"Plan or execute batches against runtime-verified infrastructure bindings; configured-only bindings are reported as blocked."}
 };
-function b64url(bytes:Uint8Array){let binary="";for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replace(/=/g,"").replace(/\\+/g,"-").replace(/\\//g,"_");}
+function b64url(bytes:Uint8Array){let binary="";for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replaceAll("=","").replaceAll("+","-").replaceAll("/","_");}
 async function githubBridgeToken(){
  const now=Math.floor(Date.now()/1000);
  const header=b64url(new TextEncoder().encode(JSON.stringify({alg:"HS256",typ:"JWT"})));
@@ -114,7 +114,7 @@ Deno.serve(async(req:Request)=>{
     result=await githubBridge("POST",{method,path,body:input.body&&typeof input.body==="object"?input.body:{}});
    }else if(tool==="github.workflow.dispatch"){
     const path=String(input.path??"");
-    if(!/^\\/repos\\/[^/]+\\/[^/]+\\/actions\\/workflows\\/[^/]+\\/dispatches$/.test(path))throw new Error("WORKFLOW_DISPATCH_PATH_REQUIRED");
+        const parts=path.split("/");if(parts.length!==8||parts[1]!=="repos"||!parts[2]||!parts[3]||parts[4]!=="actions"||parts[5]!=="workflows"||!parts[6]||parts[7]!=="dispatches")throw new Error("WORKFLOW_DISPATCH_PATH_REQUIRED");
     result=await githubBridge("POST",{method:"POST",path,body:input.body&&typeof input.body==="object"?input.body:{ref:"main"}});
    }else if(tool==="ecosystem.dispatch"){
     const ids=Array.isArray(input.binding_ids)?input.binding_ids.map(String):[];
