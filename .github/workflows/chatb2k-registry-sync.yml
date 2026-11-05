@@ -35,7 +35,7 @@ jobs:
           SUPABASE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co
         run: |
           node --input-type=module <<'NODE'
-          const endpoint = process.env.SUPABASE_URL.replace(/\\/$/, '') + '/functions/v1/chatb2k-registry-sync';
+          const endpoint = process.env.SUPABASE_URL.replace(/\/$/, '') + '/functions/v1/chatb2k-registry-sync';
           const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bindings: [] }) });
           if (response.status !== 401) throw new Error(`Expected unauthenticated request HTTP 401, received HTTP ${response.status}`);
           console.log('PASS registry endpoint denies unauthenticated requests: HTTP 401');
