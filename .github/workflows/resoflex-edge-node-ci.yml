@@ -1,0 +1,37 @@
+name: ResoFlex Edge Node and Catalog Function CI
+on:
+  push:
+    branches:
+      - feat/jumia-registry-export-route
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "infra/supabase/edge-node/functions/resoflex-commerce-intelligence/**"
+      - "infra/supabase/main/functions/catalog-public/**"
+      - "supabase/functions/chatb2k-commerce-recommendations/**"
+      - "supabase/migrations/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resoflex-edge-node-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deno-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check Edge Node commerce intelligence
+        run: deno check --config infra/supabase/edge-node/functions/resoflex-commerce-intelligence/deno.json infra/supabase/edge-node/functions/resoflex-commerce-intelligence/index.ts
+      - name: Type-check main catalog-public function
+        run: deno check --config infra/supabase/main/functions/catalog-public/deno.json infra/supabase/main/functions/catalog-public/index.ts
+
+      - name: Type-check ChatB2K hybrid commerce recommendations
+        run: deno check --config supabase/functions/chatb2k-commerce-recommendations/deno.json supabase/functions/chatb2k-commerce-recommendations/index.ts

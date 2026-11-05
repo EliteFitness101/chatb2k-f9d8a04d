@@ -1,0 +1,170 @@
+name: ResoFlex Commerce Registry Smoke
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resoflex-commerce-registry-smoke
+  cancel-in-progress: false
+
+jobs:
+  registry-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify authenticated Jumia registry export
+        env:
+          CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CHATB2K_LIVE_INGEST_KEY:-}" ]]; then
+            echo "::error::Repository Actions secret CHATB2K_LIVE_INGEST_KEY is missing."
+            exit 1
+          fi
+          python3 <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+          url = "https://chatb2k.resofit.fit/api/public/ecosystem-router"
+          payload = {
+              "route_id": "orchestration-resoflex-commerce-intelligence",
+              "action": "export_registry",
+              "payload": {"source_code": "JUMIA_NG", "limit": 100, "offset": 0},
+          }
+          req = urllib.request.Request(
+              url,
+              data=json.dumps(payload).encode(),
+              headers={
+                  "Authorization": "Bearer " + os.environ["CHATB2K_LIVE_INGEST_KEY"],
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+              },
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=25) as response:
+                  status, raw = response.status, response.read(2_000_000)
+          except urllib.error.HTTPError as error:
+              status, raw = error.code, error.read(2_000_000)
+          if not 200 <= status < 300:
+              print(f"FAIL registry export: HTTP {status}")
+              sys.exit(1)
+          body = json.loads(raw.decode("utf-8"))
+          result = body.get("result") or {}
+          if body.get("ok") is not True or result.get("ok") is not True:
+              print("FAIL registry export: router or Edge Node reported failure")
+              sys.exit(1)
+          page = result.get("page") or {}
+          records = result.get("records") or []
+          checks = {
+              "complete_export_page": bool(records) and page.get("total") == len(records) and page.get("has_more") is False,
+              "all_rows_have_source_url": all(bool(x.get("product_url")) for x in records),
+              "no_resale_authorized": all(x.get("resale_status") != "authorized" for x in records),
+              "none_publishable": all(x.get("publish_eligible") is False for x in records),
+              "all_rows_remain_discovery_only": all(x.get("page_status") in {"category_page_only_unverified", "search_discovered_not_fetched"} and x.get("verification_status") in {"candidate", "DISCOVERED"} for x in records),
+              "no_inventory_promises": all(x.get("stock_state") == "unknown" and int(x.get("source_stock_qty") or 0) == 0 for x in records),
+              "direct_candidates_have_product_urls": all(bool(x.get("canonical_product_url")) and x.get("canonical_product_url") == x.get("product_url") for x in records if x.get("page_status") == "search_discovered_not_fetched"),
+              "category_candidates_have_no_canonical_product_url": all(not x.get("canonical_product_url") for x in records if x.get("page_status") == "category_page_only_unverified"),
+          }
+          for name, passed in checks.items():
+              print(("PASS" if passed else "FAIL") + " " + name)
+          if not all(checks.values()):
+              print("Observed count:", page.get("total"), "returned:", len(records))
+              sys.exit(1)
+          print("PASS authenticated read-only export; no product, checkout, price, inventory or publication writes performed")
+          PY
+
+      - name: Verify public catalogue search excludes discovery-only Jumia offers
+        env:
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]]; then
+            echo "::warning::SUPABASE_PUBLISHABLE_KEY/SUPABASE_ANON_KEY is not configured; public-search smoke skipped."
+            exit 0
+          fi
+          python3 <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+          url = "https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/catalog-public/search?q=dumbbell&limit=12"
+          key = os.environ["SUPABASE_PUBLISHABLE_KEY"]
+          req = urllib.request.Request(
+              url,
+              headers={"apikey": key, "Authorization": "Bearer " + key, "Accept": "application/json"},
+              method="GET",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  status, raw = response.status, response.read(1_000_000)
+          except urllib.error.HTTPError as error:
+              status, raw = error.code, error.read(1_000_000)
+          if not 200 <= status < 300:
+              print(f"FAIL public catalogue search: HTTP {status}")
+              sys.exit(1)
+          body = json.loads(raw.decode("utf-8"))
+          results = body.get("results") or []
+          jumia_links = [
+              item for item in results
+              if str(item.get("href") or "").lower().find("jumia.com.ng") >= 0
+          ]
+          if jumia_links:
+              print(f"FAIL public catalogue search exposed {len(jumia_links)} Jumia link(s)")
+              sys.exit(1)
+          if not any(item.get("type") == "product" for item in results):
+              print("FAIL public catalogue search did not return the first-party product control")
+              sys.exit(1)
+          for item in results:
+              metadata = item.get("metadata") or {}
+              if item.get("type") == "offer" and metadata.get("checkout_mode") == "external":
+                  required = (
+                      metadata.get("external_checkout_enabled") is True
+                      and metadata.get("checkout_flow_verified") is True
+                      and metadata.get("direct_product_url_verified") is True
+                      and metadata.get("stock_verified") is True
+                  )
+                  if not required:
+                      print("FAIL public catalogue search exposed an external offer without all registry evidence")
+                      sys.exit(1)
+          print("PASS public search returns first-party products and only evidence-complete external offers")
+
+          def get_json(path):
+              req = urllib.request.Request(
+                  "https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/catalog-public/" + path,
+                  headers={"apikey": key, "Authorization": "Bearer " + key, "Accept": "application/json"},
+                  method="GET",
+              )
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  return json.loads(response.read(1_000_000).decode("utf-8"))
+
+          collection_body = get_json("collections?slug=home-gym-starter")
+          collections = collection_body.get("data") or []
+          if any(page.get("status") != "published" for page in collections):
+              print("FAIL collection endpoint returned a non-published page")
+              sys.exit(1)
+          for page in collections:
+              for item in (page.get("manifest") or {}).get("items") or []:
+                  if item.get("kind") == "external_candidate":
+                      page_verified = item.get("source_page_verified") is True
+                      checkout_ready = (
+                          page_verified
+                          and item.get("external_checkout_enabled") is True
+                          and item.get("resale_authorized") is True
+                          and item.get("fulfillment_ready") is True
+                          and bool(item.get("source_product_url") or item.get("href"))
+                      )
+                      if item.get("purchase_enabled") is True and not checkout_ready:
+                          print("FAIL external candidate enabled without verified source, resale and fulfilment evidence")
+                          sys.exit(1)
+                      if item.get("external_checkout_enabled") is True and not checkout_ready:
+                          print("FAIL external checkout enabled without verified source and fulfilment evidence")
+                          sys.exit(1)
+          print("PASS collections endpoint exposes published manifests and enforces registry-driven external offer eligibility")
+
+          product_body = get_json("product?sku=res-dig-reset")
+          product = product_body.get("data") or {}
+          if product.get("fulfillment_mode") != "digital" or float(product.get("variant_price") or 0) <= 0:
+              print("FAIL canonical product endpoint missing current digital SKU price/fulfillment")
+              sys.exit(1)
+          print("PASS canonical product endpoint returns price and fulfillment mode for first-party checkout")
+          PY
