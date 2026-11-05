@@ -78,7 +78,7 @@ async function installationToken() {
 
 function validateRepoPath(path: string, allowed: string[]) {
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("..") || path.includes("\\") || path.includes("#")) return false;
-  const match = /^\\/repos\\/([^/]+)\\/([^/]+)(?:\\/|$)/.exec(path);
+  const match = /^\/repos\/([^/]+)\/([^/]+)(?:\/|$)/.exec(path);
   if (!match) return false;
   return allowed.includes(`${match[1]}/${match[2]}`.toLowerCase());
 }
