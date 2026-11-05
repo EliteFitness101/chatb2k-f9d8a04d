@@ -113,3 +113,48 @@ insert into public.chatb2k_provider_capabilities(capability_id,provider,capabili
 ('telegram.message_delivery','telegram','message_delivery','Telegram bot delivery','declared','{}'),
 ('resend.transactional_email','resend','transactional_email','Transactional email delivery','declared','{}')
 on conflict (capability_id) do nothing;
+
+insert into public.chatb2k_key_job_mappings(credential_ref,capability_id,target_project_ref,target_type,target_ref,node_id,resolution_method,mapping_status,evidence) values
+('main:vault:GEMINI_API_KEY','gemini.multimodal_analysis','vbqjvmnhdtdhmeeudqnn','edge_function','content-intelligence-enricher','chatb2k113','Vault RPC or direct environment resolution','consumer_reference_found','{"usage_ledger_successes_7d":385,"credential_id_attribution":"not present in existing usage ledger"}'),
+('main:vault:GEMINI_API_KEY','gemini.multimodal_analysis','vbqjvmnhdtdhmeeudqnn','edge_function','resofit-ecosystem-autopilot','chatb2k113','direct GEMINI_API_KEY environment reference','consumer_reference_found','{"credential_id_attribution":"not present in existing usage ledger"}'),
+('main:vault:GEMINI_API_KEY','gemini.text_generation','vbqjvmnhdtdhmeeudqnn','edge_function','flow-generation-gate','chatb2k113','direct GEMINI_API_KEY environment reference','consumer_reference_found','{"runtime_key_identity":"not independently verified"}'),
+('main:vault:GEMINI_API_KEY','gemini.video_generation','vbqjvmnhdtdhmeeudqnn','edge_function','elite-media-generator','chatb2k113','Vault RPC / provider resolution','consumer_reference_found','{"unattended_video_success":"not verified","last_provider_blocker":"RESOURCE_EXHAUSTED"}'),
+('main:vault:GEMINI_API_KEY','gemini.video_generation','vbqjvmnhdtdhmeeudqnn','edge_function','elite-media-render-worker','chatb2k113','Vault RPC primary key slot','consumer_reference_found','{"unattended_video_success":"not verified","last_provider_blocker":"RESOURCE_EXHAUSTED"}'),
+('main:vault:GEMINI_API_KEY','gemini.multimodal_analysis','vbqjvmnhdtdhmeeudqnn','orchestration_node','chatb2k116','chatb2k116','Declared provider_stack includes Gemini','declared','{"runtime_worker_mapping":"not verified"}'),
+('edge-node:vault:chatb2k_gemini_automation_api_key',null,'xtgteviwtoupbfvorrmk','webhook','chatb2k-gemini-automation-webhook',null,'Edge Node Vault webhook authentication','source_verified','{"auth_secret_not_provider_api_key":true,"authenticated_round_trip":"not verified"}'),
+('elite101:github_actions:GEMINI_AUTOMATION_API_KEY','gemini.video_generation','vbqjvmnhdtdhmeeudqnn','github_workflow','elite-media-ffmpeg.yml','chatb2k113','GitHub Actions secondary provider key injected into poll worker','consumer_reference_found','{"secret_value_read":false,"poller_selects_before_GEMINI_API_KEY1":true}'),
+('elite101:github_actions:GEMINI_AUTOMATION_API_KEY','gemini.video_generation','vbqjvmnhdtdhmeeudqnn','edge_function','elite-media-render-worker','chatb2k113','x-gemini-automation-key request header / environment fallback','consumer_reference_found','{"secret_value_read":false}'),
+('elite101:github_actions:GEMINI_API_KEY1','gemini.video_generation','vbqjvmnhdtdhmeeudqnn','github_workflow','elite-media-ffmpeg.yml','chatb2k113','GitHub Actions fallback provider key injected into poll worker','consumer_reference_found','{"secret_value_read":false}'),
+('elite101:github_actions:GEMINI_API_KEY1','gemini.video_generation','vbqjvmnhdtdhmeeudqnn','edge_function','elite-media-render-worker','chatb2k113','Environment or Vault runtime secret fallback','consumer_reference_found','{"secret_value_read":false}'),
+('chatb2k:github_actions:GEMINI_API_KEY','gemini.text_generation','vbqjvmnhdtdhmeeudqnn','github_workflow','chatb2k-ecosystem-audit.yml','chatb2k113','Gemini CLI read-only repository audit workflow','consumer_reference_found','{"production_generation":false}'),
+('edge-node:env:CHATB2K_GEMINI_WEBHOOK_SECRET',null,'xtgteviwtoupbfvorrmk','webhook','chatb2k-gemini-automation-webhook',null,'Dedicated webhook authentication environment fallback','source_verified','{"runtime_presence_verified":false}')
+on conflict do nothing;
+
+insert into public.chatb2k_routing_policies(policy_id,provider,capability_id,selection_strategy,allow_failover,quota_action,verification_status,policy) values
+('gemini.text.explicit','google_gemini','gemini.text_generation','explicit_mapping',false,'backoff_no_key_rotation','declared','{"automatic_rotation":"disabled"}'),
+('gemini.image.explicit','google_gemini','gemini.image_generation','explicit_mapping',false,'backoff_no_key_rotation','declared','{"automatic_rotation":"disabled"}'),
+('gemini.video.explicit','google_gemini','gemini.video_generation','explicit_mapping',false,'backoff_no_key_rotation','blocked','{"automatic_rotation":"disabled","provider_capacity_blocker":"RESOURCE_EXHAUSTED"}'),
+('gemini.analysis.explicit','google_gemini','gemini.multimodal_analysis','explicit_mapping',false,'backoff_no_key_rotation','declared','{"automatic_rotation":"disabled"}')
+on conflict (policy_id) do nothing;
+
+insert into public.chatb2k_infrastructure_bindings(binding_id,system,project_ref,repository,workflow_path,function_slug,worker_ref,node_id,purpose,sync_mode,status,evidence) values
+('elite.gemini.poller','github_actions','vbqjvmnhdtdhmeeudqnn','EliteFitness101/elite101','.github/workflows/elite-media-gemini-poller.yml',null,'scripts/elite-media-poll-worker.mjs','chatb2k113','Poll queued Gemini Omni video generation jobs','manifest_sync','configured','{"schedule":"*/2 * * * *","secondary_gemini_key_injected":false}'),
+('elite.ffmpeg.runner','github_actions','vbqjvmnhdtdhmeeudqnn','EliteFitness101/elite101','.github/workflows/elite-media-ffmpeg.yml',null,'scripts/elite-media-ffmpeg-runner.mjs','chatb2k113','Render and normalize media assets using FFmpeg','manifest_sync','configured','{"schedule":"*/5 * * * *","secondary_gemini_keys_injected":true}'),
+('chatb2k.bigo.live','github_actions','vbqjvmnhdtdhmeeudqnn','EliteFitness101/chatb2k-f9d8a04d','.github/workflows/bigo-live-automation.yml',null,null,'chatb2k118','BIGO capture, probe and ingestion automation','manifest_sync','configured','{"publish_gate":"BIGO verified host IDs only"}'),
+('chatb2k.bigo.config_sync','github_actions','vbqjvmnhdtdhmeeudqnn','EliteFitness101/chatb2k-f9d8a04d','.github/workflows/bigo-provenance-config-sync.yml',null,null,'chatb2k118','BIGO provenance manifest reconciliation','manifest_sync','configured','{}'),
+('edge.gemini.webhook','supabase_edge_node','xtgteviwtoupbfvorrmk',null,null,'chatb2k-gemini-automation-webhook',null,'chatb2k110','Gemini automation event ingress and forwarding','observe','configured','{"deployed_version":2,"authenticated_round_trip":"not verified"}'),
+('omni.control_plane','supabase_edge_function','vbqjvmnhdtdhmeeudqnn',null,null,'chatb2k-omnidimensional-control-plane',null,'chatb2k110','Omni control-plane inventory and secret-reference checks','observe','configured','{"cross_project_sync":"not proven"}'),
+('social.publish.node','supabase_edge_function','vbqjvmnhdtdhmeeudqnn',null,null,'buffer-publisher',null,'chatb2k123','Social content distribution via Buffer','observe','configured','{"buffer_credentials_separate_from_gemini":true}'),
+('platform.storage.node','supabase_edge_function','vbqjvmnhdtdhmeeudqnn',null,null,'resofit-media-control-plane',null,'chatb2k109','Media storage routing and R2 control plane','observe','configured','{"r2_runtime_roundtrip_verified":false}')
+on conflict (binding_id) do nothing;
+
+insert into public.chatb2k_infrastructure_bindings(binding_id,system,project_ref,node_id,purpose,sync_mode,status,evidence)
+select 'node.'||n.node_id,'chatb2k_orchestration_registry','vbqjvmnhdtdhmeeudqnn',n.node_id,
+ n.title||' — '||coalesce(n.capability_scope->>'purpose','orchestration node'),
+ 'observe','configured',
+ jsonb_build_object('layer',n.layer,'role_code',n.role_code,'access_level',n.access_level,'provider_stack',n.provider_stack,'capability_scope',n.capability_scope,'kill_switch_enabled',n.kill_switch_enabled,'runtime_execution_verified',false)
+from public.chatb2k_orchestration_nodes n on conflict (binding_id) do nothing;
+
+insert into public.chatb2k_registry_sync_runs(source_system,source_ref,outcome,inserted_count,details,completed_at)
+values('supabase_migration','chatb2k_omni_credential_routing_registry','completed',0,'{"secret_values_read":false,"existing_credentials_modified":false}',now())
+on conflict do nothing;
