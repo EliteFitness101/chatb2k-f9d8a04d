@@ -1,93 +1,116 @@
-# Jumia catalogue reconciliation — evidence baseline
+# External commerce catalogue reconciliation — current evidence
 
-**Captured:** 2026-11-05  
-**Registry:** ResoFlex Edge Node project `xtgteviwtoupbfvorrmk`  
-**Source:** `JUMIA_NG` / Jumia Nigeria  
-**Consumer commerce authority:** main ResoFit project `vbqjvmnhdtdhmeeudqnn`
+**Evidence date:** 5 November 2026  
+**Edge Node project:** `xtgteviwtoupbfvorrmk`  
+**Main commerce project:** `vbqjvmnhdtdhmeeudqnn`  
+**Customer-facing domains:** `shop.resofit.fit`, `store.resofit.fit`, `resofit.fit/shop`, `elite.resofit.fit/shop`
 
-## Current registry facts
+## Current Edge Node registry
 
-The Edge Node contains 58 Jumia discovery rows. The full row-level snapshots are committed with this PR:
+The registry now contains 592 commerce records across 9 registered source roots:
 
-- `docs/commerce/jumia-58-registry-snapshot.csv` — all 45 Edge Node registry columns, including IDs, page URLs, prices, stock/rights/authorization fields, variants, delivery, ratings, source metadata and timestamps.
-- `docs/commerce/jumia-58-main-commerce-offers.csv` — all 58 main-project offer mirrors, including external IDs, links, prices, availability, checkout metadata and source metadata.
-- `docs/commerce/jumia-58-supplier-products.csv` — all 58 main-project supplier mirror rows, including raw payload, supplier price, stock quantity, media rights and resale status.
+| Source | Records | Category-only | Search-discovered product candidates | Publish eligible |
+|---|---:|---:|---:|---:|
+| Jumia Nigeria | 67 | 58 | 9 | 0 |
+| Nonsman Online | 1 | 0 | 1 | 0 |
+| Olubee Store | 8 | 0 | 8 | 0 |
+| ResoFit internal catalogue | 525 | 0 | 0 | Internal catalogue authority |
 
-The registry read returned:
+The 58 original Jumia rows remain `category_page_only_unverified`. Nine new Jumia direct-product-page URLs have been added as `search_discovered_not_fetched` candidates. They have not been fetched by the Edge Node page extractor. The nine Jumia links are direct product URL candidates, not verified live offers.
 
-- 58/58 have a source URL, but 0/58 have a canonical direct product URL.
-- 58/58 are `category_page_only_unverified`; the recorded links are category surfaces, not product detail pages.
-- 58/58 have a historical source price; the prices are discovery snapshots from September 2026 and are not verified live selling prices.
-- The 58 rows collapse to 55 normalized titles. Three probable duplicate groups need manual identity confirmation: 5-in-1 resistance band (2), yoga mat (2), and Roll Max 4-wheel ab roller (2).
-- 0 seller names, 0 brand values, 0 image URLs, 0 variants, 0 verified pickup locations, and 0 verified delivery/COD/returns/warranty details.
-- 0 are resale-authorized, 0 are publish-eligible, and all have unknown stock.
-- The main-project `supplier_products` mirror also has 58 rows: all 58 are `resale_status=pending`, `stock_qty=0`, and have a source URL. The matching main-project `commerce_offers` mirror has 58 Jumia rows, all `availability=unknown` and `discovery_only=true`.
-- The source registry explicitly records `resale_authorized=false`, `media_authorized=false`, and `automated_collection_authorized=false`.
+The 18 new external candidates (9 Jumia, 1 Nonsman, 8 Olubee) all remain:
+- `verification_status=DISCOVERED`
+- `page_status=search_discovered_not_fetched`
+- `stock_state=unknown`, `source_stock_qty=0`
+- `resale_status=blocked`
+- `image_rights_status=reference_only_unlicensed`
+- `publish_eligible=false`
 
-The existing source policy therefore blocks automated Jumia crawling and media reuse until written permission or an authorized API/feed and its evidence URL are recorded. Do not use Firecrawl or direct fetch to bypass this source-level authorization gate.
+Prices and ratings attached to these candidates are search/listing snapshots only. They are not current supplier quotations, live stock confirmations, or resale-price recommendations. The Edge Node registry is the only place where these 18 candidates have been staged; they have not been mirrored into the main project's customer-facing products, offers or supplier checkout records.
 
-The main project's public `catalog-public/search` implementation currently queries `commerce_offers` without excluding discovery-only rows. The 58 Jumia offers are marked `discovery_only=true`, `availability=unknown`, `stock_verified=false`, and point to category pages. The PR's main-project `catalog-public` snapshot adds an allow-list: internal offers must be enabled, available and priced; external offers additionally require verified direct product links, checkout flow, and stock evidence. Jumia discovery rows therefore stay out of public search until those gates are satisfied.
+## Jumia direct product-page candidates
 
-## Additive change in this PR
+These nine direct URLs were identified through public search/direct-page results and staged as discovery candidates:
 
-- Preserve the deployed Edge Node v6 implementation as a version-controlled source snapshot under `infra/supabase/edge-node/`, targeting the Edge Node project explicitly.
-- Add an admin-only, read-only `export_registry` action with pagination and optional `source_code` filter. It returns the complete registry row metadata for CEO/admin reconciliation.
-- Expand the existing main-project `orchestration-resoflex-commerce-intelligence` route allow-list to include only the actions already implemented by the Edge Node plus `export_registry`.
-- Preserve the main-project `catalog-public` v51 implementation with a fail-closed public-search filter for commerce offers; unverified discovery-only Jumia links are not returned to public search.
-- Add a public `collections` resource that returns only published `commerce_collection_v1` manifests and expose `fulfillment_mode` in canonical product responses.
-- Seed five review-only draft hybrid manifests: Home Gym Starter, Mobility & Yoga, Strength Evolution, Performance Gym, and Elite Creator Fitness Launch.
-- Seed a sixth hidden master manifest containing all 58 Jumia discovery candidates for admin reconciliation. It is draft-only and has no prices or checkout.
-- Jumia candidate items remain hidden-price and non-purchasable; first-party physical products are gated on inventory refresh; Elite101 USD services use a separate checkout.
-- Add a manual smoke workflow that verifies the 58-row Jumia export through the existing ChatB2K ecosystem router and, when a publishable/anon key is configured, verifies that public search excludes Jumia links while retaining first-party product results. The workflow prints only aggregate checks, not product data or secrets.
+| Product | Search price snapshot | Direct page |
+|---|---:|---|
+| Adjustable Phone Holder Stand | ₦3,000 | https://www.jumia.com.ng/generic-adjustable-phone-holder-stand-for-content-creation-netflix-388762336.html |
+| Vlogging Kit + Mic + Tripod + Holder/Ring Light | ₦7,900 | https://www.jumia.com.ng/generic-vlogging-kitvideo-maker-kit-mictripodholder-ring-light.-242260862.html |
+| Vlogging Kit + Mic + Tripod + Holder/Ring Light (second listing) | ₦7,900 | https://www.jumia.com.ng/vlogging-kitvideo-maker-kit-mictripodholder-ring-light-generic-mpg9591483.html |
+| 1PC Elastic Training Band | ₦6,450 | https://www.jumia.com.ng/generic-1pc-elastic-training-band-legs-booty-exercise-bands-fitness-resistance-band-70567031.html |
+| 3PCS Elastic Training Band Set | ₦11,295 | https://www.jumia.com.ng/generic-3pcs-elastic-training-band-straps-legs-booty-exercise-bands-yoga-fitness-resistance-band-229878674.html |
+| 11-piece Resistance Bands | ₦12,995 | https://www.jumia.com.ng/generic-11xset-resistance-bands-workout-bands-elastic-fitness-exercise-training-tubes-65769742.html |
+| 15KG Dumbbell Set with Barbell Extension | ₦31,445 | https://www.jumia.com.ng/15kg-dumbbell-set-with-barbell-extension-generic-mpg8923902.html |
+| Adjustable Jump Rope | Price omitted; seller snapshots conflict | https://www.jumia.com.ng/generic-adjustable-jump-skipping-rope-cable-for-adultskids-126444025.html |
+| 5-in-1 Resistance Exercise Band | ₦4,655 | https://www.jumia.com.ng/generic-5-in-1-resistance-exercise-bandyoga-pilates-fitness-sports-404448545.html |
 
-## Commerce boundary
+The vlogging-kit pair is a duplicate-like listing group and needs seller/SKU comparison before consolidation. The 58 original category-page rows are not replaced or falsely relabelled as direct product pages.
 
-The main ResoFit catalogue remains the authority for customer-visible products and checkout. Current `products` catalogue snapshot: 539 rows, 138 published; modes: digital 73 (25 published), hybrid 24 (22 published), physical 437 (87 published), service 5 (4 published).
+## Additional supplier product candidates
 
-Two published first-party physical products are currently in the inventory source as available: the 9.1ft adjustable jump rope (₦5,999) and the 11-piece resistance-band set (₦14,999). Each has seven 1,000-unit location rows, including Port Harcourt, Lagos, Aba, Umuahia, Ottawa, China and Jersey City. Those rows are `user_confirmed` / `ceo_confirmed_minimum` and were last updated 2026-09-16; treat them as historical user-confirmed inventory, not a live supplier stock feed or proof of pickup/delivery at every location. The main project also has 68 `commerce_offers`, including the same 58 Jumia discovery offers; all 58 Jumia offers are `availability=unknown`, `discovery_only=true`, and `stock_verified=false`. The Jumia `commerce_sources` record is enabled for discovery but is `platform_recommendation_only`, with resale/media authorization false and stock verification not connected.
+- Nonsman AY-49G Video Making Kit — search snapshot ₦7,800; supplier page last-week snapshot reported 501 units. [Direct page](https://nonsmanonline.com/product/ay-49g-video-making-kit/)
+- Olubee 12 Inches Ringlight — ₦16,000. [Direct page](https://olubeestores.com/product/12-inches-ringlight/)
+- Olubee Wireless Mic — ₦12,000–₦20,000 variants. [Direct page](https://olubeestores.com/product/wireless-mic/)
+- Olubee LED 600 + C08 Tripod + SX31 Wireless Mic — ₦95,000. [Direct page](https://olubeestores.com/product/led-600-c08-tripod-sx31-wireless-mic/)
+- Olubee 3-in-1 Wireless Mic — ₦25,000; page snapshot reported out of stock. [Direct page](https://olubeestores.com/product/3-in-1-wireless-mic/)
+- Olubee Tripod Selfie Ringlight — ₦13,500; page snapshot reported out of stock. [Direct page](https://olubeestores.com/product/tripod-selfie-ringlight/)
+- Olubee SX8 Wireless Mic — ₦25,000; older listing requires refresh. [Direct page](https://olubeestores.com/product/super-efficient-wireless-mic-sx8/)
+- Olubee Four-Mic Wireless Mic Series — ₦55,000. [Direct page](https://olubeestores.com/product/wireless-mic-4-mics-series/)
+- Olubee LED 600 RGB + C08 Tripod + K95 Wireless Mic — ₦95,000. [Direct page](https://olubeestores.com/product/led-600-rgb-c08-tripod-k95-wireless-mic/)
 
-Jumia candidates remain discovery-only. Do not copy them into the customer-facing `products` table, create a Paystack SKU, publish a product page, or place them in a purchasable bundle until all of the following are evidenced per item:
+## Registered source roots
 
-1. Direct product detail URL and exact product/variant identity.
-2. Current price/currency, seller identity, brand, SKU/GTIN where available.
-3. Live availability and quantity/stock evidence.
-4. Express resale/fulfilment authorization and evidence URL.
-5. Media rights for any reused image/video; otherwise use original ResoFit-created creative.
-6. Product-specific shipping fee/ETA, Jumia Express status, pickup locations, COD availability, returns and warranty terms.
-7. ResoFit SKU mapping and approved resale price/margin.
-8. A ResoFit-owned checkout/fulfilment contract that does not imply Jumia checkout integration or stock ownership.
+Seven additional supplier source roots are registered in the Edge Node with `integration_mode=search_discovery`. Their automated collection, resale and media authorization flags are all false:
 
-The `experience_page_registry` currently contains zero registered experience pages, so there are no canonical dynamic collection manifests/pages yet. The current `chatb2k-commerce-recommendations` v3 endpoint recommends only published first-party `products`; it does not ingest the Jumia `commerce_offers`. The existing `paystack-init` v67 accepts only published first-party product SKUs with classified fulfillment modes; physical/hybrid items require available ResoFit inventory and a delivery address. It does not create Jumia supplier checkout sessions.
+- Nonsman Online — https://nonsmanonline.com
+- Olubee Store — https://olubeestores.com
+- Wakeys Impex — https://www.wakeys.net
+- SomtelShop — https://www.somtel.com.ng
+- Simbi Props and Gadgets — https://simbiprops.com
+- Ring Light Store — https://ringlightstore.com.ng
+- Beejay Empire — https://beejayempire.com
 
-## Hybrid collection design after verification
+The local vendor leads The Gadgets Envy and Live Streaming Gadgets Ng were found as physical supplier leads but do not yet have a verified product feed or official product catalogue URL recorded in the source registry. They remain contact/qualification leads, not product-source integrations.
 
-Use one canonical collection manifest and stable product/offer IDs across `elite.resofit.fit/shop`, `shop.resofit.fit`, `store.resofit.fit`, and `resofit.fit/shop`. Keep domain routing as presentation, not separate catalogues.
+## Existing ecosystem sourcing connectors and endpoints
 
-Proposed collection families:
+- `chatb2k-sourcing-engine` v33: Gemini search with Firecrawl fallback; provider/domain classification includes Jumia, Konga, Jiji, AliExpress, Alibaba, Amazon, Etsy and registered local storefronts. It stages candidates with stock zero and resale/media authorization false unless supplier approval is recorded.
+- `firecrawl-intelligence-gateway` v27: search, scrape, map, crawl, batch scrape, extract, agent and parse actions. It requires authenticated service/admin access. It is not a bypass for source authorization.
+- `resoflex-commerce-intelligence` Edge Node v6: `health`, `export_registry`, `crawl`, `ingest_discovery`, `ingest_feed`, `record_comparison`. `ingest_discovery` is the search-candidate path. `crawl` and `ingest_feed` require an authorization evidence URL.
+- `resofit-external-discovery-processor` v13: external business/provider discovery; it is not a product-feed substitute.
+- Shopify Collective product candidate discovery was checked; the connected Collective flow does not support Nigeria as the merchant country.
 
-- **BIGO / Creator Launch:** verified physical creator equipment + Elite101 onboarding, creator profile, live-host setup and digital guides.
-- **TikTok / Short-form Studio:** lighting, phone tracking, microphones and creator workflow services.
-- **YouTube Studio:** microphone, tripod, lighting, gimbal and video-production services.
-- **ResoFlex Home Gym:** resistance bands, mats, rollers and verified weights + Reset/Meal Move/NaijaFit digital plans.
-- **ResoFlex Performance:** approved strength/cardio equipment + coaching and Fitness Evolution programme.
+## Authorization and page-validation boundary
 
-Each collection item must expose explicit `fulfillment_mode`, seller/vendor, source evidence, current price, resale price and margin policy, inventory source, delivery method, pickup eligibility, returns/warranty, payment authority, and fulfillment owner. Mixed carts must be rejected unless each line item has a supported fulfillment contract. `paystack-init` remains the only payment initializer; physical/hybrid checkout requires available ResoFit inventory and a delivery address. Do not represent Jumia Express or pickup as available until verified.
+Public search/direct-page results were used to identify URLs and capture search/listing snapshots. No source HTML was fetched by the ResoFlex Edge Node extractor in this refresh. Jumia source permissions remain `resale_authorized=false`, `media_authorized=false`, `automated_collection_authorized=false`, with no authorization evidence URL. The new supplier roots also have those flags false.
 
-## Orchestration ownership
+Do not enable crawling, copy third-party product media, set stock available, assign a resale price, publish a product, or generate a checkout offer until a supplier feed/API permission or written authorization and its evidence URL are recorded. A public page URL is not a resale agreement.
 
-- `chatb2k110`: orchestration/routing intelligence.
-- `chatb2k112`: discovery and source intelligence.
-- `chatb2k114`: commerce offers/recommendations.
-- `chatb2k118`: source ingestion.
-- `chatb2k121`: dynamic experience/page generation.
-- `chatb2k122`: commerce transaction/fulfilment.
-- `chatb2k126` and `chatb2k173`: absent from both the live `chatb2k_orchestration_nodes` table and `resofit_v12_engine_registry`; do not claim they are registered or synced until provisioned with roles, event contracts, health and heartbeat evidence.
+## Main ResoFit commerce boundary
+
+The main project's 58 existing Jumia `commerce_offers` remain discovery-only with unknown availability and unverified stock. Its 58 Jumia `supplier_products` remain resale-pending with stock quantity zero. The 18 newly staged Edge Node candidates have not been mirrored to these main-project tables.
+
+The live deployed `catalog-public/search` function v51 has not yet received this PR's new generic eligibility metadata response/filter. This PR's branch adds a fail-closed filter for discovery-only offers and requires external offers to have enabled source, available stock, a positive price, verified direct product URL, verified checkout flow and verified stock evidence. The smoke workflow validates those properties after deployment.
+
+The existing `paystack-init` remains the ResoFit first-party checkout authority. Elite101 creator services retain their separate Elite Media checkout. Do not imply that Jumia Express, pickup, COD, delivery, warranty or returns have been integrated.
+
+## Elite101 product-fit collections
+
+- **Highlight Launch Pack:** phone stand, ring light, microphone and short-form recording kit.
+- **Creator Starter:** AY-49G / AY-49 vlogging kit, tripod, phone holder and fill light.
+- **Creator Pro:** dual wireless microphones, RGB lighting, tracking tripod and gimbal.
+- **Agency Workspace / Agency Production:** higher-grade audio, lighting, tripods, teleprompter and studio accessories.
+- **ResoFlex Home Gym:** resistance bands, yoga mats, rollers and dumbbells paired with published ResoFit digital plans.
+
+These are collection merchandising mappings, not published product offers. External candidates remain unpriced in the customer-facing collection until registry evidence and fulfilment are complete.
 
 ## Release gates
 
-1. Deploy the main-project `catalog-public` function snapshot to `vbqjvmnhdtdhmeeudqnn` and verify public search no longer returns Jumia discovery offers.
-2. Apply the route allow-list migration only after reviewing the Vercel/CI checks.
-3. Deploy the Edge Node function to project `xtgteviwtoupbfvorrmk` (not the main `vbqjvmnhdtdhmeeudqnn` project).
-4. Run the manual registry smoke workflow; require exactly 58 rows and all discovery-only safety checks. Run the public-search smoke when the publishable/anon key is configured.
-5. Reconcile the individual 58 records against an authorized feed or written supplier evidence.
-6. Only then prepare customer-facing collection/page/checkout changes. Vercel preview and production readiness remain separate gates.
+1. Review and merge PR #83 only after CI and Vercel checks pass.
+2. Deploy the Edge Node function to project `xtgteviwtoupbfvorrmk` and apply the main-project route/catalog migration to `vbqjvmnhdtdhmeeudqnn`.
+3. Run the authenticated complete-registry export and generic public-search/collection smoke tests.
+4. Obtain authorized supplier feeds or written resale/collection permission for each external source.
+5. Reconcile direct page, seller, variant, current price, stock, delivery, pickup, COD, return and warranty evidence per product.
+6. Mirror only verified, approved candidates into the main ResoFit catalogue and canonical hybrid collection manifests.
+7. Publish the manifests only after checkout and fulfilment contracts are smoke-tested.
+
