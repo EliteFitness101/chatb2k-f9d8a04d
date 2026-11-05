@@ -12,6 +12,7 @@ The Edge Node contains 58 Jumia discovery rows. The registry read returned:
 - 58/58 have a source URL, but 0/58 have a canonical direct product URL.
 - 58/58 are `category_page_only_unverified`; the recorded links are category surfaces, not product detail pages.
 - 58/58 have a historical source price; the prices are discovery snapshots from September 2026 and are not verified live selling prices.
+- The 58 rows collapse to 55 normalized titles. Three probable duplicate groups need manual identity confirmation: 5-in-1 resistance band (2), yoga mat (2), and Roll Max 4-wheel ab roller (2).
 - 0 seller names, 0 brand values, 0 image URLs, 0 variants, 0 verified pickup locations, and 0 verified delivery/COD/returns/warranty details.
 - 0 are resale-authorized, 0 are publish-eligible, and all have unknown stock.
 - The source registry explicitly records `resale_authorized=false`, `media_authorized=false`, and `automated_collection_authorized=false`.
@@ -30,7 +31,7 @@ The main project's public `catalog-public/search` implementation currently queri
 
 ## Commerce boundary
 
-The main ResoFit catalogue remains the authority for customer-visible products and checkout. Current `products` catalogue snapshot: 539 rows, 138 published; modes: digital 73 (25 published), hybrid 24 (22 published), physical 437 (87 published), service 5 (4 published).
+The main ResoFit catalogue remains the authority for customer-visible products and checkout. Current `products` catalogue snapshot: 539 rows, 138 published; modes: digital 73 (25 published), hybrid 24 (22 published), physical 437 (87 published), service 5 (4 published). The main project also has 68 `commerce_offers`, including the same 58 Jumia discovery offers; all 58 Jumia offers are `availability=unknown`, `discovery_only=true`, and `stock_verified=false`. The Jumia `commerce_sources` record is enabled for discovery but is `platform_recommendation_only`, with resale/media authorization false and stock verification not connected.
 
 Jumia candidates remain discovery-only. Do not copy them into the customer-facing `products` table, create a Paystack SKU, publish a product page, or place them in a purchasable bundle until all of the following are evidenced per item:
 
@@ -42,6 +43,8 @@ Jumia candidates remain discovery-only. Do not copy them into the customer-facin
 6. Product-specific shipping fee/ETA, Jumia Express status, pickup locations, COD availability, returns and warranty terms.
 7. ResoFit SKU mapping and approved resale price/margin.
 8. A ResoFit-owned checkout/fulfilment contract that does not imply Jumia checkout integration or stock ownership.
+
+The `experience_page_registry` currently contains zero registered experience pages, so there are no canonical dynamic collection manifests/pages yet. The current `chatb2k-commerce-recommendations` v3 endpoint recommends only published first-party `products`; it does not ingest the Jumia `commerce_offers`. The existing `paystack-init` v67 accepts only published first-party product SKUs with classified fulfillment modes; physical/hybrid items require available ResoFit inventory and a delivery address. It does not create Jumia supplier checkout sessions.
 
 ## Hybrid collection design after verification
 
