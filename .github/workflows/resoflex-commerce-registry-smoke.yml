@@ -113,4 +113,33 @@ jobs:
               print("FAIL public catalogue search did not return the internal product control")
               sys.exit(1)
           print("PASS public search excludes Jumia discovery offers and retains first-party product results")
+
+          def get_json(path):
+              req = urllib.request.Request(
+                  "https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/catalog-public/" + path,
+                  headers={"apikey": key, "Authorization": "Bearer " + key, "Accept": "application/json"},
+                  method="GET",
+              )
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  return json.loads(response.read(1_000_000).decode("utf-8"))
+
+          collection_body = get_json("collections?slug=home-gym-starter")
+          collections = collection_body.get("data") or []
+          if any(page.get("status") != "published" for page in collections):
+              print("FAIL collection endpoint returned a non-published page")
+              sys.exit(1)
+          for page in collections:
+              for item in (page.get("manifest") or {}).get("items") or []:
+                  if item.get("kind") == "external_candidate":
+                      if item.get("purchase_enabled") is not False or item.get("price_visibility") != "hidden":
+                          print("FAIL published collection contains an enabled/unhidden Jumia candidate")
+                          sys.exit(1)
+          print("PASS collections endpoint exposes published manifests only and keeps Jumia candidates blocked")
+
+          product_body = get_json("product?sku=res-dig-reset")
+          product = product_body.get("data") or {}
+          if product.get("fulfillment_mode") != "digital" or float(product.get("variant_price") or 0) <= 0:
+              print("FAIL canonical product endpoint missing current digital SKU price/fulfillment")
+              sys.exit(1)
+          print("PASS canonical product endpoint returns price and fulfillment mode for first-party checkout")
           PY
