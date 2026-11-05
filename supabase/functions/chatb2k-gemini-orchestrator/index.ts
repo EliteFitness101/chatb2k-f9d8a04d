@@ -23,7 +23,7 @@ Deno.serve(async (req: Request) => {
     const upstream = await fetch(UPSTREAM, {
       method: "POST",
       headers: { Authorization: authorization, "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: body.prompt }),
+      body: JSON.stringify({ prompt: body.prompt, provider: body.provider === "openai" ? "openai" : "gemini" }),
       signal: AbortSignal.timeout(150000),
       cache: "no-store",
     });
