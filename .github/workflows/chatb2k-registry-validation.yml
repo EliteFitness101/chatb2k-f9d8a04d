@@ -26,6 +26,11 @@ jobs:
           set -euo pipefail
           node --check scripts/sync-omni-registry.mjs
           node scripts/sync-omni-registry.mjs --validate
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check Edge Function
+        run: deno check --no-lock supabase/functions/chatb2k-registry-sync/index.ts
       - name: Validate OIDC trust boundary
         run: |
           set -euo pipefail
