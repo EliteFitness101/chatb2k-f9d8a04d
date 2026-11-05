@@ -112,11 +112,10 @@ Deno.serve(async (req: Request) => {
     inserted_count: inserted,
     updated_count: updated,
     skipped_count: skipped,
-    error_count: errors + (ledgerErrorPlaceholder()),
+    error_count: errors,
     details: { run_id: runId, commit_sha: commitSha, manifest_version: cleanString(body.version, 40), binding_count: bindings.length, auth: "github_oidc", secret_values_read: false },
     completed_at: new Date().toISOString()
   });
-  function ledgerErrorPlaceholder() { return 0; }
   if (ledgerError) return reply({ ok: false, error: "sync_ledger_write_failed", inserted, updated, skipped, errors }, 500);
   return reply({ ok: errors === 0, outcome, inserted, updated, skipped, errors, run_id: runId }, errors ? 207 : 200);
 });
