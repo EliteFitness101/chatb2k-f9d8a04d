@@ -96,6 +96,18 @@ Deno.serve(async (req) => {
   if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
   try {
     const url = new URL(req.url); const parts = url.pathname.split("/").filter(Boolean); const fnIndex = parts.indexOf("catalog-public"); const routeParts = fnIndex >= 0 ? parts.slice(fnIndex + 1) : parts; const resource = routeParts[0] ?? "products";
+    if (resource === "collections") {
+      const slug = routeParts[1] ?? url.searchParams.get("slug");
+      let query = supabase.from("experience_page_registry")
+        .select("id,page_type,source_type,source_key,slug,canonical_path,template_key,status,version,manifest,seo,commerce,access,media")
+        .eq("page_type", "commerce_collection")
+        .eq("template_key", "commerce_collection_v1")
+        .eq("status", "published");
+      if (slug) query = query.eq("slug", safeTerm(slug));
+      const { data, error } = await query.order("slug", { ascending: true }).limit(100);
+      if (error) return json({ error: "collection_lookup_failed" }, 500);
+      return json({ data: data ?? [], total: (data ?? []).length }, 200, "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
+    }
     if (resource === "context") return json({ data: context(url.searchParams.get("country")) }, 200, "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400");
     if (resource === "search") return json(await searchEcosystem(url.searchParams.get("q") ?? "", Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8), 1), 12)), 200, "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
     if (resource === "assets") {
@@ -104,7 +116,7 @@ Deno.serve(async (req) => {
       if (sku) query = query.eq("sku", sku); else if (handle) query = query.eq("handle", handle);
       const { data, error } = await query; if (error) return json({ error: error.message }, 500); return json({ data: data ?? [], total: (data ?? []).length, limit, offset }, 200, "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400");
     }
-    const select = "id,sku,handle,title,vendor,product_type,tags,published,variant_price,variant_inventory_qty,image_src,body_html";
+    const select = "id,sku,handle,title,vendor,product_type,tags,published,variant_price,variant_inventory_qty,fulfillment_mode,image_src,body_html";
     const base = supabase.from("products").select(select).eq("published", true).not("sku", "is", null);
     if (resource === "product") { const key = routeParts[1] ?? url.searchParams.get("sku") ?? url.searchParams.get("handle"); if (!key) return json({ error: "sku or handle is required" }, 400); const { data, error } = await base.or("sku.eq." + key + ",handle.eq." + key).maybeSingle(); if (error) return json({ error: error.message }, 500); if (!data) return json({ error: "Not found" }, 404); return json({ data }); }
     if (resource === "recommendations") { const intent = url.searchParams.get("intent") ?? url.searchParams.get("goal") ?? url.searchParams.get("category") ?? ""; const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 6), 1), 20); const { data, error } = await base.limit(100); if (error) return json({ error: error.message }, 500); const ranked = (data ?? []).map((p: any) => ({ ...p, recommendation_score: scoreProduct(p, intent) })).sort((a: any, b: any) => b.recommendation_score - a.recommendation_score || Number(b.variant_inventory_qty ?? 0) - Number(a.variant_inventory_qty ?? 0)).slice(0, limit); return json({ data: ranked, intent }); }
