@@ -13,7 +13,8 @@ const cors = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Expose-Headers": "Mcp-Session-Id, Mcp-Protocol-Version",
   "Cache-Control": "no-store",
-  "Content-Type": "application/json",\n  "Mcp-Protocol-Version": PROTOCOL_VERSION,
+  "Content-Type": "application/json","
+  "Mcp-Protocol-Version": PROTOCOL_VERSION,
 };
 
 type Actor = { id: string; email: string; roles: string[] };
