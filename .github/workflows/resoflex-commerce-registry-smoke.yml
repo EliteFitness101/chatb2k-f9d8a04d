@@ -58,12 +58,14 @@ jobs:
           page = result.get("page") or {}
           records = result.get("records") or []
           checks = {
-              "expected_58_rows": page.get("total") == 58 and len(records) == 58,
+              "complete_export_page": bool(records) and page.get("total") == len(records) and page.get("has_more") is False,
               "all_rows_have_source_url": all(bool(x.get("product_url")) for x in records),
-              "no_unapproved_resale": all(x.get("resale_status") != "authorized" for x in records),
+              "no_resale_authorized": all(x.get("resale_status") != "authorized" for x in records),
               "none_publishable": all(x.get("publish_eligible") is False for x in records),
-              "all_direct_pages_unverified": all(x.get("page_status") == "category_page_only_unverified" for x in records),
-              "no_canonical_product_urls": all(not x.get("canonical_product_url") for x in records),
+              "all_rows_remain_discovery_only": all(x.get("page_status") in {"category_page_only_unverified", "search_discovered_not_fetched"} and x.get("verification_status") in {"candidate", "DISCOVERED"} for x in records),
+              "no_inventory_promises": all(x.get("stock_state") == "unknown" and int(x.get("source_stock_qty") or 0) == 0 for x in records),
+              "direct_candidates_have_product_urls": all(bool(x.get("canonical_product_url")) and x.get("canonical_product_url") == x.get("product_url") for x in records if x.get("page_status") == "search_discovered_not_fetched"),
+              "category_candidates_have_no_canonical_product_url": all(not x.get("canonical_product_url") for x in records if x.get("page_status") == "category_page_only_unverified"),
           }
           for name, passed in checks.items():
               print(("PASS" if passed else "FAIL") + " " + name)
@@ -110,9 +112,21 @@ jobs:
               print(f"FAIL public catalogue search exposed {len(jumia_links)} Jumia link(s)")
               sys.exit(1)
           if not any(item.get("type") == "product" for item in results):
-              print("FAIL public catalogue search did not return the internal product control")
+              print("FAIL public catalogue search did not return the first-party product control")
               sys.exit(1)
-          print("PASS public search excludes Jumia discovery offers and retains first-party product results")
+          for item in results:
+              metadata = item.get("metadata") or {}
+              if item.get("type") == "offer" and metadata.get("checkout_mode") == "external":
+                  required = (
+                      metadata.get("external_checkout_enabled") is True
+                      and metadata.get("checkout_flow_verified") is True
+                      and metadata.get("direct_product_url_verified") is True
+                      and metadata.get("stock_verified") is True
+                  )
+                  if not required:
+                      print("FAIL public catalogue search exposed an external offer without all registry evidence")
+                      sys.exit(1)
+          print("PASS public search returns first-party products and only evidence-complete external offers")
 
           def get_json(path):
               req = urllib.request.Request(
@@ -131,10 +145,21 @@ jobs:
           for page in collections:
               for item in (page.get("manifest") or {}).get("items") or []:
                   if item.get("kind") == "external_candidate":
-                      if item.get("purchase_enabled") is not False or item.get("price_visibility") != "hidden":
-                          print("FAIL published collection contains an enabled/unhidden Jumia candidate")
+                      page_verified = item.get("source_page_verified") is True
+                      checkout_ready = (
+                          page_verified
+                          and item.get("external_checkout_enabled") is True
+                          and item.get("resale_authorized") is True
+                          and item.get("fulfillment_ready") is True
+                          and bool(item.get("source_product_url") or item.get("href"))
+                      )
+                      if item.get("purchase_enabled") is True and not checkout_ready:
+                          print("FAIL external candidate enabled without verified source, resale and fulfilment evidence")
                           sys.exit(1)
-          print("PASS collections endpoint exposes published manifests only and keeps Jumia candidates blocked")
+                      if item.get("external_checkout_enabled") is True and not checkout_ready:
+                          print("FAIL external checkout enabled without verified source and fulfilment evidence")
+                          sys.exit(1)
+          print("PASS collections endpoint exposes published manifests and enforces registry-driven external offer eligibility")
 
           product_body = get_json("product?sku=res-dig-reset")
           product = product_body.get("data") or {}
