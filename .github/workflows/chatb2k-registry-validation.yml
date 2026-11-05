@@ -39,4 +39,5 @@ jobs:
           grep -q 'workflow_ref !== WORKFLOW_REF' supabase/functions/chatb2k-registry-sync/index.ts
           grep -q 'claims.repository !== REPOSITORY' supabase/functions/chatb2k-registry-sync/index.ts
           grep -q 'claims.ref !== BRANCH_REF' supabase/functions/chatb2k-registry-sync/index.ts
+          grep -q 'supabase_cron' supabase/functions/chatb2k-registry-sync/index.ts
           ! grep -Eq 'AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,}' config/omni-credential-registry.json

@@ -55,7 +55,7 @@ Deno.serve(async (req: Request) => {
   const runId = String(claims.run_id || crypto.randomUUID());
   const commitSha = cleanString(claims.sha, 80) || "unknown";
   let inserted = 0, updated = 0, skipped = 0, errors = 0;
-  const allowedTypes = new Set(["github_actions", "supabase_edge_node", "supabase_edge_function", "chatb2k_orchestration_registry"]);
+  const allowedTypes = new Set(["github_actions", "supabase_edge_node", "supabase_edge_function", "supabase_cron", "chatb2k_orchestration_registry"]);
 
   for (const item of bindings) {
     const row = item as Record<string, unknown>;
