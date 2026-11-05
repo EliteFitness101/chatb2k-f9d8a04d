@@ -34,4 +34,4 @@ jobs:
         run: deno check --config infra/supabase/main/functions/catalog-public/deno.json infra/supabase/main/functions/catalog-public/index.ts
 
       - name: Type-check ChatB2K hybrid commerce recommendations
-        run: deno check supabase/functions/chatb2k-commerce-recommendations/index.ts
+        run: deno check --config supabase/functions/chatb2k-commerce-recommendations/deno.json supabase/functions/chatb2k-commerce-recommendations/index.ts
