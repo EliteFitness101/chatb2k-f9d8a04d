@@ -16,6 +16,7 @@ Deno.serve(async (req: Request) => {
   const authorization = req.headers.get("authorization") ?? "";
   if (!/^Bearer\s+.+/i.test(authorization)) return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
   const body = await req.json().catch(() => null);
+  if (body?.provider === "openai") return json({ ok: false, error: "OPENAI_PROVIDER_NOT_DEPLOYED_IN_PRODUCTION_VERCEL_ROUTE" }, 503);
   if (!body || typeof body.prompt !== "string" || !body.prompt.trim() || body.prompt.length > 12000) {
     return json({ ok: false, error: "PROMPT_REQUIRED_MAX_12000_CHARS" }, 400);
   }
