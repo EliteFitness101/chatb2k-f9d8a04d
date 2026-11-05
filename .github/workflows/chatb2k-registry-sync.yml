@@ -1,0 +1,38 @@
+name: ChatB2K Omni Registry Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/omni-credential-registry.json'
+      - 'scripts/sync-omni-registry.mjs'
+      - '.github/workflows/chatb2k-registry-sync.yml'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: chatb2k-omni-registry-sync
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate registry manifest
+        run: node --check scripts/sync-omni-registry.mjs && node scripts/sync-omni-registry.mjs --validate
+      - name: Reconcile infrastructure manifest using GitHub OIDC
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+          SUPABASE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co
+        run: node scripts/sync-omni-registry.mjs
