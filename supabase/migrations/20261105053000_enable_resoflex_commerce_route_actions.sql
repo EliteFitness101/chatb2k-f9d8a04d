@@ -118,3 +118,69 @@ WHERE ci.total=58
     SELECT 1 FROM public.experience_page_registry e
     WHERE e.source_type='commerce' AND e.source_key='jumia:discovery:58'
   );
+
+
+-- Attach the new Edge Node candidate IDs to the relevant draft hybrid collections.
+-- These are references only: the public collection endpoint resolves eligibility from
+-- the main commerce registry at request time; no price, stock or purchase flag is seeded.
+WITH additions(slug,items) AS (
+  SELECT 'home-gym-starter', jsonb_build_array(
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','10f3f4f9-a869-49c1-b7ae-b68b8bca6fbe','title','Generic 1PC Elastic Training Band Legs Booty Exercise Bands Fitness Resistance Band','source_product_url','https://www.jumia.com.ng/generic-1pc-elastic-training-band-legs-booty-exercise-bands-fitness-resistance-band-70567031.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','e7114107-c9e9-48c9-b1ce-3610c702b742','title','Generic 3PCS Elastic Training Band Straps Legs Booty Exercise Bands / Yoga Fitness Resistance Band','source_product_url','https://www.jumia.com.ng/generic-3pcs-elastic-training-band-straps-legs-booty-exercise-bands-yoga-fitness-resistance-band-229878674.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','b6d3acbd-f3c4-4080-9323-f2b13c918c7a','title','Generic 11x Set Resistance Bands Workout Bands Elastic Fitness Exercise Training Tubes','source_product_url','https://www.jumia.com.ng/generic-11xset-resistance-bands-workout-bands-elastic-fitness-exercise-training-tubes-65769742.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','f6b89f06-79c2-4657-b0d5-89a32e58dc8a','title','Generic Adjustable Jump Skipping Rope Cable For Adults/Kids','source_product_url','https://www.jumia.com.ng/generic-adjustable-jump-skipping-rope-cable-for-adultskids-126444025.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','3c023248-2e05-471e-9bc5-9561cf2677c0','title','Generic 5 In 1 Resistance Exercise Band Yoga Pilates Fitness Sports','source_product_url','https://www.jumia.com.ng/generic-5-in-1-resistance-exercise-bandyoga-pilates-fitness-sports-404448545.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','e51aa0d4-ca40-4f9d-8855-00f94b62a8fa','title','Generic Well Built 15KG Dumbbell Set With Barbell Extension','source_product_url','https://www.jumia.com.ng/15kg-dumbbell-set-with-barbell-extension-generic-mpg8923902.html','fulfillment_mode','physical')
+  )
+  UNION ALL
+  SELECT 'mobility-yoga', jsonb_build_array(
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','e7114107-c9e9-48c9-b1ce-3610c702b742','title','Generic 3PCS Elastic Training Band Straps Legs Booty Exercise Bands / Yoga Fitness Resistance Band','source_product_url','https://www.jumia.com.ng/generic-3pcs-elastic-training-band-straps-legs-booty-exercise-bands-yoga-fitness-resistance-band-229878674.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','b6d3acbd-f3c4-4080-9323-f2b13c918c7a','title','Generic 11x Set Resistance Bands Workout Bands Elastic Fitness Exercise Training Tubes','source_product_url','https://www.jumia.com.ng/generic-11xset-resistance-bands-workout-bands-elastic-fitness-exercise-training-tubes-65769742.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','3c023248-2e05-471e-9bc5-9561cf2677c0','title','Generic 5 In 1 Resistance Exercise Band Yoga Pilates Fitness Sports','source_product_url','https://www.jumia.com.ng/generic-5-in-1-resistance-exercise-bandyoga-pilates-fitness-sports-404448545.html','fulfillment_mode','physical')
+  )
+  UNION ALL
+  SELECT 'strength-evolution', jsonb_build_array(
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','e51aa0d4-ca40-4f9d-8855-00f94b62a8fa','title','Generic Well Built 15KG Dumbbell Set With Barbell Extension','source_product_url','https://www.jumia.com.ng/15kg-dumbbell-set-with-barbell-extension-generic-mpg8923902.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','b6d3acbd-f3c4-4080-9323-f2b13c918c7a','title','Generic 11x Set Resistance Bands Workout Bands Elastic Fitness Exercise Training Tubes','source_product_url','https://www.jumia.com.ng/generic-11xset-resistance-bands-workout-bands-elastic-fitness-exercise-training-tubes-65769742.html','fulfillment_mode','physical')
+  )
+  UNION ALL
+  SELECT 'performance-gym', jsonb_build_array(
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','e51aa0d4-ca40-4f9d-8855-00f94b62a8fa','title','Generic Well Built 15KG Dumbbell Set With Barbell Extension','source_product_url','https://www.jumia.com.ng/15kg-dumbbell-set-with-barbell-extension-generic-mpg8923902.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','f6b89f06-79c2-4657-b0d5-89a32e58dc8a','title','Generic Adjustable Jump Skipping Rope Cable For Adults/Kids','source_product_url','https://www.jumia.com.ng/generic-adjustable-jump-skipping-rope-cable-for-adultskids-126444025.html','fulfillment_mode','physical')
+  )
+  UNION ALL
+  SELECT 'elite-creator-fitness', jsonb_build_array(
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','e91e26f0-6707-42bd-8f84-0b9ea4e77ea8','title','Adjustable Phone Holder Stand For Content Creation, Netflix','source_product_url','https://www.jumia.com.ng/generic-adjustable-phone-holder-stand-for-content-creation-netflix-388762336.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','a8767c11-81d6-40d8-addd-bda971ccbfc0','title','Vlogging Kit/Video Maker Kit + Mic + Tripod + Holder / Ring Light','source_product_url','https://www.jumia.com.ng/vlogging-kitvideo-maker-kit-mictripodholder-ring-light-generic-mpg9591483.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','JUMIA_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','a6b1da54-bbce-44e7-94ce-899a62385aeb','title','Vlogging Kit/Video Maker Kit + Mic + Tripod + Holder / Ring Light','source_product_url','https://www.jumia.com.ng/generic-vlogging-kitvideo-maker-kit-mictripodholder-ring-light.-242260862.html','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','NONSMAN_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','6c0328cc-169a-4365-9763-64f99759c2bb','title','AY-49G Video Making Kit','source_product_url','https://nonsmanonline.com/product/ay-49g-video-making-kit/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','f82abb99-83b1-47af-90ce-e6d8e617883a','title','12 Inches Ringlight','source_product_url','https://olubeestores.com/product/12-inches-ringlight/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','c5ba6083-7cbe-4876-a6a6-80d5542250c1','title','Wireless Mic','source_product_url','https://olubeestores.com/product/wireless-mic/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','5d95e8aa-54ea-4892-ba06-af1da5c45706','title','3 in 1 Wireless Mic','source_product_url','https://olubeestores.com/product/3-in-1-wireless-mic/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','e95a3818-0a7c-4f0f-bfef-8d58b8216f32','title','Led 600 + C08 Tripod + SX31 Wireless Mic','source_product_url','https://olubeestores.com/product/led-600-c08-tripod-sx31-wireless-mic/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','74c9c455-d07e-42e9-ac21-1bbbdcd2d2a5','title','Led 600 RGB + C08 Tripod + K95 Wireless Mic','source_product_url','https://olubeestores.com/product/led-600-rgb-c08-tripod-k95-wireless-mic/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','58b789db-c313-4f47-bd93-02e644a89f65','title','Super Efficient Wireless Mic 4 Mics Series','source_product_url','https://olubeestores.com/product/wireless-mic-4-mics-series/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','056b1b1f-2fd1-46d1-b3f4-85d8beceb9e0','title','Super Efficient Wireless Mic SX8','source_product_url','https://olubeestores.com/product/super-efficient-wireless-mic-sx8/','fulfillment_mode','physical'),
+    jsonb_build_object('kind','external_candidate','source_code','OLUBEE_STORE_NG','registry_project_ref','xtgteviwtoupbfvorrmk','registry_product_id','c9d2a215-78b6-430c-880d-fa2e71c797ff','title','Tripod Selfie Ringlight','source_product_url','https://olubeestores.com/product/tripod-selfie-ringlight/','fulfillment_mode','physical')
+  )
+)
+UPDATE public.experience_page_registry e
+SET manifest = jsonb_set(
+      e.manifest,
+      '{items}',
+      COALESCE(e.manifest->'items','[]'::jsonb) || additions.items,
+      true
+    ),
+    version = e.version + 1,
+    updated_at = now()
+FROM additions
+WHERE e.page_type='commerce_collection'
+  AND e.source_type='commerce'
+  AND e.slug=additions.slug
+  AND e.status='draft'
+  AND NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(COALESCE(e.manifest->'items','[]'::jsonb)) existing
+    WHERE existing->>'registry_product_id' IN (
+      SELECT jsonb_array_elements(additions.items)->>'registry_product_id'
+    )
+  );
