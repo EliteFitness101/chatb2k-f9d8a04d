@@ -12,6 +12,7 @@ const ALLOWED_EVENT_TYPES = new Set([
   "pull_request",
   "pull_request_review",
   "pull_request_review_comment",
+  "pull_request_review_thread",
   "issues",
   "issue_comment",
   "check_run",
@@ -25,10 +26,12 @@ const ALLOWED_EVENT_TYPES = new Set([
   "fork",
   "label",
   "milestone",
+  "repository",
   "release",
   "repository_dispatch",
   "workflow_run",
   "workflow_job",
+  "sub_issues",
 ]);
 
 function unauthorized() {
