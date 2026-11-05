@@ -34,6 +34,8 @@ The main project's public `catalog-public/search` implementation currently queri
 - Add an admin-only, read-only `export_registry` action with pagination and optional `source_code` filter. It returns the complete registry row metadata for CEO/admin reconciliation.
 - Expand the existing main-project `orchestration-resoflex-commerce-intelligence` route allow-list to include only the actions already implemented by the Edge Node plus `export_registry`.
 - Preserve the main-project `catalog-public` v51 implementation with a fail-closed public-search filter for commerce offers; unverified discovery-only Jumia links are not returned to public search.
+- Add a public `collections` resource that returns only published `commerce_collection_v1` manifests and expose `fulfillment_mode` in canonical product responses.
+- Seed five review-only draft hybrid manifests: Home Gym Starter, Mobility & Yoga, Strength Evolution, Performance Gym, and Elite Creator Fitness Launch. Jumia candidate items remain hidden-price and non-purchasable; first-party physical products are gated on inventory refresh; Elite101 USD services use a separate checkout.
 - Add a manual smoke workflow that verifies the 58-row Jumia export through the existing ChatB2K ecosystem router and, when a publishable/anon key is configured, verifies that public search excludes Jumia links while retaining first-party product results. The workflow prints only aggregate checks, not product data or secrets.
 
 ## Commerce boundary
