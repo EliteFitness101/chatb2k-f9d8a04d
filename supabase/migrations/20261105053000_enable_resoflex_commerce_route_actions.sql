@@ -65,3 +65,56 @@ WHERE NOT EXISTS (
   SELECT 1 FROM public.experience_page_registry e
   WHERE e.source_type=c.source_type AND e.source_key=c.source_key
 );
+
+
+-- Keep a single hidden admin/reconciliation manifest for all 58 Jumia candidates.
+-- Prices are intentionally omitted: all offer rows are discovery-only and unverified.
+WITH candidate_items AS (
+  SELECT
+    count(*) AS total,
+    jsonb_agg(
+      jsonb_build_object(
+        'kind','external_candidate',
+        'source_code','JUMIA_NG',
+        'source_offer_id',co.id,
+        'external_product_id',co.external_id,
+        'title',co.title,
+        'status','blocked_unverified',
+        'purchase_enabled',false,
+        'price_visibility','hidden',
+        'fulfillment_mode','physical',
+        'direct_product_url_verified',false,
+        'stock_verified',false,
+        'source_category_url',co.external_url
+      ) ORDER BY co.title
+    ) AS items
+  FROM public.commerce_offers co
+  JOIN public.commerce_sources cs ON cs.id=co.source_id
+  WHERE cs.name='Jumia Nigeria'
+    AND co.metadata->>'discovery_only'='true'
+)
+INSERT INTO public.experience_page_registry
+  (page_type,source_type,source_key,slug,canonical_path,template_key,status,version,manifest,seo,commerce,booking,access,media)
+SELECT
+  'commerce_collection','commerce','jumia:discovery:58','jumia-discovery-58',
+  '/shop/collection/jumia-discovery-58','commerce_collection_v1','draft',1,
+  jsonb_build_object(
+    'title','Jumia Nigeria — 58 Discovery Candidates',
+    'description','Admin reconciliation manifest for 58 Jumia physical-product candidates. No direct product pages, live stock, resale rights or checkout eligibility are asserted.',
+    'collection_type','supplier_discovery',
+    'source_code','JUMIA_NG',
+    'candidate_count',ci.total,
+    'items',coalesce(ci.items,'[]'::jsonb),
+    'checkout',jsonb_build_object('external_candidate_purchase_enabled',false,'checkout_authority','none')
+  ),
+  jsonb_build_object('title','Jumia Discovery Reconciliation — ResoFit','description','Internal supplier discovery evidence; not a public product catalogue.'),
+  jsonb_build_object('external_items_allowed',false,'checkout_authority','none'),
+  '{}'::jsonb,
+  jsonb_build_object('visibility','draft_admin_reconciliation_only'),
+  '{}'::jsonb
+FROM candidate_items ci
+WHERE ci.total=58
+  AND NOT EXISTS (
+    SELECT 1 FROM public.experience_page_registry e
+    WHERE e.source_type='commerce' AND e.source_key='jumia:discovery:58'
+  );
