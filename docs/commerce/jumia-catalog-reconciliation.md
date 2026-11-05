@@ -7,7 +7,7 @@
 
 ## Current Edge Node registry
 
-The registry now contains 592 commerce records across 9 registered source roots:
+The registry now contains 601 commerce records across 9 registered source roots:
 
 | Source | Records | Category-only | Search-discovered product candidates | Publish eligible |
 |---|---:|---:|---:|---:|
