@@ -13,7 +13,7 @@ const cors = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Expose-Headers": "Mcp-Session-Id, Mcp-Protocol-Version",
   "Cache-Control": "no-store",
-  "Content-Type": "application/json",
+  "Content-Type": "application/json",\n  "Mcp-Protocol-Version": PROTOCOL_VERSION,
 };
 
 type Actor = { id: string; email: string; roles: string[] };
@@ -38,18 +38,47 @@ function rpc(id: unknown, result: unknown) {
 function rpcError(id: unknown, code: number, message: string, data?: unknown) {
   return response({ jsonrpc: "2.0", id, error: { code, message, ...(data === undefined ? {} : { data }) } }, 200);
 }
+function decodeBase64Url(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
+  return Uint8Array.from(binary, c => c.charCodeAt(0));
+}
 async function authenticate(req: Request): Promise<Actor | null> {
-  const token = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+  const token = req.headers.get("authorization")?.match(/^Bearer[ \t]+(.+)$/i)?.[1] ?? "";
   if (!token || !SERVICE_KEY) return null;
-  const { data, error } = await db.auth.getUser(token);
-  if (error || !data.user) return null;
-  const email = String(data.user.email ?? "").toLowerCase();
-  const { data: roleRows } = await db.from("user_roles").select("role").eq("user_id", data.user.id);
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  let claims: Record<string, unknown>;
+  try { claims = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1]))); } catch { return null; }
+  const now = Math.floor(Date.now() / 1000);
+  const iat = Number(claims.iat ?? 0), exp = Number(claims.exp ?? 0);
+  if (claims.aud !== "chatb2k-mcp" || claims.scope !== "chatb2k:mcp" ||
+      !iat || exp <= now || exp - iat > 300 || iat > now + 30) return null;
+  try {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+    const valid = await crypto.subtle.verify("HMAC", key, decodeBase64Url(parts[2]), new TextEncoder().encode(parts[0] + "." + parts[1]));
+    if (!valid) return null;
+  } catch { return null; }
+  const id = String(claims.sub ?? "");
+  const email = String(claims.email ?? "").toLowerCase();
+  if (!id || !email) return null;
+  const { data: roleRows, error } = await db.from("user_roles").select("role").eq("user_id", id);
+  if (error) return null;
   const roles = (roleRows ?? []).map((r: { role: string }) => String(r.role ?? "").toLowerCase());
   const isPrivileged = email === "ceo@resofit.fit" ||
     email === "resonancefitnesswork@gmail.com" ||
     roles.some((r: string) => ["admin", "super_admin"].includes(r));
-  return isPrivileged ? { id: data.user.id, email, roles } : null;
+  return isPrivileged ? { id, email, roles } : null;
+}
+async function auditTool(actor: Actor, toolName: string, requestId: string, outcome: string, httpStatus: number) {
+  try {
+    await db.from("admin_audit_logs").insert({
+      user_id: actor.id,
+      action: "chatb2k_mcp_tool_call",
+      resource: toolName,
+      metadata: { endpoint: "chatb2k-mcp", actor_email: actor.email, request_id: requestId, outcome, http_status: httpStatus },
+    });
+  } catch (e) { console.error("mcp_audit_failed", String(e)); }
 }
 async function controlPlane(actorToken: string, action: string, payload: Record<string, unknown> = {}) {
   const r = await fetch(CONTROL_URL, {
@@ -75,7 +104,7 @@ async function gateway(payload: Record<string, unknown>) {
   try { data = JSON.parse(raw); } catch { data = { response_excerpt: raw.slice(0, 1000) }; }
   return { http_status: r.status, ok: r.ok, data };
 }
-async function runTool(name: string, args: Record<string, unknown>, token: string) {
+async function runTool(name: string, args: Record<string, unknown>, actor: Actor) {
   const controlActions: Record<string, string> = {
     ecosystem_status: "status",
     ecosystem_inventory: "inventory",
@@ -84,11 +113,25 @@ async function runTool(name: string, args: Record<string, unknown>, token: strin
     ecosystem_secret_inventory: "secret_inventory",
     ecosystem_sync_snapshot: "sync_state",
   };
-  if (controlActions[name]) return await controlPlane(token, controlActions[name]);
+  if (controlActions[name]) return await controlPlane(SERVICE_KEY, controlActions[name]);
   if (name === "ecosystem_propose_function") {
-    return await controlPlane(token, "propose_function", {
-      slug: args.slug, purpose: args.purpose, integrations: args.integrations ?? [],
+    const slug = String(args.slug ?? "").trim().toLowerCase();
+    const purpose = String(args.purpose ?? "").trim();
+    if (!/^[a-z][a-z0-9-]{2,62}$/.test(slug) || !purpose) throw new Error("VALID_SLUG_AND_PURPOSE_REQUIRED");
+    const integrations = Array.isArray(args.integrations) ? args.integrations.filter((x: unknown) => typeof x === "string").slice(0, 30) : [];
+    const now = new Date().toISOString();
+    const report = { kind: "function_scaffold_request", slug, purpose: purpose.slice(0, 2000), requested_by: actor.email, requester_user_id: actor.id, integrations, deployment_policy: "persisted proposal only; code generation, CI, security review and deployment must be separately verified", idempotency_key: "function-scaffold:" + slug, created_at: now };
+    const { data: run, error } = await db.from("chatb2k_automation_runs").insert({
+      run_key: "mcp-function-scaffold:" + slug + ":" + crypto.randomUUID(),
+      engine: "chatb2k-mcp", status: "proposed", completed_at: now,
+      counts: { integrations: integrations.length }, report,
+    }).select("id,run_key,status,started_at,completed_at").single();
+    if (error) throw new Error("FUNCTION_PROPOSAL_PERSIST_FAILED");
+    const { error: auditError } = await db.from("admin_audit_logs").insert({
+      user_id: actor.id, action: "function_scaffold_proposed", resource: slug,
+      metadata: { endpoint: "chatb2k-mcp", actor_email: actor.email, run_id: run.id, purpose: purpose.slice(0, 300) },
     });
+    return { ok: true, persisted: true, proposal: report, run, audit_recorded: !auditError, note: "Proposal only; no code generation, deployment or execution occurred." };
   }
   if (name === "agent_tool_list") {
     return await gateway({ action: "list_tools", agent_id: args.agent_id });
@@ -106,7 +149,6 @@ Deno.serve(async (req: Request) => {
   const actor = await authenticate(req);
   if (!actor) return response({ error: "ADMIN_SESSION_REQUIRED" }, 401);
 
-  const token = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
   const body = await req.json().catch(() => null);
   if (!body || (Array.isArray(body) ? body.length > 20 : typeof body !== "object")) return response({ error: "INVALID_JSON_RPC" }, 400);
   const messages = Array.isArray(body) ? body : [body];
@@ -146,7 +188,10 @@ Deno.serve(async (req: Request) => {
         continue;
       }
       try {
-        const result = await runTool(name, args, token);
+        const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
+        const result = await runTool(name, args, actor);
+        const httpStatus = Number((result as { http_status?: number }).http_status ?? 200);
+        await auditTool(actor, name, requestId, httpStatus < 400 ? "success" : "provider_error", httpStatus);
         const serialized = JSON.stringify(result);
         replies.push({ jsonrpc: "2.0", id, result: {
           content: [{ type: "text", text: serialized.slice(0, 18000) }],
@@ -154,6 +199,7 @@ Deno.serve(async (req: Request) => {
           isError: (result as { ok?: boolean }).ok === false,
         }});
       } catch (e) {
+        await auditTool(actor, name, req.headers.get("x-request-id") || crypto.randomUUID(), "error", 500);
         replies.push({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: e instanceof Error ? e.message : "TOOL_EXECUTION_FAILED" }) }], isError: true } });
       }
       continue;
