@@ -149,7 +149,6 @@ Deno.serve(async (req: Request) => {
   const actor = await authenticate(req);
   if (!actor) return response({ error: "ADMIN_SESSION_REQUIRED" }, 401);
 
-  const token = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
   const body = await req.json().catch(() => null);
   if (!body || (Array.isArray(body) ? body.length > 20 : typeof body !== "object")) return response({ error: "INVALID_JSON_RPC" }, 400);
   const messages = Array.isArray(body) ? body : [body];
