@@ -170,7 +170,17 @@ Deno.serve(async (req) => {
             const parsed = new URL(String(rawUrl));
             if (parsed.protocol === "https:") sourceUrl = parsed.toString();
           } catch { /* An invalid supplier URL is not rendered as a link. */ }
-          const sourcePageVerified = Boolean(sourceUrl) && offerMeta.direct_product_url_verified === true;
+          // A supplier listing link is a discovery/referral surface, not a ResoFit resale offer.
+          // It may be enabled by explicit page-identity evidence stored in the admin-managed
+          // manifest even before a cross-project commerce_offers mirror exists.
+          const manifestPageEvidence = item.source_page_evidence && typeof item.source_page_evidence === "object"
+            ? item.source_page_evidence : {};
+          const sourcePageVerified = Boolean(sourceUrl) && (
+            offerMeta.direct_product_url_verified === true
+            || (item.source_page_verified === true
+              && manifestPageEvidence.method === "web_page_identity_review"
+              && manifestPageEvidence.product_url === sourceUrl)
+          );
           const externalCheckoutEnabled = source?.enabled === true
             && source.checkout_mode === "external"
             && sourceMeta.external_checkout_enabled === true
@@ -185,8 +195,8 @@ Deno.serve(async (req) => {
             && fulfillmentReady
             && Number(offer?.price) > 0;
           const reasons = [
-            !sourcePageVerified ? "direct product page not verified" : "",
-            !externalCheckoutEnabled ? "supplier checkout flow not verified" : "",
+            !sourcePageVerified ? "direct supplier product page identity not verified" : "",
+            !externalCheckoutEnabled ? "ResoFit-managed supplier checkout contract not verified" : "",
             !resaleAuthorized ? "resale authorization not recorded" : "",
             !fulfillmentReady ? "live stock and fulfilment evidence not verified" : ""
           ].filter(Boolean);
@@ -194,12 +204,14 @@ Deno.serve(async (req) => {
             ...item,
             source_product_url: sourceUrl || null,
             source_page_verified: sourcePageVerified,
+            source_listing_link_enabled: sourcePageVerified,
+            source_listing_mode: sourcePageVerified ? "supplier_direct_listing_only" : "review_pending",
             external_checkout_enabled: externalCheckoutEnabled,
             resale_authorized: resaleAuthorized,
             fulfillment_ready: fulfillmentReady,
             purchase_enabled: purchaseEnabled,
             price_visibility: purchaseEnabled ? "visible" : "hidden",
-            status_label: purchaseEnabled ? "Supplier offer verified" : "Supplier review pending",
+            status_label: purchaseEnabled ? "Supplier offer verified" : sourcePageVerified ? "Verified supplier listing · direct supplier purchase only" : "Supplier review pending",
             block_reason: purchaseEnabled ? null : reasons.join("; ")
           };
         }) : [];
