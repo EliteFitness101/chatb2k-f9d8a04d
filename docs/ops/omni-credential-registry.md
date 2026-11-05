@@ -20,7 +20,7 @@ A configured node is not proof of a live worker. Runtime status is preserved sep
 
 ## Supabase Cron inventory
 
-The manifest includes the 32 active Supabase Cron jobs, their schedules, linked Edge Function slugs where present, assigned orchestration node, and recent scheduler evidence. A `runtime_verified` cron status means the scheduler has successfully executed recently; it does not prove that a downstream worker produced an asset or completed a business action. The active `elite-host-lifecycle-sweep-v2` job is currently blocked by a SQL error: its command references the missing `first_live_at` column. That failure is recorded, not hidden or auto-disabled.
+The manifest includes the 32 active Supabase Cron jobs, their schedules, linked Edge Function slugs where present, and assigned orchestration node. Live scheduler evidence remains in the database and is preserved separately from static manifest metadata. A `runtime_verified` cron status means the scheduler has successfully executed recently; it does not prove that a downstream worker produced an asset or completed a business action. The active `elite-host-lifecycle-sweep-v2` job is currently blocked by a SQL error: its command references the missing `first_live_at` column. That failure is recorded, not hidden or auto-disabled.
 
 ## Credential separation
 
@@ -39,7 +39,7 @@ Secret values and key identity were not inspected. Identical environment names a
 
 `.github/workflows/chatb2k-registry-sync.yml` runs on a 15-minute schedule, manifest changes and manual dispatch. It obtains a short-lived GitHub OIDC token with audience `chatb2k-registry-sync`. The main-project Edge Function validates issuer, audience, repository, branch and exact workflow reference before reconciling `chatb2k_infrastructure_bindings`.
 
-No Supabase service-role key is stored in GitHub Actions for this sync. The Edge Function uses its own server-side service-role environment. Existing runtime statuses and last-verified timestamps are preserved; the sync only updates declared infrastructure metadata.
+No Supabase service-role key is stored in GitHub Actions for this sync. Each run first verifies that an unauthenticated POST is rejected with HTTP 401, then uses its short-lived OIDC token for the authorized reconciliation. The Edge Function uses its own server-side service-role environment. Existing runtime statuses and last-verified timestamps are preserved; the sync only updates declared infrastructure metadata.
 
 ## Verification boundary
 
