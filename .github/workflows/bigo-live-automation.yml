@@ -1,7 +1,7 @@
 
-name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
+name: BIGO Live -> R2 primary -> ChatB2K -> Buffer/Dropbox/Drive
 run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
-# Production capture workflow — Dropbox is canonical media storage; ChatB2K ingests verified Dropbox URLs for enrichment, Buffer, and Drive archive.
+# Production capture workflow — R2 is primary verified media delivery; Dropbox remains fallback/archive and Drive remains optional.
 
 on:
   # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
