@@ -1,6 +1,6 @@
 # ResoFit ChatB2K Orchestrator — GitHub App setup
 
-Last reviewed: 2026-10-25
+Last reviewed: 2026-11-05
 
 ## App identity
 
@@ -18,12 +18,13 @@ Never put the App private key, webhook secret, or service-role key in this docum
 
 Set the Homepage URL to `https://www.resofit.fit`, the Webhook URL to the production receiver above, and a unique webhook secret. Store that exact secret only in the GitHub App settings and Vercel server-side environment variable `GITHUB_WEBHOOK_SECRET`. Do not reuse the App private key.
 
-The current production `GITHUB_ALLOWED_REPOSITORIES` is an explicit nine-repository allowlist. Keep it unchanged until the owner deliberately approves a scope change:
+The current production `GITHUB_ALLOWED_REPOSITORIES` is an explicit ten-repository allowlist, matching the current Vercel Production environment metadata verified on 2026-11-05:
 
 ```text
 EliteFitness101/nownowgym
 EliteFitness101/redzone-recruit
 EliteFitness101/reso-flex
+EliteFitness101/elite101
 EliteFitness101/joy-funnel-ai
 EliteFitness101/reso-dash
 EliteFitness101/resocatalog
@@ -32,7 +33,7 @@ EliteFitness101/chatb2k-f9d8a04d
 EliteFitness101/shop-resoflex
 ```
 
-The GitHub App installation also lists `EliteFitness101/elite101`, but it is not in the production webhook allowlist. That mismatch is intentionally fail-closed, not a reason to broaden scope automatically. Either keep `elite101` excluded or approve it explicitly and update the production allowlist plus this document.
+The ten repositories above match the current Vercel Production allowlist. The GitHub App installation is selected for these repositories; the receiver still independently enforces the exact allowlist at request time.
 
 ## Repository-scoped webhook events
 
@@ -42,6 +43,7 @@ The receiver accepts only events expected to include both an installation ID and
 - `pull_request`
 - `pull_request_review`
 - `pull_request_review_comment`
+- `pull_request_review_thread`
 - `issues`
 - `issue_comment`
 - `check_run`
@@ -55,10 +57,12 @@ The receiver accepts only events expected to include both an installation ID and
 - `fork`
 - `label`
 - `milestone`
+- `repository`
 - `release`
 - `repository_dispatch`
 - `workflow_run`
 - `workflow_job`
+- `sub_issues`
 
 Do not subscribe this receiver to `ping`, `installation`, or `installation_repositories`: those are app/account-level events and do not reliably carry the repository field required by this inbox schema. `workflow_dispatch` is a workflow trigger/API operation, not a webhook event type. Subscribe to the repository-scoped events above in GitHub App settings; the receiver rejects other event types.
 
@@ -68,7 +72,7 @@ In the `chatb2k` Vercel project, configure these server-only variables:
 
 - `GITHUB_WEBHOOK_SECRET`: same secret as GitHub App > General > Webhook secret
 - `GITHUB_ALLOWED_INSTALLATION_IDS`: `153827553`
-- `GITHUB_ALLOWED_REPOSITORIES`: comma-separated exact names of the nine repositories listed above
+- `GITHUB_ALLOWED_REPOSITORIES`: comma-separated exact names of the ten repositories listed above
 - `RESOFLEX_EDGE_SUPABASE_URL`: URL for project `xtgteviwtoupbfvorrmk` only
 - `RESOFLEX_EDGE_SUPABASE_SERVICE_ROLE_KEY`: service-role key for that same Edge Node project only
 
