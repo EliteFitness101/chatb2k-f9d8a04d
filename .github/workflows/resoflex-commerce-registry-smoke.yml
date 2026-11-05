@@ -1,0 +1,74 @@
+name: ResoFlex Commerce Registry Smoke
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resoflex-commerce-registry-smoke
+  cancel-in-progress: false
+
+jobs:
+  registry-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify authenticated Jumia registry export
+        env:
+          CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CHATB2K_LIVE_INGEST_KEY:-}" ]]; then
+            echo "::error::Repository Actions secret CHATB2K_LIVE_INGEST_KEY is missing."
+            exit 1
+          fi
+          python3 <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+          url = "https://chatb2k.resofit.fit/api/public/ecosystem-router"
+          payload = {
+              "route_id": "orchestration-resoflex-commerce-intelligence",
+              "action": "export_registry",
+              "payload": {"source_code": "JUMIA_NG", "limit": 100, "offset": 0},
+          }
+          req = urllib.request.Request(
+              url,
+              data=json.dumps(payload).encode(),
+              headers={
+                  "Authorization": "Bearer " + os.environ["CHATB2K_LIVE_INGEST_KEY"],
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+              },
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=25) as response:
+                  status, raw = response.status, response.read(2_000_000)
+          except urllib.error.HTTPError as error:
+              status, raw = error.code, error.read(2_000_000)
+          if not 200 <= status < 300:
+              print(f"FAIL registry export: HTTP {status}")
+              sys.exit(1)
+          body = json.loads(raw.decode("utf-8"))
+          result = body.get("result") or {}
+          if body.get("ok") is not True or result.get("ok") is not True:
+              print("FAIL registry export: router or Edge Node reported failure")
+              sys.exit(1)
+          page = result.get("page") or {}
+          records = result.get("records") or []
+          checks = {
+              "expected_58_rows": page.get("total") == 58 and len(records) == 58,
+              "all_rows_have_source_url": all(bool(x.get("product_url")) for x in records),
+              "no_unapproved_resale": all(x.get("resale_status") != "authorized" for x in records),
+              "none_publishable": all(x.get("publish_eligible") is False for x in records),
+              "all_direct_pages_unverified": all(x.get("page_status") == "category_page_only_unverified" for x in records),
+              "no_canonical_product_urls": all(not x.get("canonical_product_url") for x in records),
+          }
+          for name, passed in checks.items():
+              print(("PASS" if passed else "FAIL") + " " + name)
+          if not all(checks.values()):
+              print("Observed count:", page.get("total"), "returned:", len(records))
+              sys.exit(1)
+          print("PASS authenticated read-only export; no product, checkout, price, inventory or publication writes performed")
+          PY
