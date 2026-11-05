@@ -24,7 +24,10 @@ const ROOT_WRITE_TOOLS: Record<string,{permission:string;description:string}> = 
  "github.repo.read":{permission:"read",description:"Read repository resources through the installed ChatB2K GitHub App within the configured allowlist."},
  "github.repo.write":{permission:"write",description:"Create or update repository resources through the installed ChatB2K GitHub App within the configured allowlist."},
  "github.workflow.dispatch":{permission:"run",description:"Dispatch GitHub Actions workflows through the installed ChatB2K GitHub App."},
- "ecosystem.dispatch":{permission:"orchestrate",description:"Plan or execute batches against runtime-verified infrastructure bindings; configured-only bindings are reported as blocked."}
+ "ecosystem.dispatch":{permission:"orchestrate",description:"Plan or execute batches across all 72 non-governance bindings; only runtime-verified executors run."},
+ "vercel.project.write":{permission:"write",description:"Create or update Vercel projects through the configured Vercel API token."},
+ "vercel.deployment.create":{permission:"create",description:"Create a Vercel deployment for an authorized project."},
+ "vercel.deployment.promote":{permission:"run",description:"Promote a verified Vercel deployment."}
 };
 function b64url(bytes:Uint8Array){let binary="";for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replaceAll("=","").replaceAll("+","-").replaceAll("/","_");}
 async function githubBridgeToken(){
@@ -42,8 +45,22 @@ async function githubBridge(method:"GET"|"POST",payload?:Record<string,unknown>)
  const raw=await r.text();let data:unknown;try{data=JSON.parse(raw);}catch{data={response_excerpt:raw.slice(0,1500)};}
  return {status:r.status,ok:r.ok,data};
 }
+async function callVercelApi(method:"POST"|"PATCH",path:string,body:Record<string,unknown>){
+ const token=Deno.env.get("VERCEL_API_TOKEN")??"";
+ if(!token)return {ok:false,status:503,data:{error:"VERCEL_API_TOKEN_NOT_CONFIGURED"}};
+ const allowed=(path==="/v10/projects"&&method==="POST")
+  ||(/^\\/v9\\/projects\\/[A-Za-z0-9_-]+$/.test(path)&&method==="PATCH")
+  ||(path==="/v13/deployments"&&method==="POST")
+  ||(/^\\/v13\\/deployments\\/[A-Za-z0-9_-]+\\/promote$/.test(path)&&method==="POST");
+ if(!allowed)throw new Error("VERCEL_API_PATH_NOT_ALLOWLISTED");
+ const url=new URL("https://api.vercel.com"+path);
+ url.searchParams.set("teamId","team_iRyfIbkZpnmY0x43nnOI0Q9I");
+ const r=await fetch(url,{method,headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(45000),cache:"no-store"});
+ const raw=await r.text();let data:unknown;try{data=JSON.parse(raw);}catch{data={response_excerpt:raw.slice(0,1500)};}
+ return {ok:r.ok,status:r.status,data};
+}
 async function dispatchBindings(bindingIds:string[],mode:string,action:string,payload:Record<string,unknown>,idempotencyKey:string,agentId:string){
- if(bindingIds.length<1||bindingIds.length>25)throw new Error("BINDING_IDS_MUST_BE_1_TO_25");
+ if(bindingIds.length<1||bindingIds.length>(mode==="plan"?72:25))throw new Error("PLAN_LIMIT_72_EXECUTE_BATCH_LIMIT_25");
  const results:Record<string,unknown>[]=[];
  for(const bindingId of [...new Set(bindingIds)]){
   const q=new URLSearchParams({select:"binding_id,system,repository,function_slug,cron_job_name,workflow_path,node_id,purpose,sync_mode,status",binding_id:"eq."+bindingId,limit:"1"});
@@ -65,7 +82,13 @@ async function dispatchBindings(bindingIds:string[],mode:string,action:string,pa
    const bridge=await githubBridge("POST",{method:"POST",path,body:{ref:String(payload.ref??"main"),inputs:payload.inputs&&typeof payload.inputs==="object"?payload.inputs:{}}});
    results.push({binding_id:bindingId,ok:bridge.ok,status:bridge.ok?"workflow_dispatched":"workflow_dispatch_failed",http_status:bridge.status,result:bridge.data});continue;
   }
-  results.push({binding_id:bindingId,ok:false,status:"NO_DIRECT_EXECUTOR",cron_job_name:binding.cron_job_name??null});
+  if(binding.cron_job_name){
+   const rpc=await fetch(SUPABASE_URL+"/rest/v1/rpc/chatb2k_run_verified_cron_job",{method:"POST",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":"application/json"},body:JSON.stringify({p_agent_id:agentId,p_job_name:String(binding.cron_job_name),p_idempotency_key:idempotencyKey+":"+bindingId}),signal:AbortSignal.timeout(60000)});
+   const raw=await rpc.text();let data:unknown;try{data=JSON.parse(raw);}catch{data={response_excerpt:raw.slice(0,1000)};}
+   const result=(data&&typeof data==="object"&&!Array.isArray(data))?data as Record<string,unknown>:{};
+   results.push({binding_id:bindingId,ok:result.ok===true,status:result.status??"cron_dispatch_failed",cron_job_name:binding.cron_job_name,result:data});continue;
+  }
+  results.push({binding_id:bindingId,ok:false,status:"NO_DIRECT_EXECUTOR"});
  }
  return {ok:results.every(x=>x.ok===true),agent_id:agentId,mode,action,idempotency_key:idempotencyKey,requested:bindingIds.length,results};
 }
@@ -91,7 +114,7 @@ Deno.serve(async(req:Request)=>{
   const elevated=["ROOT","GLOBAL_ADMIN"].includes(String(agent.permission_level));
   const list=Object.entries(INTERNAL_READ_TOOLS).filter(([name])=>elevated||allowed.includes(name)).map(([name,v])=>({name,endpoint:v.slug,description:v.description,permission:"read_only"}));
   const ext=Object.entries(EXTERNAL_READ_TOOLS).filter(([name])=>elevated||allowed.includes(name)).map(([name,v])=>({name,category:v.category,permission:"read_only",configured:Boolean(Deno.env.get(v.env))}));
-  const rootTools=elevated?Object.entries(ROOT_WRITE_TOOLS).map(([name,v])=>({name,permission:v.permission,description:v.description,configured:true})):[];
+  const rootTools=elevated?Object.entries(ROOT_WRITE_TOOLS).map(([name,v])=>({name,permission:v.permission,description:v.description,configured:name.startsWith("vercel.")?Boolean(Deno.env.get("VERCEL_API_TOKEN")):true})):[];
   if(action==="list_tools"){
    await audit(role,actor,agentId,action,null,rid,"success",200,started,{tool_count:list.length+ext.length});
    return json({ok:true,gateway:"ChatB2K Ecosystem Tool Gateway",version:2,project:"resonance-fitness",agent:{agent_id:agent.agent_id,name:agent.name,permission_level:agent.permission_level},request_id:rid,policy:{service_role_runtime_only:true,per_agent_registry_allowlist:true,root_super_admin_enabled:elevated,read_operations_enabled:true,repository_writes_enabled:elevated,workflow_dispatch_enabled:elevated,verified_edge_function_dispatch_enabled:elevated,batch_orchestration_enabled:elevated,dynamic_page_generation_via_repo_writes:elevated,external_ingest_growth_and_product_enrichment_via_verified_bindings:elevated,vercel_project_management_enabled:Boolean(Deno.env.get("VERCEL_API_TOKEN")),payment_mutations_enabled:false,email_sending_enabled:false},tools:[...list,...ext,...rootTools]});
@@ -113,8 +136,8 @@ Deno.serve(async(req:Request)=>{
     if(!["POST","PUT","PATCH"].includes(method)||!path.startsWith("/repos/"))throw new Error("REPOSITORY_WRITE_METHOD_OR_PATH_NOT_ALLOWED");
     result=await githubBridge("POST",{method,path,body:input.body&&typeof input.body==="object"?input.body:{}});
    }else if(tool==="github.workflow.dispatch"){
-    const path=String(input.path??"");
-        const parts=path.split("/");if(parts.length!==8||parts[1]!=="repos"||!parts[2]||!parts[3]||parts[4]!=="actions"||parts[5]!=="workflows"||!parts[6]||parts[7]!=="dispatches")throw new Error("WORKFLOW_DISPATCH_PATH_REQUIRED");
+    const path=String(input.path??"");const parts=path.split("/");
+    if(parts.length!==8||parts[1]!=="repos"||!parts[2]||!parts[3]||parts[4]!=="actions"||parts[5]!=="workflows"||!parts[6]||parts[7]!=="dispatches")throw new Error("WORKFLOW_DISPATCH_PATH_REQUIRED");
     result=await githubBridge("POST",{method:"POST",path,body:input.body&&typeof input.body==="object"?input.body:{ref:"main"}});
    }else if(tool==="ecosystem.dispatch"){
     const ids=Array.isArray(input.binding_ids)?input.binding_ids.map(String):[];
@@ -122,6 +145,15 @@ Deno.serve(async(req:Request)=>{
     const actionName=String(input.action??"run");const payload=input.payload&&typeof input.payload==="object"&&!Array.isArray(input.payload)?input.payload as Record<string,unknown>:{};
     const key=String(input.idempotency_key??"");if(mode==="execute"&&key.length<8)throw new Error("IDEMPOTENCY_KEY_REQUIRED_FOR_EXECUTION");
     result=await dispatchBindings(ids,mode,actionName,payload,key,agentId);
+   }else if(tool==="vercel.project.write"){
+    const method=String(input.method??"POST").toUpperCase();const path=String(input.path??"/v10/projects");
+    if(!["POST","PATCH"].includes(method))throw new Error("VERCEL_PROJECT_WRITE_METHOD_NOT_ALLOWED");
+    result=await callVercelApi(method as "POST"|"PATCH",path,input.body&&typeof input.body==="object"?input.body as Record<string,unknown>:{});
+   }else if(tool==="vercel.deployment.create"){
+    result=await callVercelApi("POST","/v13/deployments",input.body&&typeof input.body==="object"?input.body as Record<string,unknown>:{});
+   }else if(tool==="vercel.deployment.promote"){
+    const id=String(input.deployment_id??"");if(!/^[A-Za-z0-9_-]+$/.test(id))throw new Error("VERCEL_DEPLOYMENT_ID_REQUIRED");
+    result=await callVercelApi("POST","/v13/deployments/"+id+"/promote",input.body&&typeof input.body==="object"?input.body as Record<string,unknown>:{});
    }
   }else{result=await callExternal(tool);if(result===null){await audit(role,actor,agentId,action,tool,rid,"tool_denied",403,started);return json({error:"TOOL_NOT_ALLOWLISTED",tool,request_id:rid},403);}}
   const item=result as Record<string,unknown>;const status=Number(item.status??200);const ok=item.configured===false?false:(item.ok!==false&&status<400);
