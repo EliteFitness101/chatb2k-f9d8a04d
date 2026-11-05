@@ -9,6 +9,7 @@ on:
     paths:
       - "infra/supabase/edge-node/functions/resoflex-commerce-intelligence/**"
       - "infra/supabase/main/functions/catalog-public/**"
+      - "supabase/functions/chatb2k-commerce-recommendations/**"
       - "supabase/migrations/**"
 
 permissions:
@@ -31,3 +32,6 @@ jobs:
         run: deno check --config infra/supabase/edge-node/functions/resoflex-commerce-intelligence/deno.json infra/supabase/edge-node/functions/resoflex-commerce-intelligence/index.ts
       - name: Type-check main catalog-public function
         run: deno check --config infra/supabase/main/functions/catalog-public/deno.json infra/supabase/main/functions/catalog-public/index.ts
+
+      - name: Type-check ChatB2K hybrid commerce recommendations
+        run: deno check supabase/functions/chatb2k-commerce-recommendations/index.ts
