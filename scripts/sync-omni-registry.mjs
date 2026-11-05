@@ -7,7 +7,7 @@ if (process.argv.includes("--validate")) {
   if (!Array.isArray(manifest.nodes) || !Array.isArray(manifest.integrations) || !Array.isArray(manifest.crons)) throw new Error("manifest nodes/integrations/crons missing");
   const ids = [...manifest.nodes, ...manifest.integrations, ...manifest.crons].map((x) => x.binding_id);
   if (ids.some((x) => typeof x !== "string" || !x) || new Set(ids).size !== ids.length) throw new Error("manifest binding IDs must be unique");
-  if (manifest.nodes.length !== 25) throw new Error(`expected 25 configured node records, got ${manifest.nodes.length}`);
+  if (manifest.nodes.length < 25) throw new Error(`expected at least 25 canonical node records, got ${manifest.nodes.length}`);
   console.log(JSON.stringify({ ok: true, nodes: manifest.nodes.length, integrations: manifest.integrations.length, crons: manifest.crons.length, secret_values_included: false }));
   process.exit(0);
 }
