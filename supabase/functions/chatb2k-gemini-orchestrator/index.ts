@@ -27,7 +27,25 @@ async function authorize(req: Request) {
       !roles.some((r: string) => ["admin", "super_admin"].includes(r))) {
     return { ok: false as const, status: 403, error: "ADMIN_REQUIRED" };
   }
-  return { ok: true as const, token, user_id: data.user.id, email };
+  return { ok: true as const, token, user_id: data.user.id, email, roles };
+}
+
+function base64UrlEncode(value: Uint8Array): string {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+}
+async function createScopedMcpToken(userId: string, email: string, roles: string[]) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(new TextEncoder().encode(JSON.stringify({ alg: "HS256", typ: "JWT" })));
+  const payload = base64UrlEncode(new TextEncoder().encode(JSON.stringify({
+    sub: userId, email, roles, aud: "chatb2k-mcp", scope: "chatb2k:mcp",
+    iat: now, exp: now + 300, jti: crypto.randomUUID(),
+  })));
+  const unsigned = header + "." + payload;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
+  return unsigned + "." + base64UrlEncode(new Uint8Array(signature));
 }
 
 Deno.serve(async (req: Request) => {
@@ -63,7 +81,7 @@ Deno.serve(async (req: Request) => {
       type: "mcp_server",
       name: "chatb2k_mcp",
       url: MCP_URL,
-      headers: { Authorization: `Bearer ${auth.token}` },
+      headers: { Authorization: `Bearer ${mcpToken}` },
     }],
   };
 
