@@ -28,6 +28,9 @@ const tools = [
   { name: "ecosystem_propose_function", description: "Create an audited function-scaffold proposal. This records a proposal only; it does not generate code, deploy or execute a function.", inputSchema: { type: "object", properties: { slug: { type: "string", minLength: 3, maxLength: 63 }, purpose: { type: "string", minLength: 1, maxLength: 2000 }, integrations: { type: "array", items: { type: "string" }, maxItems: 30 } }, required: ["slug", "purpose"], additionalProperties: false } },
   { name: "agent_tool_list", description: "List the read-only tools currently authorized to a specific enabled ChatB2K agent identity.", inputSchema: { type: "object", properties: { agent_id: { type: "string", minLength: 1, maxLength: 100 } }, required: ["agent_id"], additionalProperties: false } },
   { name: "agent_tool_invoke", description: "Invoke one tool already allowlisted to an enabled ChatB2K agent. The current gateway enforces read-only access; mutations, payments, deployments, repository writes and email sends are disabled.", inputSchema: { type: "object", properties: { agent_id: { type: "string", minLength: 1, maxLength: 100 }, tool: { type: "string", minLength: 1, maxLength: 120 }, input: { type: "object", additionalProperties: true } }, required: ["agent_id", "tool"], additionalProperties: false } },
+
+  { name: "github_app_status", description: "Verify the installed ChatB2K GitHub App by minting a short-lived installation token and reading its installed repository scope. Never returns credentials.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "github_app_request", description: "Perform an authenticated GitHub REST operation through the installed ChatB2K GitHub App, limited to the installation's configured repository allowlist. Supports repository reads/writes, pull requests and workflow dispatches.", inputSchema: { type: "object", properties: { method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] }, path: { type: "string", minLength: 1, maxLength: 1000 }, body: { type: "object", additionalProperties: true } }, required: ["method", "path"], additionalProperties: false } },
 ];
 
 function response(body: unknown, status = 200) {
@@ -105,6 +108,32 @@ async function gateway(payload: Record<string, unknown>) {
   try { data = JSON.parse(raw); } catch { data = { response_excerpt: raw.slice(0, 1000) }; }
   return { http_status: r.status, ok: r.ok, data };
 }
+async function githubAppBridge(actor: Actor, method: "GET" | "POST", payload?: Record<string, unknown>) {
+  if (!["ceo@resofit.fit", "resonancefitnesswork@gmail.com"].includes(actor.email.toLowerCase())) {
+    throw new Error("CEO_ROOT_AUTHORITY_REQUIRED_FOR_GITHUB_APP");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: unknown) => btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value))))
+    .replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const header = encode({ alg: "HS256", typ: "JWT" });
+  const claims = encode({ sub: actor.id, email: actor.email, aud: "chatb2k-github-app-bridge", scope: "chatb2k:github-app:admin", iat: now, exp: now + 300, jti: crypto.randomUUID() });
+  const unsigned = header + "." + claims;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
+  const token = unsigned + "." + btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const url = "https://chatb2k.resofit.fit/api/internal/chatb2k/github-app";
+  const response = await fetch(url, {
+    method,
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    ...(payload ? { body: JSON.stringify(payload) } : {}),
+    signal: AbortSignal.timeout(30000),
+  });
+  const raw = await response.text();
+  let data: unknown;
+  try { data = JSON.parse(raw); } catch { data = { response_excerpt: raw.slice(0, 1000) }; }
+  return { http_status: response.status, ok: response.ok, data };
+}
+
 async function runTool(name: string, args: Record<string, unknown>, actor: Actor) {
   const controlActions: Record<string, string> = {
     ecosystem_status: "status",
@@ -133,6 +162,14 @@ async function runTool(name: string, args: Record<string, unknown>, actor: Actor
       metadata: { endpoint: "chatb2k-mcp", actor_email: actor.email, run_id: run.id, purpose: purpose.slice(0, 300) },
     });
     return { ok: true, persisted: true, proposal: report, run, audit_recorded: !auditError, note: "Proposal only; no code generation, deployment or execution occurred." };
+  }
+  if (name === "github_app_status") return await githubAppBridge(actor, "GET");
+  if (name === "github_app_request") {
+    const method = String(args.method ?? "").toUpperCase();
+    if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) throw new Error("GITHUB_METHOD_NOT_ALLOWED");
+    const path = String(args.path ?? "");
+    if (!path.startsWith("/repos/")) throw new Error("GITHUB_REPOSITORY_PATH_REQUIRED");
+    return await githubAppBridge(actor, "POST", { method, path, body: args.body ?? {} });
   }
   if (name === "agent_tool_list") {
     return await gateway({ action: "list_tools", agent_id: args.agent_id });
@@ -168,7 +205,7 @@ Deno.serve(async (req: Request) => {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "chatb2k_mcp", version: "1.0.0" },
-        instructions: "ChatB2K governed MCP. Read operations are available to authorized administrators. Function proposals are persisted only. The connected agent gateway is read-only; no payment, deployment, repository-write, email-send or arbitrary mutation tool is exposed.",
+        instructions: "ChatB2K governed MCP. Read operations are available to authorized administrators. Function proposals are persisted only. The ecosystem read gateway remains read-only. The separate GitHub App bridge exposes CEO-root repository operations only inside the configured installation allowlist; all actions are audited and provider responses are returned as evidence.",
       }});
       continue;
     }
