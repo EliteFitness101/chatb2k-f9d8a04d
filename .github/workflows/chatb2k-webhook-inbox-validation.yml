@@ -60,10 +60,10 @@ jobs:
           const migration = readFileSync('ops/resoflex-edge/migrations/20261014080000_github_webhook_inbox.sql', 'utf8');
           const docs = readFileSync('docs/ops/github-app-setup.md', 'utf8');
           const requiredEvents = [
-            'push', 'pull_request', 'pull_request_review', 'pull_request_review_comment',
+            'push', 'pull_request', 'pull_request_review', 'pull_request_review_comment', 'pull_request_review_thread',
             'issues', 'issue_comment', 'check_run', 'check_suite', 'status', 'commit_comment',
             'create', 'delete', 'deployment', 'deployment_status', 'fork', 'label',
-            'milestone', 'release', 'repository_dispatch', 'workflow_run', 'workflow_job',
+            'milestone', 'release', 'repository', 'repository_dispatch', 'workflow_run', 'workflow_job', 'sub_issues',
           ];
           const routeEventBlock = route.match(/const ALLOWED_EVENT_TYPES = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? '';
           const routeEvents = [...routeEventBlock.matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
