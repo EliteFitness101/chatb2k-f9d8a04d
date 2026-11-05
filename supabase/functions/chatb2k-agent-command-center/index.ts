@@ -19,7 +19,15 @@ const idNumber = (id: string) => {
 };
 const inScope = (id: string) => {
   const n = idNumber(id);
-  return n !== null && n >= 101 && n <= 173;
+  if (n !== null) return n >= 101 && n <= 125;
+  const worker = /^agent-(\d{3})$/.exec(id);
+  return worker !== null && Number(worker[1]) >= 1 && Number(worker[1]) <= 72;
+};
+const agentOrder = (id: string) => {
+  const node = idNumber(id);
+  if (node !== null) return node;
+  const worker = /^agent-(\d{3})$/.exec(id);
+  return worker ? 1000 + Number(worker[1]) : 9999;
 };
 const routeUrl = (route: string) => `${URL}/functions/v1/${route}`;
 const TOOL_ENDPOINTS: Record<string, { url: string; access: string }> = {
@@ -124,7 +132,7 @@ Deno.serve(async (req: Request) => {
       db.from("chatb2k_provider_routes").select("route_id,provider,service_type,status,owner_node_id,endpoint_class,config,updated_at").order("route_id"),
     ]);
     for (const r of [agentRes,nodeRes,aliasRes,runRes,taskRes,learningRes,killRes,auditRes,controlRes,functionRes]) if (r.error) throw r.error;
-    const agents = (agentRes.data || []).filter((a: any) => inScope(a.agent_id)).sort((a: any,b: any) => idNumber(a.agent_id)! - idNumber(b.agent_id)!);
+    const agents = (agentRes.data || []).filter((a: any) => inScope(a.agent_id)).sort((a: any,b: any) => agentOrder(a.agent_id) - agentOrder(b.agent_id));
     const nodes = nodeRes.data || [];
     const aliases = aliasRes.data || [];
     const runs = runRes.data || [];
@@ -134,7 +142,8 @@ Deno.serve(async (req: Request) => {
     const audits = auditRes.data || [];
     const routeRows = functionRes.data || [];
     const agentIds = new Set(agents.map((a: any) => a.agent_id));
-    const missing = Array.from({ length: 73 }, (_, i) => i + 101).map(n => "chatb2k" + n).filter(id => !agentIds.has(id));
+    const expectedIds = [...Array.from({ length: 25 }, (_, i) => "chatb2k" + (i + 101)), ...Array.from({ length: 72 }, (_, i) => "agent-" + String(i + 1).padStart(3, "0"))];
+    const missing = expectedIds.filter(id => !agentIds.has(id));
     const byId = agents.map((a: any) => {
       const id = a.agent_id;
       const node = nodes.find((n: any) => n.node_id === id);
@@ -161,7 +170,7 @@ Deno.serve(async (req: Request) => {
     return json({
       ok: true, generated_at: new Date().toISOString(), source_project: "resonance-fitness", source_project_ref: "vbqjvmnhdtdhmeeudqnn",
       authority: { requested_root: "chatb2k101", caller_email: auth.email, can_control: auth.isCEO, global_kill_switch: controlRes.data?.kill_switch_enabled === true, global_kill_reason: controlRes.data?.kill_switch_reason || null, global_kill_switched_at: controlRes.data?.kill_switched_at || null },
-      summary: { requested_agents: 73, registered_agents: agents.length, missing_agent_ids: missing, enabled_and_registry_callable: callable, disabled: agents.filter((a: any)=>a.enabled!==true || a.status!=="ENABLED").length, killed: agents.filter((a: any)=>a.kill_switch_enabled===true).length, unhealthy: agents.filter((a: any)=>a.health_status==="FAILED").length, agents_with_assigned_email: agents.filter((a: any)=>a.metadata?.control_email || nodes.some((n:any)=>n.node_id===a.agent_id&&n.control_email)).length, agents_with_tools: agents.filter((a: any)=>Array.isArray(a.allowed_tools)&&a.allowed_tools.length>0).length, agents_with_routes: agents.filter((a: any)=>Array.isArray(a.allowed_routes)&&a.allowed_routes.length>0).length, recent_run_records: runs.length, recent_task_records: tasks.length, learning_events: learning.length, kill_switch_events: killEvents.length, tool_gateway_audit_events: audits.length },
+      summary: { requested_agents: 97, canonical_nodes: agents.filter((a: any) => /^chatb2k1\d{2}$/.test(a.agent_id)).length, worker_agents: agents.filter((a: any) => /^agent-\d{3}$/.test(a.agent_id)).length, registered_agents: agents.length, missing_agent_ids: missing, enabled_and_registry_callable: callable, disabled: agents.filter((a: any)=>a.enabled!==true || a.status!=="ENABLED").length, killed: agents.filter((a: any)=>a.kill_switch_enabled===true).length, unhealthy: agents.filter((a: any)=>a.health_status==="FAILED").length, agents_with_assigned_email: agents.filter((a: any)=>a.metadata?.control_email || nodes.some((n:any)=>n.node_id===a.agent_id&&n.control_email)).length, agents_with_tools: agents.filter((a: any)=>Array.isArray(a.allowed_tools)&&a.allowed_tools.length>0).length, agents_with_routes: agents.filter((a: any)=>Array.isArray(a.allowed_routes)&&a.allowed_routes.length>0).length, recent_run_records: runs.length, recent_task_records: tasks.length, learning_events: learning.length, kill_switch_events: killEvents.length, tool_gateway_audit_events: audits.length },
       agents: byId,
       routes: routeRows.map((r: any)=>({ ...r, endpoint_url: r.config?.endpoint || null })),
       recent_runs: runs.slice(0,100).map((r:any)=>({id:r.id,run_key:r.run_key,engine:r.engine,status:r.status,started_at:r.started_at,completed_at:r.completed_at,counts:r.counts})),
