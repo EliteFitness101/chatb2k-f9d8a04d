@@ -104,6 +104,17 @@ The existing `paystack-init` remains the ResoFit first-party checkout authority.
 
 These are collection merchandising mappings, not published product offers. External candidates remain unpriced in the customer-facing collection until registry evidence and fulfilment are complete.
 
+## Draft hybrid collection references and dynamic eligibility
+
+The migration now attaches the 18 new Edge Node candidate UUIDs to the appropriate draft collection manifests:
+- Home Gym Starter, Mobility & Yoga, Strength Evolution and Performance Gym reference the Jumia fitness candidates.
+- Elite Creator Fitness Launch references the Jumia phone/vlogging candidates plus the Nonsman and Olubee creator gear candidates.
+- Each external item stores only the source code, Edge Node project reference, stable Edge Node registry product UUID, title, direct source URL and physical fulfilment class. It does not duplicate a price, stock quantity, seller approval or purchase permission.
+
+The main-project `catalog-public/collections` endpoint now resolves external offer eligibility from `commerce_offers` and `commerce_sources` at request time. It overlays `source_page_verified`, `external_checkout_enabled`, `resale_authorized`, `fulfillment_ready`, `purchase_enabled`, price visibility and a current status label. The Elite101 renderer displays supplier links or supplier checkout only when those returned fields authorize them. This replaces the static Jumia-only UI branch with source-agnostic registry evaluation.
+
+The 18 new Edge Node candidates have not yet been mirrored into main-project `commerce_offers`; their manifest references therefore resolve to review-pending status and no purchase/link action until the ChatB2K cross-project sync and evidence gates are completed. This is intentional: the manifest does not copy source data into a second catalogue or imply a checkout contract.
+
 ## Release gates
 
 1. Review and merge PR #83 only after CI and Vercel checks pass.
