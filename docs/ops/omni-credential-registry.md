@@ -20,7 +20,9 @@ A configured node is not proof of a live worker. Runtime status is preserved sep
 
 ## Credential separation
 
-- Main Vault `GEMINI_API_KEY`: existing main provider key reference.
+- Main Vault `GEMINI_API_KEY`: existing provider key used by RPC-based consumers.
+- Main Edge Function runtime `GEMINI_API_KEY`: separate environment reference used directly by `flow-generation-gate`, `resofit-ecosystem-autopilot`, and as the first-choice credential in `content-intelligence-enricher`; runtime value presence and identity are not verified.
+- Main Edge Function runtime `GEMINI_AUTOMATION_API_KEY` and `GEMINI_API_KEY1`: separate secondary/fallback references used by `elite-media-render-worker`; runtime value presence and identity are not verified.
 - Elite GitHub Actions `GEMINI_AUTOMATION_API_KEY`: secondary provider key reference passed to the media poller/render worker.
 - Elite GitHub Actions `GEMINI_API_KEY1`: fallback provider key reference.
 - Edge Node Vault `chatb2k_gemini_automation_api_key`: inbound webhook authentication secret, not a model key.
