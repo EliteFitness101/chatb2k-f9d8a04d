@@ -48,10 +48,13 @@ async function githubBridge(method:"GET"|"POST",payload?:Record<string,unknown>)
 async function callVercelApi(method:"POST"|"PATCH",path:string,body:Record<string,unknown>){
  const token=Deno.env.get("VERCEL_API_TOKEN")??"";
  if(!token)return {ok:false,status:503,data:{error:"VERCEL_API_TOKEN_NOT_CONFIGURED"}};
+ const parts=path.split("/");
+ const projectPatch=parts.length===4&&parts[1]==="v9"&&parts[2]==="projects"&&parts[3].length>0&&!parts[3].includes("/");
+ const deploymentPromote=parts.length===5&&parts[1]==="v13"&&parts[2]==="deployments"&&parts[3].length>0&&!parts[3].includes("/")&&parts[4]==="promote";
  const allowed=(path==="/v10/projects"&&method==="POST")
-  ||(/^\\/v9\\/projects\\/[A-Za-z0-9_-]+$/.test(path)&&method==="PATCH")
+  ||(projectPatch&&method==="PATCH")
   ||(path==="/v13/deployments"&&method==="POST")
-  ||(/^\\/v13\\/deployments\\/[A-Za-z0-9_-]+\\/promote$/.test(path)&&method==="POST");
+  ||(deploymentPromote&&method==="POST");
  if(!allowed)throw new Error("VERCEL_API_PATH_NOT_ALLOWLISTED");
  const url=new URL("https://api.vercel.com"+path);
  url.searchParams.set("teamId","team_iRyfIbkZpnmY0x43nnOI0Q9I");
@@ -117,7 +120,7 @@ Deno.serve(async(req:Request)=>{
   const rootTools=elevated?Object.entries(ROOT_WRITE_TOOLS).map(([name,v])=>({name,permission:v.permission,description:v.description,configured:name.startsWith("vercel.")?Boolean(Deno.env.get("VERCEL_API_TOKEN")):true})):[];
   if(action==="list_tools"){
    await audit(role,actor,agentId,action,null,rid,"success",200,started,{tool_count:list.length+ext.length});
-   return json({ok:true,gateway:"ChatB2K Ecosystem Tool Gateway",version:2,project:"resonance-fitness",agent:{agent_id:agent.agent_id,name:agent.name,permission_level:agent.permission_level},request_id:rid,policy:{service_role_runtime_only:true,per_agent_registry_allowlist:true,root_super_admin_enabled:elevated,read_operations_enabled:true,repository_writes_enabled:elevated,workflow_dispatch_enabled:elevated,verified_edge_function_dispatch_enabled:elevated,batch_orchestration_enabled:elevated,dynamic_page_generation_via_repo_writes:elevated,external_ingest_growth_and_product_enrichment_via_verified_bindings:elevated,vercel_project_management_enabled:Boolean(Deno.env.get("VERCEL_API_TOKEN")),payment_mutations_enabled:false,email_sending_enabled:false},tools:[...list,...ext,...rootTools]});
+   return json({ok:true,gateway:"ChatB2K Ecosystem Tool Gateway",version:3,project:"resonance-fitness",agent:{agent_id:agent.agent_id,name:agent.name,permission_level:agent.permission_level},request_id:rid,policy:{service_role_runtime_only:true,per_agent_registry_allowlist:true,root_super_admin_enabled:elevated,read_operations_enabled:true,repository_writes_enabled:elevated,workflow_dispatch_enabled:elevated,verified_edge_function_dispatch_enabled:elevated,batch_orchestration_enabled:elevated,dynamic_page_generation_via_repo_writes:elevated,external_ingest_growth_and_product_enrichment_via_verified_bindings:elevated,vercel_project_management_enabled:Boolean(Deno.env.get("VERCEL_API_TOKEN")),payment_mutations_enabled:false,email_sending_enabled:false},tools:[...list,...ext,...rootTools]});
   }
   if(action!=="invoke")return json({error:"UNKNOWN_ACTION",allowed_actions:["list_tools","invoke"],request_id:rid},400);
   const tool=String(body.tool??"");
