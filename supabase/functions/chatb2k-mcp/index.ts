@@ -44,7 +44,7 @@ function decodeBase64Url(value: string): Uint8Array {
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
 async function authenticate(req: Request): Promise<Actor | null> {
-  const token = req.headers.get("authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1] ?? "";
+  const token = req.headers.get("authorization")?.match(/^Bearer[ \t]+(.+)$/i)?.[1] ?? "";
   if (!token || !SERVICE_KEY) return null;
   const parts = token.split(".");
   if (parts.length !== 3) return null;
@@ -69,6 +69,16 @@ async function authenticate(req: Request): Promise<Actor | null> {
     email === "resonancefitnesswork@gmail.com" ||
     roles.some((r: string) => ["admin", "super_admin"].includes(r));
   return isPrivileged ? { id, email, roles } : null;
+}
+async function auditTool(actor: Actor, toolName: string, requestId: string, outcome: string, httpStatus: number) {
+  try {
+    await db.from("admin_audit_logs").insert({
+      user_id: actor.id,
+      action: "chatb2k_mcp_tool_call",
+      resource: toolName,
+      metadata: { endpoint: "chatb2k-mcp", actor_email: actor.email, request_id: requestId, outcome, http_status: httpStatus },
+    });
+  } catch (e) { console.error("mcp_audit_failed", String(e)); }
 }
 async function controlPlane(actorToken: string, action: string, payload: Record<string, unknown> = {}) {
   const r = await fetch(CONTROL_URL, {
@@ -179,7 +189,10 @@ Deno.serve(async (req: Request) => {
         continue;
       }
       try {
+        const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
         const result = await runTool(name, args, actor);
+        const httpStatus = Number((result as { http_status?: number }).http_status ?? 200);
+        await auditTool(actor, name, requestId, httpStatus < 400 ? "success" : "provider_error", httpStatus);
         const serialized = JSON.stringify(result);
         replies.push({ jsonrpc: "2.0", id, result: {
           content: [{ type: "text", text: serialized.slice(0, 18000) }],
@@ -187,6 +200,7 @@ Deno.serve(async (req: Request) => {
           isError: (result as { ok?: boolean }).ok === false,
         }});
       } catch (e) {
+        await auditTool(actor, name, req.headers.get("x-request-id") || crypto.randomUUID(), "error", 500);
         replies.push({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: e instanceof Error ? e.message : "TOOL_EXECUTION_FAILED" }) }], isError: true } });
       }
       continue;
