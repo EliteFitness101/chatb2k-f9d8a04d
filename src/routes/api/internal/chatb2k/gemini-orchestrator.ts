@@ -55,6 +55,7 @@ export const Route = createFileRoute("/api/internal/chatb2k/gemini-orchestrator"
       POST: async ({ request }) => {
         const actor = await authorize(request);
         if (!actor) return json({ ok: false, error: "CEO_OR_ADMIN_SESSION_REQUIRED" }, 401);
+        if (!actor.ceoRoot) return json({ ok: false, error: "CEO_ROOT_REQUIRED_FOR_OMNIDIMENSIONAL_EXECUTION" }, 403);
         const body = await request.json().catch(() => ({}));
         const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
         if (!prompt || prompt.length > 12000) return json({ ok: false, error: "PROMPT_REQUIRED_MAX_12000_CHARS" }, 400);
@@ -66,6 +67,58 @@ export const Route = createFileRoute("/api/internal/chatb2k/gemini-orchestrator"
           return json({ ok: false, error: "GEMINI_AUTOMATION_API_KEY_NOT_CONFIGURED_IN_VERCEL_RUNTIME" }, 503);
         }
         const mcpToken = await createScopedMcpToken(actor.user_id, actor.email, actor.roles);
+        const provider = body.provider === "openai" ? "openai" : "gemini";
+        if (provider === "openai") {
+          const openaiKey = process.env.OPENAI_API_KEY?.trim();
+          if (!openaiKey || openaiKey.length < 20) return json({ ok: false, error: "OPENAI_API_KEY_NOT_CONFIGURED_IN_VERCEL_RUNTIME" }, 503);
+          const openaiModel = process.env.OPENAI_MODEL?.trim() || "gpt-6-astra";
+          try {
+            const upstream = await fetch("https://api.openai.com/v1/responses", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: "Bearer " + openaiKey },
+              body: JSON.stringify({
+                model: openaiModel,
+                input: prompt,
+                instructions: "You are the OpenAI secondary reasoning provider for ChatB2K101. Use the chatb2k_mcp remote MCP server for all ecosystem state and actions. ChatB2K101 is the CEO root controller. Preserve governance and kill switches. Never claim execution without provider evidence. Keep registered, configured, deployed, reachable, integrated, executing and verified distinct.",
+                store: false,
+                tools: [{
+                  type: "mcp",
+                  server_label: "chatb2k_mcp",
+                  server_description: "Governed ChatB2K101 ecosystem gateway. Root-only repository writes, workflow dispatch and runtime-verified binding orchestration.",
+                  server_url: MCP_URL,
+                  authorization: mcpToken,
+                  require_approval: "never",
+                }],
+              }),
+              signal: AbortSignal.timeout(145000),
+              cache: "no-store",
+            });
+            const raw = await upstream.text();
+            let result: Record<string, unknown>;
+            try { result = JSON.parse(raw); } catch { result = { response_excerpt: raw.slice(0, 1500) }; }
+            if (!upstream.ok) {
+              console.error("chatb2k_openai_orchestration_failed", { status: upstream.status, actor: actor.email });
+              return json({ ok: false, provider: "openai", http_status: upstream.status, error: "OPENAI_RESPONSES_REQUEST_FAILED" }, 502);
+            }
+            return json({
+              ok: true,
+              provider: "openai",
+              model: openaiModel,
+              mcp_server: "chatb2k_mcp",
+              actor: actor.email,
+              response_id: result.id ?? null,
+              status: result.status ?? "completed",
+              output_text: result.output_text ?? null,
+              output: result.output ?? [],
+              usage: result.usage ?? null,
+              credential_separation: { openai: "OPENAI_API_KEY", gemini_orchestration: "GEMINI_AUTOMATION_API_KEY", internal_media: "GEMINI_API_KEY" },
+              storage: "disabled_for_this_interaction",
+            });
+          } catch (error) {
+            console.error("chatb2k_openai_orchestration_route_error", { actor: actor.email, error: error instanceof Error ? error.message : "unknown" });
+            return json({ ok: false, error: "OPENAI_ORCHESTRATION_UNAVAILABLE" }, 502);
+          }
+        }
         const interactionBody = {
           agent: AGENT,
           environment: "remote",
