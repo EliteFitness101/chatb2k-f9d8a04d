@@ -18,12 +18,15 @@ The Edge Node contains 58 Jumia discovery rows. The registry read returned:
 
 The existing source policy therefore blocks automated Jumia crawling and media reuse until written permission or an authorized API/feed and its evidence URL are recorded. Do not use Firecrawl or direct fetch to bypass this source-level authorization gate.
 
+The main project's public `catalog-public/search` implementation currently queries `commerce_offers` without excluding discovery-only rows. The 58 Jumia offers are marked `discovery_only=true`, `availability=unknown`, `stock_verified=false`, and point to category pages. The PR's main-project `catalog-public` snapshot adds an allow-list: internal offers must be enabled, available and priced; external offers additionally require verified direct product links, checkout flow, and stock evidence. Jumia discovery rows therefore stay out of public search until those gates are satisfied.
+
 ## Additive change in this PR
 
 - Preserve the deployed Edge Node v6 implementation as a version-controlled source snapshot under `infra/supabase/edge-node/`, targeting the Edge Node project explicitly.
 - Add an admin-only, read-only `export_registry` action with pagination and optional `source_code` filter. It returns the complete registry row metadata for CEO/admin reconciliation.
 - Expand the existing main-project `orchestration-resoflex-commerce-intelligence` route allow-list to include only the actions already implemented by the Edge Node plus `export_registry`.
-- Add a manual smoke workflow that verifies the 58-row Jumia export through the existing ChatB2K ecosystem router. It prints only aggregate checks, not product PII or secrets.
+- Preserve the main-project `catalog-public` v51 implementation with a fail-closed public-search filter for commerce offers; unverified discovery-only Jumia links are not returned to public search.
+- Add a manual smoke workflow that verifies the 58-row Jumia export through the existing ChatB2K ecosystem router and, when a publishable/anon key is configured, verifies that public search excludes Jumia links while retaining first-party product results. The workflow prints only aggregate checks, not product data or secrets.
 
 ## Commerce boundary
 
@@ -66,8 +69,9 @@ Each collection item must expose explicit `fulfillment_mode`, seller/vendor, sou
 
 ## Release gates
 
-1. Merge/apply the route allow-list migration only after reviewing the Vercel/CI checks.
-2. Deploy the Edge Node function to project `xtgteviwtoupbfvorrmk` (not the main `vbqjvmnhdtdhmeeudqnn` project).
-3. Run the manual registry smoke workflow; require exactly 58 rows and all discovery-only safety checks.
-4. Reconcile the individual 58 records against an authorized feed or written supplier evidence.
-5. Only then prepare customer-facing collection/page/checkout changes. Vercel preview and production readiness remain separate gates.
+1. Deploy the main-project `catalog-public` function snapshot to `vbqjvmnhdtdhmeeudqnn` and verify public search no longer returns Jumia discovery offers.
+2. Apply the route allow-list migration only after reviewing the Vercel/CI checks.
+3. Deploy the Edge Node function to project `xtgteviwtoupbfvorrmk` (not the main `vbqjvmnhdtdhmeeudqnn` project).
+4. Run the manual registry smoke workflow; require exactly 58 rows and all discovery-only safety checks. Run the public-search smoke when the publishable/anon key is configured.
+5. Reconcile the individual 58 records against an authorized feed or written supplier evidence.
+6. Only then prepare customer-facing collection/page/checkout changes. Vercel preview and production readiness remain separate gates.
