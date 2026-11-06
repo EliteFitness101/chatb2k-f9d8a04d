@@ -17,7 +17,7 @@ create table if not exists public.commerce_vas_funding_ledger (
   source_snapshot jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint commerce_vas_funding_not_overdrawn check (allocated_cost_ngn <= vas_funding_pool_ngn)
+  constraint commerce_vas_funding_not_overdrawn check (allocated_cost_ngn <= vas_funding_pool_ngn or status = 'review_required')
 );
 
 create index if not exists commerce_vas_funding_status_idx
