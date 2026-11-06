@@ -48,8 +48,7 @@ begin
       'currency', new.currency,
       'payment_amount', new.amount,
       'product_context', coalesce(new.metadata->'line_items', '[]'::jsonb),
-      'vas', selected_item,
-      'checkout_metadata', new.metadata
+      'vas', selected_item
     );
 
     insert into public.commerce_vas_generation_jobs (
