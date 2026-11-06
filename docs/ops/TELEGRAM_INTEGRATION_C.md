@@ -1,0 +1,3 @@
+# Telegram Integration C
+
+Additive implementation track for the ChatB2K Telegram Mini App and Bot API integration. Preserve existing client bot identities, Vault credentials, social destination records, Buffer publishing, and payment rails. The Mini App is hosted at https://chatb2k.resofit.fit/telegram. Telegram Web App initData must be verified server-side using Telegram's HMAC-SHA-256 procedure. Purchases and plans continue through existing checkout routes; this integration does not create or change payment products, prices, or subscriptions. Menu-button changes must be audited first and only default menu buttons may be configured; existing custom menus must be preserved.
