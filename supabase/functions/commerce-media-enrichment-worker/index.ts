@@ -15,20 +15,12 @@ function equal(a: string, b: string) {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
-async function authorized(req: Request) {
-  let expected = Deno.env.get("CONTENT_CRON_SECRET") || Deno.env.get("BUFFER_CRON_SECRET") || "";
-  if (!expected) {
-    const secret = await db.rpc("get_buffer_cron_secret");
-    if (!secret.error && secret.data) expected = String(secret.data);
-  }
+function authorized(req: Request) {
+  const expected = Deno.env.get("CONTENT_CRON_SECRET") || Deno.env.get("BUFFER_CRON_SECRET") || "";
   const provided = req.headers.get("x-content-cron-secret") || req.headers.get("x-buffer-cron-secret") || "";
   if (expected && equal(expected, provided)) return true;
-  const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  try {
-    const payload = bearer.split(".")[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=")));
-    return decoded.role === "service_role";
-  } catch { return false; }
+  const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\\s+/i, "");
+  return !!SERVICE_KEY && equal(bearer, SERVICE_KEY);
 }
 function safeKey(value: string) {
   return value.normalize("NFKD").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 90) || "unidentified-product";
@@ -211,7 +203,7 @@ async function createOrReuseAsset(job: any, role: string) {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (req.method !== "POST") return reply({ ok: false, error: "method_not_allowed" }, 405);
-  if (!await authorized(req)) return reply({ ok: false, error: "unauthorized" }, 401);
+  if (!authorized(req)) return reply({ ok: false, error: "unauthorized" }, 401);
   let body: any = {};
   try { body = await req.json(); } catch { return reply({ ok: false, error: "invalid_json" }, 400); }
   const limit = Math.min(Math.max(Number(body.limit || 3), 1), 10);
