@@ -12,7 +12,7 @@ create table if not exists public.commerce_vas_offers (
   recommendation_reason text not null,
   provider text not null check (provider in ('gemini','openai','rules_fallback')),
   model text null,
-  price numeric(14,2) not null check (price >= 0),
+  price numeric(14,2) not null default 0 check (price = 0),
   currency text not null default 'NGN',
   pricing_rule_version text not null,
   status text not null default 'offered'
