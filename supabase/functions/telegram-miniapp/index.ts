@@ -18,7 +18,7 @@ async function validate(initData: string, token: string) {
   const age = Math.floor(Date.now() / 1000) - authDate;
   if (!received || !Number.isFinite(authDate) || age < -60 || age > 86400) return null;
   const check = [...p.entries()].filter(([k]) => k !== "hash").sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => k + "=" + v).join("\n");
-  const secret = await hmac(new TextEncoder().encode(token), "WebAppData");
+  const secret = await hmac(new TextEncoder().encode("WebAppData"), token);
   if (!(await equal(hex(await hmac(secret, check)), received))) return null;
   let user: any; try { user = JSON.parse(p.get("user") ?? "null"); } catch { return null; }
   if (!user || !Number.isSafeInteger(Number(user.id))) return null;
