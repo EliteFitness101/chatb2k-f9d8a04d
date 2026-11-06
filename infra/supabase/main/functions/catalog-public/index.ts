@@ -205,6 +205,7 @@ Deno.serve(async (req) => {
             source_product_url: sourceUrl || null,
             image_url: typeof offerMeta.image_url === "string" && offerMeta.image_url.startsWith("https://") ? offerMeta.image_url : (typeof item.image_url === "string" && item.image_url.startsWith("https://") ? item.image_url : null),
             price: Number(offer?.price) > 0 ? Number(offer.price) : null,
+            price_range_max: Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) > 0 ? Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) : null,
             supplier_price: Number(offerMeta.supplier_price ?? offer?.price) > 0 ? Number(offerMeta.supplier_price ?? offer.price) : null,
             price_currency: offer?.currency || item.price_currency || "NGN",
             source_seller_name: offerMeta.source_seller_name || item.source_seller_name || null,
