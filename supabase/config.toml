@@ -1,1 +1,4 @@
 project_id = "vbqjvmnhdtdhmeeudqnn"
+
+[functions.commerce-media-enrichment-worker]
+verify_jwt = false
