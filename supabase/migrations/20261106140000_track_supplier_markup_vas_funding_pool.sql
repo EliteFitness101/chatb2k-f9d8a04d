@@ -53,7 +53,7 @@ begin
   uplift := greatest(resale_price - supplier_cost,0);
   pool := least(uplift, round(supplier_cost * 0.30,2));
 
-  insert into public.commerce_vas_funding_ledger (
+  insert into public.commerce_vas_funding_ledger as current_funding (
     commerce_offer_id, source_cost_ngn, resale_price_ngn, actual_markup_ngn,
     policy_markup_rate_bps, vas_funding_pool_ngn, allocated_cost_ngn,
     currency, status, source_snapshot
@@ -74,7 +74,7 @@ begin
     actual_markup_ngn = excluded.actual_markup_ngn,
     vas_funding_pool_ngn = excluded.vas_funding_pool_ngn,
     status = case
-      when public.commerce_vas_funding_ledger.allocated_cost_ngn > excluded.vas_funding_pool_ngn then 'review_required'
+      when current_funding.allocated_cost_ngn > excluded.vas_funding_pool_ngn then 'review_required'
       when excluded.vas_funding_pool_ngn <= 0 then 'held'
       when public.commerce_vas_funding_ledger.allocated_cost_ngn >= excluded.vas_funding_pool_ngn then 'exhausted'
       else 'eligible'
