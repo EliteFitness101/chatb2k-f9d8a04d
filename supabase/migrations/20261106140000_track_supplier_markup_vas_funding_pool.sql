@@ -51,7 +51,7 @@ begin
 
   resale_price := coalesce(new.price,0);
   uplift := greatest(resale_price - supplier_cost,0);
-  pool := least(uplift, round(supplier_cost * 0.30,2));
+  pool := case when abs(uplift - round(supplier_cost * 0.30,2)) <= 1 then uplift else 0 end;
 
   insert into public.commerce_vas_funding_ledger as current_funding (
     commerce_offer_id, source_cost_ngn, resale_price_ngn, actual_markup_ngn,
@@ -103,11 +103,13 @@ select
   o.price,
   greatest(o.price - (o.metadata->>'supplier_price')::numeric,0),
   3000,
-  least(greatest(o.price - (o.metadata->>'supplier_price')::numeric,0),
-        round((o.metadata->>'supplier_price')::numeric * 0.30,2)),
+  case when abs(greatest(o.price - (o.metadata->>'supplier_price')::numeric,0) -
+        round((o.metadata->>'supplier_price')::numeric * 0.30,2)) <= 1
+       then greatest(o.price - (o.metadata->>'supplier_price')::numeric,0) else 0 end,
   0,
   'NGN',
-  case when o.price > (o.metadata->>'supplier_price')::numeric then 'eligible' else 'held' end,
+  case when abs((o.price - (o.metadata->>'supplier_price')::numeric) -
+       round((o.metadata->>'supplier_price')::numeric * 0.30,2)) <= 1 then 'eligible' else 'held' end,
   jsonb_build_object('offer_title',o.title,'supplier_price',o.metadata->>'supplier_price',
     'resale_price',o.price,'policy','supplier_cost_plus_30_percent')
 from public.commerce_offers o
