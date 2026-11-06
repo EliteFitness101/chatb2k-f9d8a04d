@@ -11,7 +11,7 @@ const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 async function authorize(request: Request) {
-  const token = request.headers.get("authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1] ?? "";
+  const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
   if (!token || !SUPABASE_URL || !SERVICE_KEY) return null;
   const { data, error } = await db.auth.getUser(token);
   if (error || !data.user) return null;
@@ -27,7 +27,7 @@ async function authorize(request: Request) {
 function b64url(value: Uint8Array) {
   let binary = "";
   for (const byte of value) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 async function createScopedMcpToken(userId: string, email: string, roles: string[]) {
