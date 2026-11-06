@@ -106,8 +106,8 @@ begin
     eligible := coalesce((row_data->>'resale_authorized')::boolean,false)
       or coalesce((row_data->>'media_authorized')::boolean,false);
   elsif entity_name = 'commerce_offers' then
-    eligible := coalesce((row_data->'metadata'->>'resale_authorized')::boolean,false)
-      or coalesce((row_data->'metadata'->>'media_authorized')::boolean,false);
+    eligible := lower(coalesce(row_data->'metadata'->>'resale_authorized','')) in ('true','1','yes')
+      or lower(coalesce(row_data->'metadata'->>'media_authorized','')) in ('true','1','yes');
   end if;
 
   snapshot := jsonb_strip_nulls(jsonb_build_object(
