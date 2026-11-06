@@ -175,7 +175,7 @@ async function createOrReuseAsset(job: any, role: string) {
     qa_status: qa.status === "pass" ? "pending" : "hold",
     qa_reason: qa.status === "pass" ? "Automated structural, source-grounding and claim-risk checks passed; publication review remains separate." : "Automated document QA held: " + qa.failed.join(", "),
     content_pillar: "PRODUCT_EDUCATION",
-    fingerprint,
+    fingerprint: job.idempotency_key + ":" + fingerprint,
     intelligence: {
       enrichment_job_id: job.id,
       source_entity: job.source_entity,
