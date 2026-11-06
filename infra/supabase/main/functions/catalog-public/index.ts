@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const cors = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,OPTIONS", "access-control-allow-headers": "content-type, authorization" };
+const cors = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,OPTIONS", "access-control-allow-headers": "content-type, authorization, apikey, x-client-info" };
 const json = (body: unknown, status = 200, cache = "public, max-age=15, s-maxage=60, stale-while-revalidate=120") => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": cache, ...cors } });
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
 
@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
             && sourceMeta.external_checkout_enabled === true
             && sourceMeta.checkout_flow_verified === true;
           const resaleAuthorized = sourceMeta.resale_authorized === true && offerMeta.resale_authorized === true;
-          const fulfillmentReady = offer?.availability === "available"
+          const fulfillmentReady = (offer?.availability === "available" || offer?.availability === "in_stock")
             && offerMeta.stock_verified === true
             && offerMeta.fulfillment_ready === true;
           const purchaseEnabled = sourcePageVerified
@@ -203,6 +203,14 @@ Deno.serve(async (req) => {
           return {
             ...item,
             source_product_url: sourceUrl || null,
+            image_url: typeof offerMeta.image_url === "string" && offerMeta.image_url.startsWith("https://") ? offerMeta.image_url : (typeof item.image_url === "string" && item.image_url.startsWith("https://") ? item.image_url : null),
+            price: Number(offer?.price) > 0 ? Number(offer.price) : null,
+            supplier_price: Number(offerMeta.supplier_price ?? offer?.price) > 0 ? Number(offerMeta.supplier_price ?? offer.price) : null,
+            price_currency: offer?.currency || item.price_currency || "NGN",
+            source_seller_name: offerMeta.source_seller_name || item.source_seller_name || null,
+            stock_status: offer?.availability || item.stock_status || "unknown",
+            stock_label: offerMeta.observed_stock_state || item.stock_label || offer?.availability || "unknown",
+            stock_quantity: Number.isFinite(Number(offerMeta.observed_stock_quantity)) ? Number(offerMeta.observed_stock_quantity) : null,
             source_page_verified: sourcePageVerified,
             source_listing_link_enabled: sourcePageVerified,
             source_listing_mode: sourcePageVerified ? "supplier_direct_listing_only" : "review_pending",
@@ -210,7 +218,7 @@ Deno.serve(async (req) => {
             resale_authorized: resaleAuthorized,
             fulfillment_ready: fulfillmentReady,
             purchase_enabled: purchaseEnabled,
-            price_visibility: purchaseEnabled ? "visible" : "hidden",
+            price_visibility: sourcePageVerified && Number(offer?.price) > 0 ? "supplier_snapshot" : "hidden",
             status_label: purchaseEnabled ? "Supplier offer verified" : sourcePageVerified ? "Supplier listing page checked · checkout not verified" : "Supplier review pending",
             block_reason: purchaseEnabled ? null : reasons.join("; ")
           };
