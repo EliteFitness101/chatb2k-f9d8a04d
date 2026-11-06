@@ -36,14 +36,11 @@ Deno.serve(async (req: Request) => {
     if (!initData) return json({ error: "Open this Mini App from Telegram." }, 401);
     const verified = await validate(initData, token);
     if (!verified) return json({ error: "Telegram identity could not be verified. Reopen the Mini App from your connected bot." }, 401);
-    const meResponse = await fetch("https://api.telegram.org/bot" + token + "/getMe", { signal: AbortSignal.timeout(8000) });
-    const me = await meResponse.json().catch(() => null);
-    const username = clean(me?.result?.username, 64);
     return json({
       ok: true, authenticated: true,
       user: { id: String(verified.user.id), first_name: clean(verified.user.first_name, 80), last_name: clean(verified.user.last_name, 80), username: clean(verified.user.username, 64), language_code: clean(verified.user.language_code, 16) },
-      client: { display_name: username ? "@" + username : "Connected Telegram bot", bot_username: username },
-      support_url: username ? "https://t.me/" + username : "https://t.me/resonancefitness_bot",
+      client: { display_name: "Verified Telegram member" },
+      support_url: "https://t.me/resonancefitness_bot",
       start_param: verified.startParam, authenticated_at: new Date().toISOString()
     });
   } catch {
