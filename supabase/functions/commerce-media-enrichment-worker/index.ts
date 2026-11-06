@@ -102,7 +102,7 @@ function documentQa(markdown: string, title: string, role: string) {
     non_empty: markdown.trim().length >= 250,
     title_grounded: markdown.toLowerCase().includes(title.toLowerCase()),
     has_safety_or_provenance_note: /manufacturer|source record|verified facts|source facts/i.test(markdown),
-    no_high_risk_claims: !/\\b(cure|guaranteed results|guaranteed weight loss|instant results|diagnose|treats? disease|clinically proven)\\b/i.test(markdown)
+    no_high_risk_claims: !/\b(cure|guaranteed results|guaranteed weight loss|instant results|diagnose|treats? disease|clinically proven)\b/i.test(markdown)
   };
   const failed = Object.entries(checks).filter(([, pass]) => !pass).map(([name]) => name);
   return { status: failed.length ? "hold" : "pass", checks, failed, role };
