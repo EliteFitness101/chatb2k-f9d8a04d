@@ -71,6 +71,7 @@ set search_path = public, pg_temp
 as $$
 declare
   row_data jsonb := to_jsonb(new);
+  source_data jsonb;
   record_id text;
   sku text;
   handle text;
@@ -80,10 +81,19 @@ declare
   eligible boolean := true;
   entity_name text := tg_table_name;
 begin
-  record_id := coalesce(row_data->>'id', row_data->>'handle', row_data->>'sku');
-  sku := nullif(coalesce(row_data->>'sku', row_data->>'source_product_sku'), '');
-  handle := nullif(coalesce(row_data->>'handle', row_data->>'slug'), '');
-  title := nullif(coalesce(row_data->>'title', row_data->>'product_title', row_data->>'service_name'), '');
+  source_data := row_data;
+  if entity_name = 'product_sources' then
+    select to_jsonb(p) || row_data into source_data
+    from public.products p
+    where p.id = nullif(row_data->>'product_id','')::uuid;
+    if source_data is null then return new; end if;
+    record_id := source_data->>'product_id';
+  else
+    record_id := coalesce(row_data->>'id', row_data->>'handle', row_data->>'sku');
+  end if;
+  sku := nullif(coalesce(source_data->>'sku', source_data->>'source_product_sku'), '');
+  handle := nullif(coalesce(source_data->>'handle', source_data->>'slug'), '');
+  title := nullif(coalesce(source_data->>'title', source_data->>'product_title', source_data->>'service_name'), '');
   if record_id is null or title is null then
     return new;
   end if;
@@ -106,19 +116,20 @@ begin
     'sku', sku,
     'handle', handle,
     'title', title,
-    'description', coalesce(row_data->>'description', row_data->>'body_html'),
-    'product_type', coalesce(row_data->>'product_type', row_data->>'collection_type'),
-    'vendor', row_data->>'vendor',
-    'tags', row_data->'tags',
-    'features', coalesce(row_data->'features', row_data->'attributes', row_data->'metadata'),
-    'source_url', coalesce(row_data->>'product_url', row_data->>'source_url', row_data->>'external_url'),
-    'image_url', coalesce(row_data->>'image_url', row_data->>'image_src'),
-    'price', coalesce(row_data->'price', row_data->'variant_price'),
-    'currency', row_data->>'currency',
-    'availability', coalesce(row_data->>'availability', row_data->>'stock_status'),
-    'fulfillment_mode', coalesce(row_data->>'fulfillment_mode', row_data->>'fulfillment_type'),
-    'source_status', coalesce(row_data->>'status', row_data->>'resale_status'),
-    'metadata', row_data->'metadata'
+    'description', coalesce(source_data->>'description', source_data->>'body_html'),
+    'product_type', coalesce(source_data->>'product_type', source_data->>'collection_type'),
+    'vendor', source_data->>'vendor',
+    'tags', source_data->'tags',
+    'features', coalesce(source_data->'features', source_data->'attributes', source_data->'metadata'),
+    'source_url', coalesce(row_data->>'source_url', source_data->>'product_url', source_data->>'source_url', source_data->>'external_url'),
+    'image_url', coalesce(source_data->>'image_url', source_data->>'image_src'),
+    'price', coalesce(source_data->'price', source_data->'variant_price'),
+    'currency', source_data->>'currency',
+    'availability', coalesce(source_data->>'availability', source_data->>'stock_status'),
+    'fulfillment_mode', coalesce(source_data->>'fulfillment_mode', source_data->>'fulfillment_type'),
+    'source_status', coalesce(row_data->>'status', source_data->>'status', source_data->>'resale_status'),
+    'metadata', coalesce(row_data->'metadata', source_data->'metadata'),
+    'source_provenance', case when entity_name = 'product_sources' then row_data else null end
   ));
   key := entity_name || ':' || record_id || ':' || md5(snapshot::text);
 
