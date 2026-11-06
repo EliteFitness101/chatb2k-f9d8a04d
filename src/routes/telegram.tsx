@@ -75,7 +75,7 @@ function TelegramMiniApp() {
             <button onClick={() => open(session.support_url)} className="glass rounded-2xl border border-white/10 p-6 text-left transition hover:border-[#c9a96e]/50"><MessageCircle className="h-6 w-6 text-[#c9a96e]" /><h2 className="mt-4 font-display text-2xl">Talk to support</h2><p className="mt-2 text-sm leading-6 text-white/60">Continue in your connected Telegram bot for help and customer support.</p><span className="mt-5 inline-flex items-center gap-2 text-xs uppercase tracking-widest text-[#d8bd8e]">Open support <ArrowUpRight className="h-4 w-4" /></span></button>
             <div className="glass rounded-2xl border border-white/10 p-6"><Wallet className="h-6 w-6 text-[#c9a96e]" /><h2 className="mt-4 font-display text-2xl">Payment security</h2><p className="mt-2 text-sm leading-6 text-white/60">Your purchases use the existing approved payment rails. This Mini App does not collect card details or wallet credentials.</p><div className="mt-5 inline-flex items-center gap-2 text-xs text-emerald-200"><ShieldCheck className="h-4 w-4" /> Existing checkout preserved</div></div>
           </section>
-          <p className="mt-7 text-center text-[11px] leading-5 text-white/35">Client identity is resolved from the verified Telegram destination registry. No bot token is sent to this page.</p>
+          <p className="mt-7 text-center text-[11px] leading-5 text-white/35">Telegram launch data is verified server-side. Bot credentials remain server-only.</p>
         </>}
         <footer className="mt-10 border-t border-white/10 pt-5 text-center text-[10px] tracking-widest text-white/35">CHATB2K · GOVERNED CLIENT EXPERIENCE</footer>
       </div>
