@@ -196,6 +196,67 @@ create trigger trg_collection_registry_media_enrichment
 after insert or update of title, metadata, hero_asset, details_asset, gallery_assets, seo_title, seo_description, tags, status
 on public.resofit_collection_registry for each row execute function public.enqueue_commerce_media_enrichment();
 
+-- Initial catch-up for the current verified supplier offers and active collections.
+-- These are queue records only; the worker creates assets asynchronously and leaves them in QA.
+insert into public.commerce_media_enrichment_jobs (
+  source_entity, source_record_id, source_sku, source_handle, source_title,
+  source_snapshot, generation_spec, asset_plan, storage_route, status, idempotency_key
+)
+select
+  'commerce_offers', o.id::text,
+  coalesce(nullif(o.metadata->>'sku',''), o.external_id),
+  null,
+  o.title,
+  jsonb_strip_nulls(jsonb_build_object(
+    'source_entity','commerce_offers','source_record_id',o.id::text,
+    'title',o.title,'description',o.metadata->>'description',
+    'features',coalesce(o.metadata->'features',o.metadata->'attributes',o.metadata),
+    'source_url',o.external_url,'image_url',o.metadata->>'image_url',
+    'price',o.price,'currency',o.currency,'availability',o.availability,
+    'fulfillment_mode',o.fulfillment_mode,'metadata',o.metadata
+  )),
+  jsonb_build_object('schema_version',1,'strategy','reuse_first_generate_gaps',
+    'fact_policy','verified_source_facts_only','customer_charge',0,
+    'funding_policy','supplier_markup_30pct_shared_vas_pool','qa_required',true),
+  jsonb_build_array(
+    jsonb_build_object('role','quick_start_guide','type','digital_guide','required',true),
+    jsonb_build_object('role','product_manual','type','manual','required',false),
+    jsonb_build_object('role','video_setup_brief','type','video_production_brief','required',false),
+    jsonb_build_object('role','setup_video','type','video','required',false)
+  ),
+  'resofit_r2_primary','queued',
+  'commerce_offers:' || o.id::text || ':' || md5(jsonb_build_object('title',o.title,'metadata',o.metadata,'price',o.price)::text)
+from public.commerce_offers o
+where lower(coalesce(o.metadata->>'resale_authorized','')) in ('true','1','yes')
+  and lower(coalesce(o.metadata->>'media_authorized','')) in ('true','1','yes')
+on conflict (idempotency_key) do nothing;
+
+insert into public.commerce_media_enrichment_jobs (
+  source_entity, source_record_id, source_handle, source_title,
+  source_snapshot, generation_spec, asset_plan, storage_route, status, idempotency_key
+)
+select
+  'resofit_collection_registry', c.handle, c.handle, c.title,
+  jsonb_strip_nulls(jsonb_build_object(
+    'source_entity','resofit_collection_registry','source_record_id',c.handle,
+    'title',c.title,'description',c.seo_description,'product_type',c.collection_type,
+    'features',c.metadata,'tags',c.tags,'image_url',c.hero_asset,
+    'gallery_assets',c.gallery_assets,'brand',c.brand,'currency',c.currency
+  )),
+  jsonb_build_object('schema_version',1,'strategy','reuse_first_generate_gaps',
+    'fact_policy','verified_source_facts_only','customer_charge',0,
+    'funding_policy','supplier_markup_30pct_shared_vas_pool','qa_required',true),
+  jsonb_build_array(
+    jsonb_build_object('role','collection_guide','type','digital_guide','required',true),
+    jsonb_build_object('role','collection_video_brief','type','video_production_brief','required',false),
+    jsonb_build_object('role','collection_visuals','type','image_set','required',false)
+  ),
+  'resofit_r2_primary','queued',
+  'resofit_collection_registry:' || c.handle || ':' || md5(jsonb_build_object('title',c.title,'metadata',c.metadata,'tags',c.tags)::text)
+from public.resofit_collection_registry c
+where lower(coalesce(c.status,'')) = 'active'
+on conflict (idempotency_key) do nothing;
+
 -- Route preference is explicit and auditable. R2 is the primary ResoFit CDN route;
 -- Supabase Storage remains an available fallback. Other providers are not marked active
 -- until their credentials, upload path, public/private policy and retrieval are verified.
