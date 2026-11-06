@@ -97,6 +97,16 @@ function factsMarkdown(job: any, role: string) {
     "_Prepared automatically by ChatB2K from the product's ingested source record. This is an informational companion, not a replacement for the manufacturer's official manual._"
   ].filter(Boolean).join("\n");
 }
+function documentQa(markdown: string, title: string, role: string) {
+  const checks = {
+    non_empty: markdown.trim().length >= 250,
+    title_grounded: markdown.toLowerCase().includes(title.toLowerCase()),
+    has_safety_or_provenance_note: /manufacturer|source record|verified facts|source facts/i.test(markdown),
+    no_high_risk_claims: !/\\b(cure|guaranteed results|guaranteed weight loss|instant results|diagnose|treats? disease|clinically proven)\\b/i.test(markdown)
+  };
+  const failed = Object.entries(checks).filter(([, pass]) => !pass).map(([name]) => name);
+  return { status: failed.length ? "hold" : "pass", checks, failed, role };
+}
 async function putAsset(key: string, content: string) {
   const bytes = new TextEncoder().encode(content);
   const base64 = btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
@@ -146,6 +156,7 @@ async function createOrReuseAsset(job: any, role: string) {
   }
 
   const markdown = factsMarkdown(job, role);
+  const qa = documentQa(markdown, clean(job.source_title, 180) || "Product guide", role);
   const key = "resofit/products/" + safeKey(job.source_sku || job.source_handle || job.source_record_id) +
     "/guides/" + role + "-" + fingerprint.slice(0, 12) + ".md";
   const stored = await putAsset(key, markdown);
@@ -161,8 +172,8 @@ async function createOrReuseAsset(job: any, role: string) {
     mime_type: "text/markdown",
     rights_status: "original_generated",
     commercial_status: "included_vas",
-    qa_status: "pending",
-    qa_reason: "Automatically generated from the product ingestion snapshot; awaiting factual and editorial QA.",
+    qa_status: qa.status === "pass" ? "pending" : "hold",
+    qa_reason: qa.status === "pass" ? "Automated structural, source-grounding and claim-risk checks passed; publication review remains separate." : "Automated document QA held: " + qa.failed.join(", "),
     content_pillar: "PRODUCT_EDUCATION",
     fingerprint,
     intelligence: {
@@ -177,6 +188,7 @@ async function createOrReuseAsset(job: any, role: string) {
       storage_bucket: stored.bucket,
       storage_key: stored.key,
       reusable: true,
+      document_qa: qa,
       customer_charge: 0,
       funding_policy: "supplier_markup_30pct_shared_vas_pool"
     },
@@ -189,11 +201,11 @@ async function createOrReuseAsset(job: any, role: string) {
     asset_registry_id: asset.id, asset_role: role, asset_type: "document",
     canonical_url: asset.canonical_url, storage_provider: stored.provider,
     storage_bucket: stored.bucket, storage_key: stored.key, content_sha256: fingerprint,
-    qa_status: "pending", reuse_scope: "same_product_and_equivalent_products",
+    qa_status: qa.status === "pass" ? "pending" : "hold", reuse_scope: "same_product_and_equivalent_products",
     metadata: { reused: false, bytes: stored.bytes }
   }, { onConflict: "enrichment_job_id,asset_role,asset_type" });
   if (linkError) throw linkError;
-  return { id: asset.id, url: asset.canonical_url, reused: false, storage: stored.provider };
+  return { id: asset.id, url: asset.canonical_url, reused: false, storage: stored.provider, document_qa: qa };
 }
 
 Deno.serve(async (req: Request) => {
@@ -216,8 +228,9 @@ Deno.serve(async (req: Request) => {
     try {
       const guide = await createOrReuseAsset(job, "quick_start_guide");
       const videoBrief = await createOrReuseAsset(job, "video_setup_brief");
+      const held = [guide.document_qa?.status, videoBrief.document_qa?.status].includes("hold");
       await db.from("commerce_media_enrichment_jobs").update({
-        status: "qa",
+        status: held ? "held" : "qa",
         generation_spec: { ...(job.generation_spec || {}), generated_roles: ["quick_start_guide", "video_setup_brief"], video_rendering: "deferred_until_reuse_check_and_cost_gate", funding_policy: "supplier_markup_30pct_shared_vas_pool" },
         asset_plan: [
           { role: "quick_start_guide", type: "digital_guide", status: guide.reused ? "reused" : "generated", asset_id: guide.id, url: guide.url },
@@ -226,7 +239,7 @@ Deno.serve(async (req: Request) => {
         ],
         updated_at: new Date().toISOString()
       }).eq("id", job.id);
-      results.push({ id: job.id, status: "qa", guide, videoBrief });
+      results.push({ id: job.id, status: held ? "held" : "qa", guide, videoBrief });
     } catch (e) {
       const detail = String(e).slice(0, 500);
       await db.from("commerce_media_enrichment_jobs").update({
