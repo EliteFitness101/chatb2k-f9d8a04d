@@ -15,13 +15,17 @@ begin
     return new;
   end if;
 
-  if not (new.metadata ? 'vas_checkout_snapshot')
-     or jsonb_typeof(new.metadata->'vas_checkout_snapshot') <> 'array' then
+  if nullif(new.paystack_ref,'') is null then
+    return new;
+  end if;
+
+  if not (coalesce(new.metadata,'{}'::jsonb) ? 'vas_checkout_snapshot')
+     or jsonb_typeof(coalesce(new.metadata,'{}'::jsonb)->'vas_checkout_snapshot') <> 'array' then
     return new;
   end if;
 
   for selected_item in
-    select value from jsonb_array_elements(new.metadata->'vas_checkout_snapshot')
+    select value from jsonb_array_elements(coalesce(new.metadata,'{}'::jsonb)->'vas_checkout_snapshot')
   loop
     begin
       offer_uuid := (selected_item->>'offer_id')::uuid;
@@ -34,6 +38,8 @@ begin
       select 1 from public.commerce_vas_offers o
       where o.id = offer_uuid
         and o.status = 'selected'
+        and o.price = 0
+        and (o.user_id is null or o.user_id = new.user_id)
         and o.expires_at > coalesce(new.paid_at, now())
     ) then
       raise warning 'VAS offer % not selected/valid for payment %', offer_uuid, new.paystack_ref;
