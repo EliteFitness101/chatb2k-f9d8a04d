@@ -27,6 +27,19 @@ const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const db = supabaseUrl && serviceKey
   ? createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
+const internalToken = (Deno.env.get("CHATB2K_INTERNAL_TOKEN") ?? "").trim();
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let difference = 0;
+  for (let i = 0; i < a.length; i++) difference |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return difference === 0;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 function detectLanguage(text: string) {
   const s = text.toLowerCase();
@@ -48,16 +61,37 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 204, headers: { ...cors, "Access-Control-Allow-Origin": origin } });
   }
   if (req.method !== "POST") return respond({ error: "POST required" }, 405);
-  if (!allowedOrigins.has(origin)) return respond({ error: "Origin not allowed" }, 403);
   if (!supabaseUrl || !serviceKey) return respond({ error: "Assistant service is not configured" }, 503);
 
+  const suppliedInternalToken = req.headers.get("x-chatb2k-internal-token") ?? "";
+  const isInternal = Boolean(internalToken) && constantTimeEqual(suppliedInternalToken, internalToken);
+  if (!isInternal && !allowedOrigins.has(origin)) return respond({ error: "Origin not allowed" }, 403);
+  if (origin && !allowedOrigins.has(origin) && !isInternal) return respond({ error: "Origin not allowed" }, 403);
+
   try {
-    const body = await req.json().catch(() => null);
+    const declaredLength = Number(req.headers.get("content-length") ?? "0");
+    if (declaredLength > 24000) return respond({ error: "Request body too large" }, 413);
+    const rawBody = await req.text();
+    if (new TextEncoder().encode(rawBody).length > 24000) return respond({ error: "Request body too large" }, 413);
+    let body: unknown;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return respond({ error: "A valid JSON request body is required" }, 400);
+    }
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return respond({ error: "A valid JSON request body is required" }, 400);
     }
     const message = String((body as any).message ?? "").trim();
-    const history = Array.isArray((body as any).history) ? (body as any).history.slice(-8) : [];
+    const history = Array.isArray((body as any).history)
+      ? (body as any).history.slice(-8).filter((item: any) =>
+        item && typeof item === "object" && ["user", "assistant"].includes(item.role) &&
+        typeof item.content === "string"
+      ).map((item: any) => ({ role: item.role, content: item.content.slice(0, 1200) }))
+      : [];
+    if (isInternal && ((body as any).channel !== "telegram" || !String((body as any).conversation_id ?? "").trim())) {
+      return respond({ error: "Internal requests require channel=telegram and a conversation_id" }, 400);
+    }
     const persona = (body as any).persona === "mavia"
       ? "Mavia, elegant, warm, polished virtual concierge and HR/front-desk guide"
       : "Coach B2K, compassionate yet firm, accountable, practical coach";
@@ -66,9 +100,11 @@ Deno.serve(async (req: Request) => {
       return respond({ error: "Message must contain 1–2000 characters" }, 400);
     }
 
-    const ip = req.headers.get("cf-connecting-ip")
-      ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-      ?? "unknown";
+    const ip = isInternal
+      ? "internal:" + await sha256Hex("telegram:" + String((body as any).conversation_id))
+      : req.headers.get("cf-connecting-ip")
+        ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+        ?? "unknown";
     const windowStart = new Date(Date.now() - 60000).toISOString();
     if (db) {
       const { count, error: countError } = await db
@@ -177,6 +213,7 @@ Deno.serve(async (req: Request) => {
       model,
       provider_fallback: usedFallback,
       source: "Gemini live response via ChatB2K",
+      request_channel: isInternal ? "telegram" : "web",
     });
   } catch (error) {
     console.error("ChatB2K live assistant request failed", error);
