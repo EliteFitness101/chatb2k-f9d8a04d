@@ -80,14 +80,35 @@ create table if not exists public.chatb2k_delivery_outbox (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint chatb2k_delivery_outbox_identity_link_fk
+    foreign key (identity_link_id)
+    references public.resofit_ecosystem_identity_links (id)
+    on delete set null,
+  constraint chatb2k_delivery_outbox_identity_owner_fk
     foreign key (identity_link_id, customer_user_id)
     references public.resofit_ecosystem_identity_links (id, auth_user_id)
     on delete set null (identity_link_id),
   constraint chatb2k_delivery_outbox_customer_or_link_check
-    check (customer_user_id is not null or identity_link_id is not null),
+    check (customer_user_id is not null or identity_link_id is not null
+      or status in ('delivered', 'failed', 'suppressed', 'cancelled', 'dead_letter')),
+  constraint chatb2k_delivery_outbox_source_job_check
+    check ((source_job_table is null and source_job_id is null)
+      or (source_job_table in (
+        'digital_product_factory_jobs',
+        'digital_product_delivery_jobs',
+        'chatb2k_automation_tasks',
+        'customer_journeys'
+      ) and source_job_id is not null)),
+  constraint chatb2k_delivery_outbox_provider_channel_check
+    check (
+      (provider = 'resend' and channel = 'email')
+      or (provider = 'meta_whatsapp' and channel = 'whatsapp')
+      or (provider = 'telegram' and channel = 'telegram')
+      or (provider = 'twilio' and channel in ('sms', 'whatsapp'))
+    ),
   constraint chatb2k_delivery_outbox_approved_decision_check
     check (authorization_status <> 'approved'
-      or (authorization_decision_id is not null and authorized_at is not null)),
+      or (authorization_decision_id is not null and authorized_at is not null
+        and authorized_by_node = 'chatb2k101')),
   constraint chatb2k_delivery_outbox_dispatch_authorized_check
     check (status not in ('leased', 'accepted', 'delivered')
       or authorization_status = 'approved'),
