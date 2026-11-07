@@ -69,3 +69,25 @@ Updated `supabase/functions/chatb2k-live-assistant/index.ts` on this PR branch:
 - The Telegram webhook has not yet been changed to call this route.
 - No Deno typecheck, unit test, deployment, or runtime invocation was performed.
 - The route is not usable by Telegram until the same high-entropy token is provisioned securely to the assistant function and Telegram master handler.
+
+
+## Telegram relay implementation committed
+
+**Commit:** `19736de4ed2eaf2d3584ec0521f4a1fe9ff80c0e`
+
+Added a version-controlled copy of the currently deployed master webhook at `supabase/functions/telegram-master-webhook/index.ts`, then extended its ordinary text-message handling:
+
+- Master-bot text messages now call `chatb2k-live-assistant` through the internal-token route and send the reply back through the master bot.
+- Managed child-bot text messages use the same assistant route and reply through the matching child bot token.
+- `/start`, `/help`, `/provision`, callback handling, existing secret-token validation, update-ID deduplication, and managed-bot provisioning logic are retained.
+- Conversation identifiers are namespaced as `master:<chat_id>` or `child:<bot_id>:<chat_id>`; the assistant hashes them before request-log persistence.
+- The assistant call requires `CHATB2K_INTERNAL_TOKEN` and fails closed if it is absent. No message is silently treated as AI-answered when the assistant request fails.
+
+### Important rollout gates
+
+- This is repository source only. The deployed Telegram master webhook has not been changed.
+- The current live function's deployed source was used as the baseline; the new repository copy must be reconciled against any subsequent production edits before deployment.
+- Provision `CHATB2K_INTERNAL_TOKEN` as a Supabase Edge Function secret, then deploy the assistant and Telegram functions together through an approved release.
+- Run Deno format/typecheck and tests; test duplicate update IDs, invalid webhook secret, text and command routing, missing internal token, assistant timeout, Telegram send failure, and master/child bot isolation.
+- Run controlled test chats in non-production before enabling the relay for production traffic.
+- No outbound messages were sent by this repository change; no Telegram webhook settings, secrets, database rows, or deployments were changed.
