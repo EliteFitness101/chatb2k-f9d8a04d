@@ -48,3 +48,24 @@
 - Telegram assistant relay implementation: not started; deployed assistant dependency is currently unsafe to rely on.
 - Telegram Bot API status endpoint: not invoked; no outbound messages sent.
 - Production configuration, secrets, webhook registration, and deployment: unchanged.
+
+
+## Follow-on implementation — internal assistant authentication
+
+**Commit:** `16905adfe7053ab53d844178eb147ebdcded80c6`
+
+Updated `supabase/functions/chatb2k-live-assistant/index.ts` on this PR branch:
+
+- Added an internal server-to-server route authenticated by `x-chatb2k-internal-token`, compared in constant time against the Edge Function secret `CHATB2K_INTERNAL_TOKEN`.
+- Internal requests are accepted without a browser Origin only when the configured secret matches. Browser requests retain the existing Elite origin allowlist.
+- Internal requests must explicitly identify `channel: "telegram"` and provide a `conversation_id`.
+- Internal rate-limit identity uses a SHA-256 hash of the Telegram conversation identifier rather than persisting the raw identifier in the existing request-log fingerprint field.
+- Request bodies are capped at 24 KB and conversation history is bounded to the last eight valid user/assistant messages, each capped at 1,200 characters.
+- Standard `Request.text()` and `Response.json()` handling remains in place; the previously identified invalid response-method calls are absent from the branch source.
+
+### Configuration and evidence gates
+
+- The live Vault name lookup returned no `CHATB2K_INTERNAL_TOKEN` entry. The value must be provisioned as a Supabase Edge Function secret; no value was created, retrieved, or exposed.
+- The Telegram webhook has not yet been changed to call this route.
+- No Deno typecheck, unit test, deployment, or runtime invocation was performed.
+- The route is not usable by Telegram until the same high-entropy token is provisioned securely to the assistant function and Telegram master handler.
