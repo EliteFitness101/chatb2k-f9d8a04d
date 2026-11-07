@@ -80,6 +80,7 @@ async function handleManagedBot(update: Record<string, unknown>) {
   const { data: existingToken, error: existingTokenError } = await db!.rpc("chatb2k_get_runtime_secret", { p_name: secretName });
   if (existingTokenError) throw new Error("EXISTING_CHILD_TOKEN_LOOKUP_FAILED");
   if (typeof existingToken === "string" && existingToken !== token) throw new Error("CHILD_TOKEN_ROTATION_REQUIRES_RECONCILIATION");
+  let vaultSecretId: string | null = null;
   if (typeof existingToken !== "string") {
     const { data: secretId, error: vaultError } = await db!.rpc("chatb2k_store_runtime_secret", {
       p_name: secretName,
@@ -87,6 +88,7 @@ async function handleManagedBot(update: Record<string, unknown>) {
       p_description: "Managed Telegram bot credential; bot_id=" + botId,
     });
     if (vaultError || !secretId) throw new Error("VAULT_SECRET_WRITE_FAILED");
+    vaultSecretId = String(secretId);
   }
   const { data: existingWebhookSecret, error: existingWebhookSecretError } = await db!.rpc("chatb2k_get_runtime_secret", { p_name: webhookSecretName });
   if (existingWebhookSecretError) throw new Error("EXISTING_CHILD_WEBHOOK_SECRET_LOOKUP_FAILED");
@@ -110,7 +112,7 @@ async function handleManagedBot(update: Record<string, unknown>) {
     webhook_secret_ref: webhookSecretName,
     lifecycle_status: "vault_stored",
     managed_by_master: true,
-    metadata: { telegram_managed_bot: true, telegram_bot_id: botId, vault_secret_id: secretId },
+    metadata: { telegram_managed_bot: true, telegram_bot_id: botId, vault_secret_id: vaultSecretId },
     updated_at: new Date().toISOString(),
     last_verified_at: new Date().toISOString(),
   }, { onConflict: "bot_id" }).select("id").single();
