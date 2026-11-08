@@ -97,12 +97,12 @@ async function controlPlane(actorToken: string, action: string, payload: Record<
 async function gateway(payload: Record<string, unknown>, actor: Actor) {
   const agentId = String(payload.agent_id ?? "");
   const now = Math.floor(Date.now() / 1000);
-  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
-  const claims = btoa(JSON.stringify({ sub: actor.id, email: actor.email, aud: "chatb2k-ecosystem-tool-gateway", scope: "chatb2k:gateway:actor", agent_id: agentId, iat: now, exp: now + 60 })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const claims = btoa(JSON.stringify({ sub: actor.id, email: actor.email, aud: "chatb2k-ecosystem-tool-gateway", scope: "chatb2k:gateway:actor", agent_id: agentId, iat: now, exp: now + 60 })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const unsigned = header + "." + claims;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
-  const assertion = unsigned + "." + btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const assertion = unsigned + "." + btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const r = await fetch(GATEWAY_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", "x-request-id": crypto.randomUUID(), "x-chatb2k-actor": assertion },
