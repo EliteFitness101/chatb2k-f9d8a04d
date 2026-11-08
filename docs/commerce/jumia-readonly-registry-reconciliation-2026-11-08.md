@@ -27,7 +27,7 @@ The Edge Node source row for `JUMIA_NG` currently reports:
 - `robots_policy_checked_at=null`
 - `last_crawl_at=null`
 
-Its 67 product rows report `resale_status=authorized`, while nine are marked `publish_eligible=true`. Those internal flags are not accompanied by verified supplier-side authorization evidence in this audit. They must not be treated as commercial or image-rights permission.
+Its 67 product rows report `resale_status=authorized`: 58 are `category_page_only_unverified` / `candidate`, and nine are `page_fetched` / `VERIFIED` and marked `publish_eligible=true`. Those internal flags are not accompanied by verified supplier-side authorization evidence in this audit. They must not be treated as commercial or image-rights permission.
 
 The main mirror reports 67 Jumia URL rows, 17 unique URLs, zero Jumia offers marked publish eligible, and 20 offers across all sources marked resale authorized. The Edge Node and main mirror therefore do not have equivalent authorization semantics.
 
