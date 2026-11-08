@@ -94,10 +94,18 @@ async function controlPlane(actorToken: string, action: string, payload: Record<
   try { data = JSON.parse(raw); } catch { data = { response_excerpt: raw.slice(0, 1000) }; }
   return { http_status: r.status, ok: r.ok, data };
 }
-async function gateway(payload: Record<string, unknown>) {
+async function gateway(payload: Record<string, unknown>, actor: Actor) {
+  const agentId = String(payload.agent_id ?? "");
+  const now = Math.floor(Date.now() / 1000);
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const claims = btoa(JSON.stringify({ sub: actor.id, email: actor.email, aud: "chatb2k-ecosystem-tool-gateway", scope: "chatb2k:gateway:actor", agent_id: agentId, iat: now, exp: now + 60 })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const unsigned = header + "." + claims;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
+  const assertion = unsigned + "." + btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
   const r = await fetch(GATEWAY_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", "x-request-id": crypto.randomUUID() },
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", "x-request-id": crypto.randomUUID(), "x-chatb2k-actor": assertion },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(30000),
   });
@@ -135,11 +143,26 @@ async function runTool(name: string, args: Record<string, unknown>, actor: Actor
     });
     return { ok: true, persisted: true, proposal: report, run, audit_recorded: !auditError, note: "Proposal only; no code generation, deployment or execution occurred." };
   }
-  if (name === "agent_tool_list") {
-    return await gateway({ action: "list_tools", agent_id: args.agent_id });
-  }
-  if (name === "agent_tool_invoke") {
-    return await gateway({ action: "invoke", agent_id: args.agent_id, tool: args.tool, input: args.input ?? {} });
+  if (name === "agent_tool_list" || name === "agent_tool_invoke") {
+    const requestedAgentId = String(args.agent_id ?? "").trim();
+    if (!requestedAgentId) throw new Error("AGENT_ID_REQUIRED");
+    const { data: agent, error } = await db.from("chatb2k_agent_registry")
+      .select("agent_id,permission_level,enabled,status,health_status,kill_switch_enabled")
+      .eq("agent_id", requestedAgentId).maybeSingle();
+    if (error || !agent || agent.enabled !== true || agent.status !== "ENABLED" ||
+        agent.health_status === "FAILED" || agent.kill_switch_enabled === true) {
+      throw new Error("AGENT_NOT_AUTHORIZED_OR_DISABLED");
+    }
+    const isRoot = ["ROOT", "GLOBAL_ADMIN"].includes(String(agent.permission_level));
+    if (isRoot && (requestedAgentId !== "chatb2k101" || actor.email !== "ceo@resofit.fit")) {
+      throw new Error("CEO_ROOT_IDENTITY_BINDING_REQUIRED");
+    }
+    if (!isRoot) throw new Error("NON_ROOT_ACTOR_BINDING_NOT_CONFIGURED");
+    return await gateway({
+      action: name === "agent_tool_list" ? "list_tools" : "invoke",
+      agent_id: "chatb2k101",
+      ...(name === "agent_tool_invoke" ? { tool: args.tool, input: args.input ?? {} } : {}),
+    }, actor);
   }
   throw new Error("TOOL_NOT_FOUND");
 }
