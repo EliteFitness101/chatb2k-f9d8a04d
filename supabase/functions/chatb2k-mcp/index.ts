@@ -58,7 +58,10 @@ async function authenticate(req: Request): Promise<Actor | null> {
       !iat || exp <= now || exp - iat > 300 || iat > now + 30) return null;
   try {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-    const valid = await crypto.subtle.verify("HMAC", key, decodeBase64Url(parts[2]), new TextEncoder().encode(parts[0] + "." + parts[1]));
+    const signature = decodeBase64Url(parts[2]);
+    const signatureBuffer = new ArrayBuffer(signature.byteLength);
+    new Uint8Array(signatureBuffer).set(signature);
+    const valid = await crypto.subtle.verify("HMAC", key, signatureBuffer, new TextEncoder().encode(parts[0] + "." + parts[1]));
     if (!valid) return null;
   } catch { return null; }
   const id = String(claims.sub ?? "");
