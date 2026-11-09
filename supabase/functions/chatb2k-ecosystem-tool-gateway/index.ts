@@ -103,7 +103,10 @@ async function verifyMcpActorAssertion(token:string,agentId:string){try{
  const now=Math.floor(Date.now()/1000);
  if(claims.aud!=="chatb2k-ecosystem-tool-gateway"||claims.scope!=="chatb2k:gateway:actor"||claims.agent_id!==agentId||Number(claims.exp)<=now||Number(claims.iat)>now+10)return null;
  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(SERVICE_KEY),{name:"HMAC",hash:"SHA-256"},false,["verify"]);
- const valid=await crypto.subtle.verify("HMAC",key,decodeJwtPart(parts[2]),new TextEncoder().encode(parts[0]+"."+parts[1]));
+ const signature=decodeJwtPart(parts[2]);
+  const signatureBuffer=new ArrayBuffer(signature.byteLength);
+  new Uint8Array(signatureBuffer).set(signature);
+  const valid=await crypto.subtle.verify("HMAC",key,signatureBuffer,new TextEncoder().encode(parts[0]+"."+parts[1]));
  return valid?claims:null;
  }catch{return null;}}
 async function audit(role:string,actor:string,agent:string,action:string,tool:string|null,rid:string,outcome:string,status:number,started:number,metadata:Record<string,unknown>={}){try{await fetch(SUPABASE_URL+"/rest/v1/chatb2k_tool_gateway_audit",{method:"POST",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({actor_role:role,actor_id:actor,action,tool_name:tool,request_id:rid,outcome,http_status:status,latency_ms:Date.now()-started,metadata:{agent_id:agent,...metadata}})});}catch(e){console.error("audit_failed",String(e));}}
@@ -131,7 +134,6 @@ Deno.serve(async(req:Request)=>{
   }
   if(!agent||agent.enabled!==true||agent.status!=="ENABLED"||agent.kill_switch_enabled===true||agent.health_status==="FAILED"){await audit(role,actor,agentId,action,null,rid,"agent_denied",403,started);return json({error:"AGENT_NOT_AUTHORIZED_OR_DISABLED",request_id:rid},403);}
   const allowed=Array.isArray(agent.allowed_tools)?agent.allowed_tools.map(String):[];
-  const elevated=["ROOT","GLOBAL_ADMIN"].includes(String(agent.permission_level));
   const list=Object.entries(INTERNAL_READ_TOOLS).filter(([name])=>elevated||allowed.includes(name)).map(([name,v])=>({name,endpoint:v.slug,description:v.description,permission:"read_only"}));
   const ext=Object.entries(EXTERNAL_READ_TOOLS).filter(([name])=>elevated||allowed.includes(name)).map(([name,v])=>({name,category:v.category,permission:"read_only",configured:Boolean(Deno.env.get(v.env))}));
   const rootTools=elevated?Object.entries(ROOT_WRITE_TOOLS).map(([name,v])=>({name,permission:v.permission,description:v.description,configured:name.startsWith("vercel.")?Boolean(Deno.env.get("VERCEL_API_TOKEN")):true})):[];
