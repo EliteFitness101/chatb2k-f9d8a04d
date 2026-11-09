@@ -9,7 +9,7 @@ function decodePart(value: string) {
 }
 
 function verifyBridgeToken(request: Request) {
-  const token = request.headers.get("authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1] ?? "";
+  const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
   const parts = token.split(".");
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (parts.length !== 3 || !secret) return null;
