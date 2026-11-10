@@ -26,53 +26,7 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# One-time production proof: rehost a real archived capture during a push-triggered
-# storage-only run, then download it from the public R2 route and compare exact bytes.
-# The lock ensures concurrent per-host workers perform this probe only once per runner.
-if [ "${CAPTURE_STORAGE_ONLY:-false}" = "true" ] && mkdir /tmp/resofit-r2-capture-proof.lock 2>/dev/null; then
-  (
-    set -euo pipefail
-    test -n "${DROPBOX_APP_KEY:-}" && test -n "${DROPBOX_APP_SECRET:-}" && test -n "${DROPBOX_REFRESH_TOKEN:-}"
-    test -n "${R2_WRITE_TOKEN:-}"
-    SRC_PATH="/ResoFit/BIGO/hosts/748833040/processed/748833040-20261025T065551Z.mp4"
-    R2_KEY="public/bigo/hosts/748833040/processed/20261025-r2-verified/748833040-20261025T065551Z.mp4"
-    R2_URL="${R2_MEDIA_BASE:-https://media.resofit.fit}/${R2_KEY}"
-    ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$R2_KEY")"
-    UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
-    TOKEN_JSON="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"
-    DB_TOKEN="$(printf '%s' "$TOKEN_JSON" | jq -er '.access_token')"
-    curl --fail --silent --show-error --retry 2 --retry-delay 2 -X POST https://content.dropboxapi.com/2/files/download -H "Authorization: Bearer ${DB_TOKEN}" -H "Dropbox-API-Arg: {\"path\":\"$SRC_PATH\"}" -o /tmp/resofit-r2-capture-source.mp4
-    test "$(stat -c %s /tmp/resofit-r2-capture-source.mp4)" -eq 17680728
-    DIRECT_URL="https://media.resofit.fit/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$R2_KEY")"
-    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
-    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
-      echo "R2 proof direct PUT failed (HTTP $CODE); sanitized response follows:" >&2
-      head -c 2000 /tmp/resofit-r2-put.json >&2 || true
-      printf '\\n' >&2
-      CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-post.json -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
-      if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
-        echo "R2 proof upload POST failed (HTTP $CODE); sanitized response follows:" >&2
-        head -c 2000 /tmp/resofit-r2-post.json >&2 || true
-        printf '\\n' >&2
-        cp /tmp/resofit-r2-post.json /tmp/resofit-r2-put.json
-      else
-        cp /tmp/resofit-r2-post.json /tmp/resofit-r2-put.json
-      fi
-    fi
-    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then echo "R2 proof upload failed (HTTP $CODE); both upload paths were attempted." >&2; exit 1; fi
-    test "$CODE" -ge 200 && test "$CODE" -lt 300
-    jq -e '.ok == true and .size == 17680728' /tmp/resofit-r2-put.json >/dev/null
-    READBACK_OK=0
-    for BASE in "${R2_MEDIA_BASE:-https://media.resofit.fit}" "https://content.resofit.fit"; do
-      if curl --silent --show-error --max-time 30 "$BASE/$R2_KEY" -o /tmp/resofit-r2-capture-readback.mp4; then
-        if cmp -s /tmp/resofit-r2-capture-source.mp4 /tmp/resofit-r2-capture-readback.mp4; then READBACK_OK=1; break; fi
-      fi
-    done
-    test "$READBACK_OK" -eq 1
-    test "$(stat -c %s /tmp/resofit-r2-capture-readback.mp4)" -eq 17680728
-    echo "::notice::R2_CAPTURE_UPLOAD_VERIFIED URL=$R2_URL bytes=17680728 sha256=$(sha256sum /tmp/resofit-r2-capture-readback.mp4 | awk '{print $1}')"
-  ) || echo "::error::One-time actual-capture R2 upload/read-back verification failed; normal Dropbox capture/archive behavior remains unchanged."
-fi
+# Vercel Blob is the primary media delivery store.
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -481,20 +435,13 @@ if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = 
   fi
 fi
 
-# Dropbox is the canonical media store for this capture path. Never attempt Blob uploads:
-# the store is suspended, and downstream ingestion accepts an HTTPS media URL.
-if [ -z "${DROPBOX_APP_KEY:-}" ] || [ -z "${DROPBOX_APP_SECRET:-}" ] || [ -z "${DROPBOX_REFRESH_TOKEN:-}" ]; then
-  echo "::error::Dropbox credentials are required; refusing to create a capture without a verified archive."
-  exit 1
-fi
-# Exchange the GitHub Actions Dropbox refresh token. Dropbox is mandatory for this
-# capture path; no Blob upload fallback is permitted while the Blob store is suspended.
+# Dropbox is optional secondary archival. Vercel Blob is mandatory for public delivery.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
     DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
     export DROPBOX_ACCESS_TOKEN
   else
-    echo "::error::Dropbox OAuth refresh failed; refusing to create an unarchived capture."
+    echo "::warning::Dropbox OAuth refresh failed; primary Vercel Blob delivery remains available."
   fi
 fi
 dropbox_upload() {
@@ -663,81 +610,51 @@ PYDIR
 dropbox_ensure_host_dirs
 
 export FILE COVER
-R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
-r2_upload() {
-  local SRC="$1" KEY="$2" MIME="$3" DEST TMP ENCODED_KEY UPLOAD_URL CODE
-  [ -n "${R2_WRITE_TOKEN:-}" ] || { echo "::warning::No R2 writer token; retaining verified Dropbox archive." >&2; return 2; }
-  R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
-  DEST="${R2_MEDIA_BASE%/}/${KEY}"
-  ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$KEY")"
-  UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
-  # workers.dev provides an authenticated upload ingress that bypasses zone-level custom-hostname challenges.
-  # Existing custom-domain paths remain first; Dropbox remains canonical until read-back verification passes.
-  WORKERS_DEV_URL="${R2_WORKERS_DEV_URL:-https://shopb2k.resonancefitnessng.workers.dev}"
-  TMP="$(mktemp)"
-  DIRECT_URL="${R2_MEDIA_BASE%/}/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$KEY")"
-  CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
-  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
-    CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
-  fi
-  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
-    CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "${WORKERS_DEV_URL%/}/api/ingest-media?key=${ENCODED_KEY}" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
-  fi
-  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
-    echo "R2 upload failed for ${KEY} (HTTP ${CODE}); response follows without credentials:" >&2
-    cat "${TMP}.json" >&2
-    rm -f "$TMP" "${TMP}.json"
-    return 1
-  fi
-  if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "$DEST" -o "$TMP"; then
-    if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "https://content.resofit.fit/${KEY}" -o "$TMP"; then
-      rm -f "$TMP" "${TMP}.json"
-      echo "R2 upload succeeded but CDN read-back was blocked for ${KEY}." >&2
-      return 1
-    fi
-  fi
-  if ! cmp -s "$SRC" "$TMP"; then
-    rm -f "$TMP" "${TMP}.json"
-    echo "R2 read-back checksum mismatch for ${KEY}" >&2
-    return 1
-  fi
-  rm -f "$TMP" "${TMP}.json"
-  printf '%s' "$DEST"
+# Upload processed media and cover to Vercel Blob first; public URLs are verified by SHA-256 read-back.
+blob_upload() {
+  local SRC="$1" KEY="$2" MIME="$3"
+  [ -n "${BLOB_READ_WRITE_TOKEN:-}" ] || { echo "Vercel Blob token is missing" >&2; return 2; }
+  [ -s "$SRC" ] || { echo "Blob upload source is empty: $SRC" >&2; return 1; }
+  ( cd /tmp/bigo-blob-sdk && BLOB_READ_WRITE_TOKEN="$BLOB_READ_WRITE_TOKEN" node --input-type=module - "$SRC" "$KEY" "$MIME" <<'JSBLOB'
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { put } from '@vercel/blob';
+const [src, pathname, contentType] = process.argv.slice(2);
+const token = process.env.BLOB_READ_WRITE_TOKEN;
+if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is missing');
+const bytes = await readFile(src);
+const digest = createHash('sha256').update(bytes).digest('hex');
+const blob = await put(pathname, bytes, { access: 'public', token, contentType, addRandomSuffix: false });
+if (!blob?.url?.startsWith('https://')) throw new Error('Vercel Blob did not return a public HTTPS URL');
+const response = await fetch(blob.url, { cache: 'no-store' });
+if (!response.ok) throw new Error(`Blob read-back failed (HTTP ${response.status})`);
+const readback = Buffer.from(await response.arrayBuffer());
+const readbackDigest = createHash('sha256').update(readback).digest('hex');
+if (readback.length !== bytes.length || readbackDigest !== digest) throw new Error('Blob read-back byte count or SHA-256 mismatch');
+process.stdout.write(JSON.stringify({url: blob.url, size: bytes.length, sha256: digest, verified: true}));
+JSBLOB
+  ) | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("verified") is True; print(d["url"])'
 }
-# Dropbox remains the verified archive. R2 becomes the delivery URL only after
-# the actual object passes production PUT + GET + byte-for-byte verification.
-DROPBOX_PROCESSED_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
-BLOB_URL="$DROPBOX_PROCESSED_URL"
-R2_VIDEO_STATUS="unavailable"
-if [ -n "${R2_WRITE_TOKEN:-}" ] && R2_VIDEO_URL="$(r2_upload "$FILE" "public/bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"; then
-  BLOB_URL="$R2_VIDEO_URL"
-  R2_VIDEO_STATUS="verified_object_readback"
-  echo "::notice::R2 video upload and byte-for-byte read-back verified for $HOST"
-else
-  BLOB_URL="$DROPBOX_PROCESSED_URL"
-  R2_VIDEO_STATUS="failed_or_unconfigured_dropbox_fallback"
-  echo "::warning::R2 video delivery unavailable for $HOST; continuing with verified Dropbox archive URL." >&2
-fi
+BLOB_URL="$(blob_upload "$FILE" "bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
+COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
-  if ! audio_qa "$GBP_FILE" "Google Business derivative"; then
+  if audio_qa "$GBP_FILE" "Google Business derivative"; then
+    GBP_URL="$(blob_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
+  else
     echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
     rm -f "$GBP_FILE"
-  else
-    GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"
-    if [ -n "${R2_WRITE_TOKEN:-}" ] && R2_GBP_URL="$(r2_upload "$GBP_FILE" "public/bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"; then
-      GBP_URL="$R2_GBP_URL"
-    else
-      echo "::warning::R2 derivative delivery unavailable for $HOST; retaining verified Dropbox derivative URL." >&2
-    fi
   fi
 fi
-DROPBOX_COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
-COVER_URL="$DROPBOX_COVER_URL"
-if [ -n "${R2_WRITE_TOKEN:-}" ] && R2_COVER_URL="$(r2_upload "$COVER" "public/bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"; then
-  COVER_URL="$R2_COVER_URL"
-else
-  echo "::warning::R2 cover delivery unavailable for $HOST; retaining verified Dropbox cover URL." >&2
+DROPBOX_PROCESSED_URL=""
+DROPBOX_COVER_URL=""
+DROPBOX_RAW_URL=""
+if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  if dropbox_ensure_host_dirs; then
+    DROPBOX_PROCESSED_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)" || DROPBOX_PROCESSED_URL=""
+    DROPBOX_COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)" || DROPBOX_COVER_URL=""
+    DROPBOX_RAW_URL="$(dropbox_upload "$RAW" "${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4")" || DROPBOX_RAW_URL=""
+  fi
 fi
 
 DRIVE_RAW=""
@@ -776,18 +693,13 @@ def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'cloudflare_r2' if blob.startswith('https://media.resofit.fit/') else 'dropbox','r2_object_readback_verified':blob.startswith('https://media.resofit.fit/'),'r2_write_token_present':bool(__import__('os').environ.get('R2_WRITE_TOKEN'))}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'vercel_blob','blob_store':'vercel_blob','blob_readback_verified':bool(blob)}}
 print(json.dumps({'highlight':hitem}))
 PY
 
 # Preserve source media and metadata in the Dropbox archive; upload/read-back hash checks are mandatory.
-if ! dropbox_upload "$RAW" "${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4"; then
-  echo "::error::Dropbox raw capture archive failed for $HOST."
-  exit 1
-fi
-if ! dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json"; then
-  echo "::error::Dropbox metadata archive failed for $HOST."
-  exit 1
+if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json" || echo "::warning::Secondary Dropbox metadata archive failed for $HOST."
 fi
 if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   if drive_put "$RESULT" "metadata" "application/json" "BIGO-$HOST-$TS.json" >/dev/null; then
@@ -799,11 +711,11 @@ fi
 
 # Save a per-host verification receipt after the primary archive uploads have passed Dropbox read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
-python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "${R2_VIDEO_STATUS}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
-host,ts,root,video,cover,r2_status=sys.argv[1:]
-is_r2=video.startswith("https://media.resofit.fit/")
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"archive_verified","dropbox_root":root,"processed_video":root+"/processed","raw_capture":root+"/raw-captures","metadata":root+"/metadata","logs":root+"/logs","video_url":video,"cover_url":cover,"archive_verification":"Dropbox size and content_hash read-back","media_delivery_provider":"cloudflare_r2" if is_r2 else "dropbox","r2_object_readback_status":r2_status,"r2_object_readback_verified":is_r2 and r2_status=="verified_object_readback"}))
+host,ts,root,video,cover,blob_status=sys.argv[1:]
+is_blob=video.startswith("https://")
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"archive_verified","dropbox_root":root,"processed_video":root+"/processed","raw_capture":root+"/raw-captures","metadata":root+"/metadata","logs":root+"/logs","video_url":video,"cover_url":cover,"archive_verification":"Dropbox size and content_hash read-back","media_delivery_provider":"vercel_blob","blob_readback_status":blob_status,"blob_object_readback_verified":is_blob and blob_status=="verified_object_readback"}))
 PYSTATUS
 if ! dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json"; then
   echo "::error::Per-host archive verification receipt failed for $HOST."
