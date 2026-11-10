@@ -1,12 +1,9 @@
-name: BIGO Noble_terra Proof
+name: BIGO Dynamic Host Proof
 
-# Retry after signed /sid/ HLS discovery patch
+# On-demand proof for any host selected by the agency from its configured host inventory.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/bigo-noble-proof.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,7 +11,8 @@ permissions:
 
 env:
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-  BIGO_NOBLE_TERRA_SOURCE_URL: ${{ secrets.BIGO_NOBLE_TERRA_SOURCE_URL }}
+  BIGO_PROOF_HOST_ID: ${{ secrets.BIGO_PROOF_HOST_ID }}
+  BIGO_PROOF_SOURCE_URL: ${{ secrets.BIGO_PROOF_SOURCE_URL }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
 
@@ -32,29 +30,31 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           python3 -m pip install --disable-pip-version-check -q 'streamlink==8.6.1' requests
-          rm -rf /tmp/bigo-blob-node
-          mkdir -p /tmp/bigo-blob-node
-          cd /tmp/bigo-blob-node
+          rm -rf /tmp/bigo-blob-sdk
+          mkdir -p /tmp/bigo-blob-sdk
+          cd /tmp/bigo-blob-sdk
           npm init -y --silent
           npm install --no-package-lock --omit=dev @vercel/blob@2.6.1 --no-audit --no-fund
           cd -
 
-      - name: Capture Noble_terra from signed source
+      - name: Capture configured proof host
         run: |
           set -euo pipefail
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
-          : "${BIGO_NOBLE_TERRA_SOURCE_URL:?BIGO_NOBLE_TERRA_SOURCE_URL is required}"
+          : "${BIGO_PROOF_HOST_ID:?BIGO_PROOF_HOST_ID is required}"
+          PROOF_HOST_SAFE="$(printf '%s' "${BIGO_PROOF_HOST_ID}" | tr -c 'A-Za-z0-9._-' '_')"
+          PROOF_SOURCE_URL="${BIGO_PROOF_SOURCE_URL:-https://www.bigo.tv/${BIGO_PROOF_HOST_ID}}"
           mkdir -p /tmp/bigo-results
           export BLOB_READ_WRITE_TOKEN
           chmod +x ./scripts/bigo-capture-host.sh
-          bash ./scripts/bigo-capture-host.sh "Noble_terra" "${BIGO_NOBLE_TERRA_SOURCE_URL}"
-          test -s /tmp/bigo-results/Noble_terra.json
-          jq . /tmp/bigo-results/Noble_terra.json
+          bash ./scripts/bigo-capture-host.sh "${BIGO_PROOF_HOST_ID}" "${PROOF_SOURCE_URL}"
+          test -s "/tmp/bigo-results/${PROOF_HOST_SAFE}.json"
+          jq . "/tmp/bigo-results/${PROOF_HOST_SAFE}.json"
 
       - name: Ingest captured highlight into canonical pipeline
         run: |
           set -euo pipefail
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           VERIFIED_PATTERN="$(printf "%s" "${BIGO_VERIFIED_HOST_IDS:-}" | tr ", " "\\n" | sed "/^$/d" | jq -R -s 'split("\\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlight], verified_host_ids:$verified, limit: 1, storage_only:false}' /tmp/bigo-results/Noble_terra.json > /tmp/noble-batch.json
+          jq --argjson verified "$VERIFIED_PATTERN" --slurpfile captured "/tmp/bigo-results/${PROOF_HOST_SAFE}.json" '{highlights: [$captured[0].highlight], verified_host_ids:$verified, limit: 1, storage_only:false}' /dev/null > /tmp/noble-batch.json
           curl -fsS -X POST "${PIPELINE_URL}"             -H "Authorization: Bearer ${OIDC_TOKEN}"             -H 'Content-Type: application/json'             --data-binary @/tmp/noble-batch.json
