@@ -1,4 +1,4 @@
-name: BIGO Dropbox-primary migration checks
+name: BIGO Blob-primary migration checks
 
 on:
   push:
@@ -18,35 +18,36 @@ permissions:
   contents: read
 
 jobs:
-  dropbox-primary-static:
+  blob-primary-static:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - name: Validate capture shell syntax
         run: bash -n scripts/bigo-capture-host.sh
-      - name: Assert Dropbox is the canonical capture path
+      - name: Assert Vercel Blob is the primary capture path
         run: |
           python3 - <<'PY'
           from pathlib import Path
           script = Path("scripts/bigo-capture-host.sh").read_text()
           workflow = Path(".github/workflows/bigo-live-automation.yml").read_text()
           required = [
+              "BLOB_READ_WRITE_TOKEN",
+              "from '@vercel/blob'",
+              "access: 'public'",
+              "readbackDigest",
+              "BIGO_CAPTURE_PARALLELISM",
+              "Supabase BIGO source-of-truth registry loaded",
               "files/upload_session/start",
-              "files/upload_session/append_v2",
-              "files/upload_session/finish",
               "files/get_metadata",
-              "metadata.get(\"content_hash\") != expected_hash",
-              "create_shared_link_with_settings",
-              "Dropbox raw capture archive failed",
-              "Dropbox metadata archive failed",
           ]
-          missing = [item for item in required if item not in script]
-          assert not missing, f"Missing Dropbox archive controls: {missing}"
-          assert "@vercel/blob" not in script, "Blob SDK remains in capture script"
-          assert "BLOB_READ_WRITE_TOKEN" not in script, "Blob token remains in capture script"
-          assert "@vercel/blob" not in workflow, "Blob SDK remains in BIGO workflow"
-          assert "BLOB_READ_WRITE_TOKEN" not in workflow, "Blob token remains in BIGO workflow"
-          assert 'dropbox_upload "$FILE"' in script and 'dropbox_upload "$COVER"' in script
-          print("PASS: Dropbox resumable upload, hash/size read-back, public media links, raw/metadata archiving; no Blob SDK/token dependency.")
-          PY
+          missing = [item for item in required if item not in script + workflow]
+          assert not missing, f"Missing production capture controls: {missing}"
+          assert "BIGO_HOSTS_PER_CYCLE" not in workflow
+          assert "kisexy" not in workflow
+          assert "R2_WRITE_TOKEN" not in script + workflow
+          assert "cloudflare_r2" not in script
+          assert "BLOB_READ_WRITE_TOKEN" in workflow
+          assert "complete dynamic source-of-truth inventory" in workflow
+          print("PASS: dynamic inventory, configurable concurrency, primary Blob upload and SHA-256 read-back; Dropbox optional.")
+          PYY
