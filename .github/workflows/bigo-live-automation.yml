@@ -52,6 +52,7 @@ jobs:
             sudo apt-get install -y -qq ffmpeg
           fi
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
+          npm install --prefix /tmp/bigo-blob-sdk --no-audit --no-fund @vercel/blob
           ffmpeg -version | head -n 1
           streamlink --version
 
