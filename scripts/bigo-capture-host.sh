@@ -569,11 +569,6 @@ else:
 PYDROP
 }
 
-if [ -z "${DROPBOX_ACCESS_TOKEN:-}" ]; then
-  echo "::error::Dropbox access token unavailable; refusing to create a capture without a verified archive."
-  exit 1
-fi
-
 dropbox_ensure_host_dirs() {
   python3 - "${HOST_ROOT}" <<'PYDIR'
 import json, os, urllib.error, urllib.request, sys, time
@@ -607,7 +602,6 @@ for path in [root,root+"/raw-captures",root+"/processed",root+"/processed/google
     print("Ensured Dropbox folder: "+path)
 PYDIR
 }
-dropbox_ensure_host_dirs
 
 export FILE COVER
 # Upload processed media and cover to Vercel Blob first; public URLs are verified by SHA-256 read-back.
@@ -677,11 +671,11 @@ if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
     echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST; metadata read-back is still pending"
   else
     DRIVE_SYNC_STATUS="partial"
-    echo "::warning::Google Drive archive is partial for $HOST; Dropbox remains canonical and capture will continue."
+    echo "::warning::Google Drive archive is partial for $HOST; verified Blob delivery remains available."
   fi
 else
   DRIVE_SYNC_STATUS="not_configured"
-  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; Dropbox remains canonical."
+  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Blob delivery remains available."
 fi
 
 python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
@@ -697,7 +691,7 @@ hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'
 print(json.dumps({'highlight':hitem}))
 PY
 
-# Preserve source media and metadata in the Dropbox archive; upload/read-back hash checks are mandatory.
+# Save an optional secondary Dropbox metadata copy after the primary Blob object read-back succeeds.
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json" || echo "::warning::Secondary Dropbox metadata archive failed for $HOST."
 fi
@@ -709,17 +703,16 @@ if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   fi
 fi
 
-# Save a per-host verification receipt after the primary archive uploads have passed Dropbox read-back checks.
+# Save a per-host verification receipt after the primary Blob objects pass SHA-256 read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
 python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
 host,ts,root,video,cover,blob_status=sys.argv[1:]
 is_blob=video.startswith("https://")
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"archive_verified","dropbox_root":root,"processed_video":root+"/processed","raw_capture":root+"/raw-captures","metadata":root+"/metadata","logs":root+"/logs","video_url":video,"cover_url":cover,"archive_verification":"Dropbox size and content_hash read-back","media_delivery_provider":"vercel_blob","blob_readback_status":blob_status,"blob_object_readback_verified":is_blob and blob_status=="verified_object_readback"}))
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"blob_verified","video_url":video,"cover_url":cover,"archive_verification":"Vercel Blob public GET and SHA-256 byte-for-byte read-back","media_delivery_provider":"vercel_blob","blob_readback_status":blob_status,"blob_object_readback_verified":is_blob and blob_status=="verified_object_readback","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
 PYSTATUS
-if ! dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json"; then
-  echo "::error::Per-host archive verification receipt failed for $HOST."
-  exit 1
+if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json" || echo "::warning::Secondary Dropbox receipt archive failed for $HOST."
 fi
 echo "Captured and archive-verified $HOST at ${HOST_ROOT}"
 rm -f "$RAW" "$FILE" "$COVER" "$LOG" "$ARCHIVE_STATUS"
