@@ -55,6 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          PROOF_HOST_SAFE="$(printf '%s' "${BIGO_PROOF_HOST_ID}" | tr -c 'A-Za-z0-9._-' '_')"
           VERIFIED_PATTERN="$(printf "%s" "${BIGO_VERIFIED_HOST_IDS:-}" | tr ", " "\\n" | sed "/^$/d" | jq -R -s 'split("\\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" --slurpfile captured "/tmp/bigo-results/${PROOF_HOST_SAFE}.json" '{highlights: [$captured[0].highlight], verified_host_ids:$verified, limit: 1, storage_only:false}' /dev/null > /tmp/noble-batch.json
+          jq -n --argjson verified "$VERIFIED_PATTERN" --slurpfile captured "/tmp/bigo-results/${PROOF_HOST_SAFE}.json" '{highlights: [$captured[0].highlight], verified_host_ids:$verified, limit: 1, storage_only:false}' > /tmp/noble-batch.json
           curl -fsS -X POST "${PIPELINE_URL}"             -H "Authorization: Bearer ${OIDC_TOKEN}"             -H 'Content-Type: application/json'             --data-binary @/tmp/noble-batch.json
