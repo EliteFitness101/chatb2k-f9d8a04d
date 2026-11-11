@@ -54,7 +54,9 @@ export function Header() {
         <div className="hidden md:flex items-center gap-3">
           <CurrencyBadge />
           <LanguageSwitcher />
-          {user ? (\n            <Link to="/contacts" className="text-sm text-foreground/80 hover:text-gold">Contacts</Link>\n            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
+          {user ? (
+            <Link to="/contacts" className="text-sm text-foreground/80 hover:text-gold">Contacts</Link>
+            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
           ) : (
             <Link to="/login" className="text-sm text-foreground/80 hover:text-gold">{t("cta.signin")}</Link>
           )}
@@ -76,7 +78,10 @@ export function Header() {
       {open && (
         <div className="md:hidden glass border-t border-[var(--glass-border)]">
           <div className="px-4 py-4 flex flex-col gap-3 text-sm">
-            {user && (\n              <Link to="/contacts" onClick={() => setOpen(false)} className="py-2 text-foreground/80">Contact Intelligence</Link>\n            )}\n            {NAV.map((n) => (
+            {user && (
+              <Link to="/contacts" onClick={() => setOpen(false)} className="py-2 text-foreground/80">Contact Intelligence</Link>
+            )}
+            {NAV.map((n) => (
               <Link
                 key={n.to}
                 to={n.to}
