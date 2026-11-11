@@ -54,8 +54,7 @@ export function Header() {
         <div className="hidden md:flex items-center gap-3">
           <CurrencyBadge />
           <LanguageSwitcher />
-          {user ? (
-            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
+          {user ? (\n            <Link to="/contacts" className="text-sm text-foreground/80 hover:text-gold">Contacts</Link>\n            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
           ) : (
             <Link to="/login" className="text-sm text-foreground/80 hover:text-gold">{t("cta.signin")}</Link>
           )}
