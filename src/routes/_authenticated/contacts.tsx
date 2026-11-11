@@ -32,7 +32,7 @@ function normalizePhone(raw: string): string | null {
 }
 
 function extractContacts(source: string): Contact[] {
-  const candidates = source.match(/(?:\+|00)?\d(?:[\d\s().-]{5,}\d)?/g) ?? [];
+  const candidates = source.match(/(?:\+|00)?\d(?:[\d \t().-]{5,}\d)?/g) ?? [];
   const unique = new Set<string>();
   for (const candidate of candidates) {
     const normalized = normalizePhone(candidate);
