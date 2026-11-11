@@ -3,47 +3,9 @@ import { useMemo, useRef, useState } from "react";
 import { Download, FileText, ShieldCheck, Upload, Users } from "lucide-react";
 import { SiteShell } from "@/components/site/SiteShell";
 import { SectionHeading } from "@/components/site/SectionHeading";
+import { extractContacts, type ExtractedContact } from "@/lib/contact-intelligence";
 
-type Contact = {
-  id: string;
-  phone: string;
-  consent: boolean;
-};
-
-function normalizePhone(raw: string): string | null {
-  const trimmed = raw.trim();
-  const hasInternationalPrefix = trimmed.startsWith("+") || trimmed.startsWith("00");
-  let digits = trimmed.replace(/\D/g, "");
-  if (trimmed.startsWith("00")) digits = digits.slice(2);
-  if (!digits || /^([0-9])\1+$/.test(digits)) return null;
-
-  // Nigerian local mobile format: 080XXXXXXXX -> +23480XXXXXXXX.
-  if (!hasInternationalPrefix && digits.length === 11 && digits.startsWith("0")) {
-    digits = "234" + digits.slice(1);
-  } else if (!hasInternationalPrefix && digits.startsWith("234") && digits.length === 13) {
-    // Already supplied with Nigeria's country code.
-  } else if (!hasInternationalPrefix) {
-    return null;
-  }
-
-  if (digits.length < 8 || digits.length > 15) return null;
-  if (digits.startsWith("0")) return null;
-  return "+" + digits;
-}
-
-function extractContacts(source: string): Contact[] {
-  const candidates = source.match(/(?:\+|00)?\d(?:[\d \t().-]{5,}\d)?/g) ?? [];
-  const unique = new Set<string>();
-  for (const candidate of candidates) {
-    const normalized = normalizePhone(candidate);
-    if (normalized) unique.add(normalized);
-  }
-  return [...unique].sort().map((phone) => ({
-    id: phone,
-    phone,
-    consent: false,
-  }));
-}
+type Contact = ExtractedContact;
 
 function csvCell(value: string) {
   return '"' + value.replace(/"/g, '""') + '"';
