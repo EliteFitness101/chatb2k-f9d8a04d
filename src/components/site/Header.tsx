@@ -55,8 +55,10 @@ export function Header() {
           <CurrencyBadge />
           <LanguageSwitcher />
           {user ? (
-            <Link to="/contacts" className="text-sm text-foreground/80 hover:text-gold">Contacts</Link>
-            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
+            <>
+              <Link to="/contacts" className="text-sm text-foreground/80 hover:text-gold">Contacts</Link>
+              <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
+            </>
           ) : (
             <Link to="/login" className="text-sm text-foreground/80 hover:text-gold">{t("cta.signin")}</Link>
           )}
