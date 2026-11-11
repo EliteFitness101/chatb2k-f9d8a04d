@@ -1,0 +1,31 @@
+name: BIGO media rehost tests
+
+on:
+  pull_request:
+    paths:
+      - "supabase/functions/bigo-media-rehost/**"
+      - ".github/workflows/bigo-media-rehost-tests.yml"
+  push:
+    branches:
+      - "fix/bigo-rehost-cover-retry"
+    paths:
+      - "supabase/functions/bigo-media-rehost/**"
+      - ".github/workflows/bigo-media-rehost-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cover-source-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Run cover allowlist tests
+        run: deno test supabase/functions/bigo-media-rehost/cover-source.test.ts
+      - name: Type-check Edge Function
+        run: deno check supabase/functions/bigo-media-rehost/index.ts
