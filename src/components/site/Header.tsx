@@ -77,7 +77,7 @@ export function Header() {
       {open && (
         <div className="md:hidden glass border-t border-[var(--glass-border)]">
           <div className="px-4 py-4 flex flex-col gap-3 text-sm">
-            {NAV.map((n) => (
+            {user && (\n              <Link to="/contacts" onClick={() => setOpen(false)} className="py-2 text-foreground/80">Contact Intelligence</Link>\n            )}\n            {NAV.map((n) => (
               <Link
                 key={n.to}
                 to={n.to}
