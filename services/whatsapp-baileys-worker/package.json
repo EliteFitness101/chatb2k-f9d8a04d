@@ -1,0 +1,19 @@
+{
+  "name": "resofit-whatsapp-baileys-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "check": "node --check src/server.mjs"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "express": "^5.1.0",
+    "better-sqlite3": "^12.4.1",
+    "pino": "^9.7.0"
+  }
+}
