@@ -1,0 +1,12 @@
+name = "resofit-media"
+main = "src/index.ts"
+compatibility_date = "2026-10-12"
+workers_dev = false
+
+[[r2_buckets]]
+binding = "MEDIA_PUBLIC"
+bucket_name = "resofit-media-public"
+
+routes = [
+  { pattern = "media.resofit.fit", custom_domain = true }
+]
