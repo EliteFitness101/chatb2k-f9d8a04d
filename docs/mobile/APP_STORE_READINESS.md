@@ -34,6 +34,16 @@
 10. **iOS build toolchain.** Apple requires App Store uploads to use Xcode 26 or later with the iOS 26 SDK. Keep the Expo SDK 54 EAS default image (Xcode 26) or explicitly select a newer supported image; do not pin Xcode 16.\n11. **Test on real devices.** Verify sign-up, email confirmation, sign-in, session refresh, chat request, recommendation search, Elite workspace read, deep links, logout, account deletion and offline/error states.
 
 
+## CAC registration classification — confirmed 2026-11-13
+
+The owner has confirmed that the CAC registration is a **Business Name**, not an incorporated company/limited-liability entity.
+
+- **Apple:** A Business Name/trade name/sole proprietorship is not eligible for Apple organization enrollment. Enroll as an individual/sole proprietor; Apple displays the account holder's personal legal name as the App Store seller. Do not enter “Resonance Fitness” as the legal first/last name. To have a company entity as seller, the owner would first need an eligible incorporated legal entity and its matching D-U-N-S record.
+- **Google Play:** Google distinguishes personal from organisation/business accounts. An organisation account requires a D-U-N-S number and matching verified organisation/payments-profile details. Nigeria's accepted organization documents include a certificate of incorporation or registration and an authorized representative's government photo ID. Confirm with Play Console/D&B that the specific CAC Business Name registration and D-U-N-S profile are accepted before choosing the organization account path; do not misstate the business as an incorporated company.
+- **Brand display:** Google developer name can differ from legal name, subject to verification. Apple's individual account seller name remains the individual's legal name.
+
+No publisher account has been created and no enrollment, agreement, payment, or identity verification has been submitted.
+
 ## Official publisher registration — exact sequence
 
 ### Apple App Store
