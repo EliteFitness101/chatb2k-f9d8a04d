@@ -1,0 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Linking } from "react-native";
+const RSID_KEY="chatb2k_mobile_rsid";
+async function rsid(){let v=await AsyncStorage.getItem(RSID_KEY);if(!v){v=`rfm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;await AsyncStorage.setItem(RSID_KEY,v);}return v;}
+export async function openTrackedLink(destination:string,campaign="mobile_app"){const url=new URL(destination);url.searchParams.set("rsid",url.searchParams.get("rsid")||await rsid());url.searchParams.set("utm_source",url.searchParams.get("utm_source")||"chatb2k");url.searchParams.set("utm_medium",url.searchParams.get("utm_medium")||"mobile_app");url.searchParams.set("utm_campaign",url.searchParams.get("utm_campaign")||campaign);await Linking.openURL(url.toString());}
+export const destinations={chat:process.env.EXPO_PUBLIC_CHATB2K_WEB_URL||"https://chatb2k.resofit.fit",resofit:process.env.EXPO_PUBLIC_RESOFIT_WEB_URL||"https://www.resofit.fit",elite:process.env.EXPO_PUBLIC_ELITE_WEB_URL||"https://elite.resofit.fit"};
