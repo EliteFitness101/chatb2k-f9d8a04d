@@ -31,7 +31,7 @@ Copy `.env.example` to `.env` for local development and provide:
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
-Use the current Supabase publishable key only. Never use a service-role key or server provider secret. Set the same public values in the Expo/EAS environment used for builds. The Supabase URL is prefilled in the example; the publishable key is intentionally not committed.
+Use the current Supabase publishable key only. Never use a service-role key or server provider secret. Set the same public values in the Expo/EAS environment used for builds. The Supabase URL is prefilled in the example; the publishable key is intentionally not committed. Add `chatb2k://auth/callback` to the Supabase Auth redirect URL allowlist before testing email confirmation and password recovery.
 
 ## Local setup and checks
 
