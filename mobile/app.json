@@ -25,7 +25,10 @@
     },
     "extra": {
       "appName": "ChatB2K",
-      "canonicalWebUrl": "https://chatb2k.resofit.fit"
+      "canonicalWebUrl": "https://chatb2k.resofit.fit",
+      "eas": {
+        "projectId": "b61c2f6d-0863-49e4-ae2a-f5e3c3bfb7c8"
+      }
     }
   }
 }
