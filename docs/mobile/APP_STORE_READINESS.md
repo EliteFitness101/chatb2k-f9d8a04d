@@ -41,7 +41,7 @@ Two possible account routes must not be conflated:
 - **Personal developer account:** does not require an organisation D-U-N-S number. Google requires individual identity and address verification. New personal developer accounts created after 13 November 2023 must complete a closed test with at least 12 opted-in testers continuously for 14 days before applying for production access. Google Play displays verified developer identity/contact information according to its account and monetisation rules. The owner must review the exact public profile disclosures before enrolment.
 - **Organisation developer account:** requires a D-U-N-S number and a linked payments profile whose legal name/address match the D-U-N-S record. Do not represent a CAC Business Name as an incorporated company. Confirm D&B and Play Console accept the exact CAC Business Name record before selecting this route.
 
-For the no-D-U-N-S route, the practical fallback is a **Personal** Play developer account, subject to the owner reviewing the identity/address disclosure and completing the 12-tester/14-day closed test.
+**Owner decision confirmed 2026-11-13:** proceed with a **Personal** Play developer account; the owner has explicitly authorized this route. No D-U-N-S application is required for this account type. The account holder must personally complete Google identity/address verification, accept the developer agreement and pay the one-time registration fee in Play Console. Google Play closed testing must then meet the 12-tester/14-consecutive-day requirement before production access can be requested.
 
 Official references:
 - [Google Play developer account requirements](https://support.google.com/googleplay/android-developer/answer/13628312?hl=en-NG)
