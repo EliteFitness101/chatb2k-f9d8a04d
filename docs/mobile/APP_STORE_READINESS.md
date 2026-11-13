@@ -26,7 +26,7 @@
 2. **Create an Expo organization project.** Run `eas init`, record the EAS project ID in app config, and configure the two public Supabase environment variables.
 3. **Generate and commit `mobile/package-lock.json`.** Then run Expo Doctor, TypeScript checks and native export/build checks.
 4. **Create and verify store publisher accounts.** Apple Developer Program organization enrollment and Google Play Console organization verification require the legal entity's account owner and verification materials.
-5. **Register the Android package name.** Google Play's Android developer verification policy states all Play packages must be registered by September 30, 2026.
+5. **Verify Android developer identity and package registration.** Check the Play Console Android developer verification page for the ChatB2K package's status; many eligible existing Play apps are auto-registered, while new package names are registered during app creation. The September 30, 2026 enforcement phase began in Brazil, Indonesia, Singapore and Thailand, with broader global rollout planned for 2027.
 6. **Create the store listings.** Confirm the bundle/package IDs are available before registration. Replace the App Store Connect ID placeholder in `mobile/eas.json`.
 7. **Complete privacy and account controls.** Publish accurate privacy and support pages; implement and test an in-app account deletion flow backed by a server-side deletion endpoint. Sign-out is not account deletion.
 8. **Create visual store assets.** Custom app icon, launch artwork, iPhone/iPad screenshots, Android phone/tablet screenshots, description, keywords, age rating and Data Safety disclosures.
