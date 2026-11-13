@@ -31,7 +31,7 @@
 7. **Complete privacy and account controls.** Publish accurate privacy and support pages; implement and test an in-app account deletion flow backed by a server-side deletion endpoint. Sign-out is not account deletion.
 8. **Create visual store assets.** Custom app icon, launch artwork, iPhone/iPad screenshots, Android phone/tablet screenshots, description, keywords, age rating and Data Safety disclosures.
 9. **Billing review.** Decide which digital subscriptions/credits require Apple In-App Purchase or Google Play Billing, and retain Paystack for eligible physical-goods and web checkout flows.
-10. **Test on real devices.** Verify sign-up, email confirmation, sign-in, session refresh, chat request, recommendation search, Elite workspace read, deep links, logout, account deletion and offline/error states.
+10. **iOS build toolchain.** Apple requires App Store uploads to use Xcode 26 or later with the iOS 26 SDK. Keep the Expo SDK 54 EAS default image (Xcode 26) or explicitly select a newer supported image; do not pin Xcode 16.\n11. **Test on real devices.** Verify sign-up, email confirmation, sign-in, session refresh, chat request, recommendation search, Elite workspace read, deep links, logout, account deletion and offline/error states.
 
 ## Build and submission sequence
 
