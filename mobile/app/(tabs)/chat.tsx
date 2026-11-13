@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {ActivityIndicator,KeyboardAvoidingView,Platform,ScrollView,Text,TextInput,View} from "react-native";
+import {ActivityIndicator,ScrollView,Text,TextInput,View} from "react-native";
 import {Action,Card,Eyebrow,Heading,Screen,SmallLabel,palette} from "@/components/ui";
 import {destinations,openTrackedLink} from "@/lib/links";
 import {useAuth} from "@/providers/auth-provider";
