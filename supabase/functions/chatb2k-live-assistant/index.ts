@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
   const isInternal = Boolean(internalToken) && constantTimeEqual(suppliedInternalToken, internalToken);
   const isMobile = req.headers.get("x-chatb2k-client") === "mobile";
   if (isMobile) {
-    const bearer = req.headers.get("authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1] ?? "";
+    const bearer = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
     if (!bearer || !db) return respond({ error: "Mobile sign-in required" }, 401);
     const { data: { user }, error: authError } = await db.auth.getUser(bearer);
     if (authError || !user) return respond({ error: "Mobile session is invalid or expired" }, 401);
