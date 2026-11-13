@@ -52,7 +52,7 @@ Commit the generated `package-lock.json` after dependency resolution so future b
 3. Set the two `EXPO_PUBLIC_*` variables in the Expo project's environment.
 4. Run `npx eas-cli build --platform android --profile preview` for an internal APK.
 5. Run `npx eas-cli build --platform ios --profile preview` for an internal iOS distribution build (Apple device registration/signing is required).
-6. Run production builds only after the release gates in `docs/mobile/APP_STORE_READINESS.md` are closed.
+6. Keep the EAS iOS build image on Xcode 26 or later (do not pin an older image); Apple requires the iOS 26 SDK for App Store uploads since April 28, 2026. Expo SDK 54's EAS default image is Xcode 26.\n7. Run production builds only after the release gates in `docs/mobile/APP_STORE_READINESS.md` are closed.
 
 For store uploads, create the official listings first and then configure the real App Store Connect app ID and Play Console service account. The placeholder `ascAppId` in `eas.json` must be replaced before iOS submission. Android submission is intentionally configured as an internal draft.
 
