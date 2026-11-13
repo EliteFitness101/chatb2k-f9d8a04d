@@ -1,78 +1,75 @@
-# ChatB2K — Mobile Store Readiness
+# ChatB2K — Mobile Production and Store Readiness
 
-**Audit timestamp:** 2026-11-13  
+**Audit date:** 2026-11-13  
 **Repository:** `EliteFitness101/chatb2k-f9d8a04d`  
-**Branch:** `feat/chatb2k-native-mobile-app`  
-**Change class:** additive native app and integration source; no production deployment
+**Working branch:** `feat/chatb2k-production-launch-2026`  
+**Production deployment:** Not performed  
+**Store submission:** Not performed
 
-## Current implementation evidence
+## Verified implementation baseline
 
-| Area | Evidence | State |
+| Area | Evidence | Status |
 |---|---|---|
-| Native project | `mobile/app.json`, Expo Router screens and React Native package | C — development |
-| iOS identity | `fit.resofit.chatb2k` configured | C — proposed, not registered |
-| Android identity | `fit.resofit.chatb2k` configured, target API 36 | C — proposed, not registered |
-| Supabase Auth | Native client uses project URL + publishable key from build environment | B — code configured, build credentials not supplied |
-| ChatB2K assistant | Existing Edge Function `chatb2k-live-assistant` is ACTIVE v18; mobile JWT gate added in this branch's source copy | D — source patch not deployed |
-| Commerce recommendations | Existing `chatb2k-recommend` is ACTIVE v36; native Discover invokes it | B — integration code present; device execution untested |
-| Elite workspace | Existing `elite-media-workspace` is ACTIVE v14; native Studio invokes authenticated GET | B — integration code present; device execution untested |
-| Web companion | `https://chatb2k.resofit.fit` | Existing domain; native session handoff not implemented |
-| Builds | No EAS project/build IDs available | Not built |
-| Stores | No App Store Connect / Play Console listing evidence | Not registered or submitted |
+| Native project | Expo SDK 54 / React Native / Expo Router in `mobile/` | C — implemented in feature branch |
+| iOS bundle ID | `fit.resofit.chatb2k` in `mobile/app.json` | C — configured, not registered in App Store Connect |
+| Android application ID | `fit.resofit.chatb2k` in `mobile/app.json` | C — configured, not registered in Play Console |
+| Authentication | Supabase Auth, AsyncStorage session persistence, sign-up/sign-in/reset/sign-out | B — code present, device test pending |
+| Chat | Calls `chatb2k-live-assistant` with user JWT and `x-chatb2k-client: mobile` | D — branch source contains mobile JWT validation; deployed function remains v18 and has not been patched |
+| Discovery | Calls active `chatb2k-recommend` v36 | B — code present, device test pending |
+| Elite workspace | Calls active `elite-media-workspace` v14 | B — read-only native integration; creation/publishing remains in web workspace |
+| RSID/UTM | Persistent RSID and tagged outbound links | B — code present, attribution end-to-end not yet measured |
+| CI | Latest commit `85050ab2fab5c76c36c2ecc7dace0a80427bcc9d`: Test #779 and ChatB2K mobile validation #32 completed successfully | A — CI checks only |
+| Native binaries | No signed `.ipa` or `.aab` build evidence | E — not built |
+| Store accounts/listings | No App Store Connect or Play Console listing evidence | E — not registered/submitted |
 
-## Release blockers
+A successful Expo JS bundle export is not a signed native release binary, a store upload, or public availability.
 
-1. **Deploy the mobile-auth patch for `chatb2k-live-assistant`.** The current deployed function only allows the Elite web origins. The branch's copied source adds a mobile client marker and validates the caller's Supabase JWT before accepting the native request. Review and deploy this exact source before testing native chat.
-2. **Create an Expo organization project.** Run `eas init`, record the EAS project ID in app config, and configure the two public Supabase environment variables.
-3. **Generate and commit `mobile/package-lock.json`.** Then run Expo Doctor, TypeScript checks and native export/build checks.
-4. **Create and verify store publisher accounts.** Apple Developer Program organization enrollment and Google Play Console organization verification require the legal entity's account owner and verification materials.
-5. **Verify Android developer identity and package registration.** Check the Play Console Android developer verification page for the ChatB2K package's status; many eligible existing Play apps are auto-registered, while new package names are registered during app creation. The September 30, 2026 enforcement phase began in Brazil, Indonesia, Singapore and Thailand, with broader global rollout planned for 2027.
-6. **Create the store listings.** Confirm the bundle/package IDs are available before registration. Replace the App Store Connect ID placeholder in `mobile/eas.json`.
-7. **Complete privacy and account controls.** Publish accurate privacy and support pages; implement and test an in-app account deletion flow backed by a server-side deletion endpoint. Sign-out is not account deletion.
-8. **Create visual store assets.** Custom app icon, launch artwork, iPhone/iPad screenshots, Android phone/tablet screenshots, description, keywords, age rating and Data Safety disclosures.
-9. **Billing review.** Decide which digital subscriptions/credits require Apple In-App Purchase or Google Play Billing, and retain Paystack for eligible physical-goods and web checkout flows.
-10. **iOS build toolchain.** Apple requires App Store uploads to use Xcode 26 or later with the iOS 26 SDK. Keep the Expo SDK 54 EAS default image (Xcode 26) or explicitly select a newer supported image; do not pin Xcode 16.\n11. **Test on real devices.** Verify sign-up, email confirmation, sign-in, session refresh, chat request, recommendation search, Elite workspace read, deep links, logout, account deletion and offline/error states.
+## Publisher account route — CAC Business Name confirmed
 
-
-## CAC registration classification — confirmed 2026-11-13
-
-The owner has confirmed that the CAC registration is a **Business Name**, not an incorporated company/limited-liability entity.
-
-- **Apple:** A Business Name/trade name/sole proprietorship is not eligible for Apple organization enrollment. Enroll as an individual/sole proprietor; Apple displays the account holder's personal legal name as the App Store seller. Do not enter “Resonance Fitness” as the legal first/last name. To have a company entity as seller, the owner would first need an eligible incorporated legal entity and its matching D-U-N-S record.
-- **Google Play:** Google distinguishes personal from organisation/business accounts. An organisation account requires a D-U-N-S number and matching verified organisation/payments-profile details. Nigeria's accepted organization documents include a certificate of incorporation or registration and an authorized representative's government photo ID. Confirm with Play Console/D&B that the specific CAC Business Name registration and D-U-N-S profile are accepted before choosing the organization account path; do not misstate the business as an incorporated company.
-- **Brand display:** Google developer name can differ from legal name, subject to verification. Apple's individual account seller name remains the individual's legal name.
-
-No publisher account has been created and no enrollment, agreement, payment, or identity verification has been submitted.
-
-## Official publisher registration — exact sequence
+The owner confirmed the CAC registration is a **Business Name**, not an incorporated company.
 
 ### Apple App Store
 
-1. Open [Apple Developer Program enrollment](https://developer.apple.com/programs/enroll/), sign in with the ResoFit-controlled Apple Account and enable two-factor authentication.
-2. Enroll as an **Organization** if the legal ResoFit entity is eligible and should appear as the App Store seller. Prepare the exact legal entity name, D-U-N-S number, organization-domain work email, public company website and proof that the Account Holder can bind the entity to Apple agreements.
-3. After approval, open [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) and register the App ID fit.resofit.chatb2k.
-4. Open [App Store Connect](https://appstoreconnect.apple.com/), choose Apps → + → New App, select iOS, enter ChatB2K, primary language, bundle ID fit.resofit.chatb2k, and a unique SKU. Record the App Store Connect numeric App ID.
-5. Replace the App Store Connect ID placeholder in mobile/eas.json. Configure signing through EAS after the organization account is connected.
-6. Upload an iOS build to TestFlight, add internal testers, then complete the app privacy, age rating, screenshots, support/privacy URLs, review notes and in-app purchase declarations before submitting for App Review.
+Use **Individual / sole proprietor** enrollment as already approved by the owner. Apple states that the individual account holder's personal legal name appears as the App Store seller. A trade name/DBA is not accepted as the seller identity for an Apple organization account. To have a corporate entity appear as seller, the business must first become an eligible incorporated legal entity and meet Apple's D-U-N-S requirements.
 
-Apple's current upload rule requires Xcode 26 or later and the iOS 26 SDK. The Expo SDK 54 EAS default uses Xcode 26; do not override it with an older image.
+Official steps: [Apple Developer enrollment](https://developer.apple.com/programs/enroll/) → sign in with the account holder's Apple Account with two-factor authentication → enroll as Individual → complete identity verification and membership purchase directly with Apple. Do not send identity documents or payment details through ChatGPT.
 
-### Google Play
+### Google Play — no D-U-N-S currently
 
-1. Open [Google Play Console](https://play.google.com/console/) and create or access the ResoFit organization developer account.
-2. Complete organization identity verification and review the Android developer verification page in Play Console.
-3. Select Create app, enter ChatB2K, default language English, app type, free/paid distribution and required declarations.
-4. Use package name fit.resofit.chatb2k. Google Play normally registers a new package name automatically when the app is created; check the package registration status and resolve any ownership conflict before release.
-5. Configure Play App Signing, upload the Android App Bundle to internal testing, add testers and verify the installation/update path.
-6. Complete the store listing, app access instructions, Data Safety, content rating, target audience, privacy policy, account deletion URL/flow and billing declarations before production rollout.
+Two possible account routes must not be conflated:
 
-The Android developer-verification enforcement began in selected countries on September 30, 2026, with broader global expansion planned for 2027. Check the current Play Console status rather than assuming automatic registration succeeded.
+- **Personal developer account:** does not require an organisation D-U-N-S number. Google requires individual identity and address verification. New personal developer accounts created after 13 November 2023 must complete a closed test with at least 12 opted-in testers continuously for 14 days before applying for production access. Google Play displays verified developer identity/contact information according to its account and monetisation rules. The owner must review the exact public profile disclosures before enrolment.
+- **Organisation developer account:** requires a D-U-N-S number and a linked payments profile whose legal name/address match the D-U-N-S record. Do not represent a CAC Business Name as an incorporated company. Confirm D&B and Play Console accept the exact CAC Business Name record before selecting this route.
 
-## Build and submission sequence
+**Owner decision confirmed 2026-11-13:** proceed with a **Personal** Play developer account; the owner has explicitly authorized this route. No D-U-N-S application is required for this account type. The account holder must personally complete Google identity/address verification, accept the developer agreement and pay the one-time registration fee in Play Console. Google Play closed testing must then meet the 12-tester/14-consecutive-day requirement before production access can be requested.
+
+Official references:
+- [Google Play developer account requirements](https://support.google.com/googleplay/android-developer/answer/13628312?hl=en-NG)
+- [Google Play testing requirements for new personal accounts](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en)
+- [Google Play Nigeria verification documents](https://support.google.com/googleplay/android-developer/answer/15633622?co=GENIE.CountryCode%3DNG&hl=en)
+
+No publisher account has been created, no identity documents submitted, no agreement accepted, and no fee paid.
+
+## Engineering release gates
+
+1. Review and deploy the mobile-authenticated `chatb2k-live-assistant` Edge Function source from this branch. It validates the bearer token with Supabase Auth and applies a per-user rate-limit identity for native requests. Current production function v18 has not been updated.
+2. Create the ResoFit-owned Expo/EAS project; record its actual project ID in app config. Configure only the Supabase URL and publishable key as public build variables. Never place service-role, Gemini, Buffer, Paystack secret or other server credentials in the app.
+3. Generate and commit `mobile/package-lock.json`; use reproducible `npm ci` builds.
+4. Configure app icon, splash artwork, adaptive Android icon, store screenshots, app description, keywords, age rating, content declarations and review notes.
+5. Publish a real privacy policy, support page and account-deletion web URL on the canonical ResoFit domain. Verify content, ownership, HTTP status, and store crawler accessibility.
+6. Implement and verify in-app account deletion backed by an authenticated server-side deletion endpoint. Sign-out is not account deletion. Explain data retention/deletion timing accurately.
+7. Decide digital subscription/credit billing before enabling purchase links. Use Apple In-App Purchase and Google Play Billing where required; do not route restricted digital purchases through external checkout. Retain Paystack for eligible physical goods and permitted web transactions.
+8. Review mobile chat history, offline/retry states, rate limiting, deep links, session refresh, logout, reset-password and deletion on real devices.
+9. Test native media workflow, entitlements and Buffer connection handoff. Current Studio is a workspace link/read integration, not full native media creation or channel OAuth.
+10. Run Expo Doctor, TypeScript, Android/iOS exports, signed EAS preview builds, physical-device tests, and store-specific pre-launch checks.
+11. Create TestFlight and Play internal/closed test tracks; collect test evidence and fix issues before production release.
+12. Replace `ascAppId` placeholder in `mobile/eas.json` after App Store Connect app creation. Configure EAS signing and Play App Signing from the owner's store accounts.
+
+## Build sequence
 
 ```sh
 cd mobile
-npm install
+npm ci
 npx expo-doctor
 npm run typecheck
 npx eas-cli login
@@ -81,8 +78,21 @@ npx eas-cli build --platform android --profile preview
 npx eas-cli build --platform ios --profile preview
 ```
 
-After internal device verification, create production-signed builds and upload them to Play Console internal testing and App Store Connect/TestFlight. A successful upload is not public availability. Complete the store metadata, reviewer access and review submission separately.
+Do not call a preview build production-ready until signing, physical-device testing, release configuration and store compliance are verified. A store upload is not public release; each store must complete review and publication.
 
-## Governance
+## Advertising readiness gates
 
-This branch is development evidence only. It does not authorize a production deployment, Supabase function deployment, merge to `main`, store registration under unverified legal details, or public release. Keep production state separate until the release gates above have current evidence.
+Paid user-acquisition ads must not start until:
+- Both store listings are publicly available and install links resolve to the correct country/store.
+- App install attribution is implemented and tested (Apple campaign/ad attribution and Android install referrer/approved measurement SDK).
+- Privacy disclosures and consent flows match the actual analytics/advertising SDK behavior and target regions.
+- Events are verified for install, first open, registration, confirmed email, completed onboarding, first chat, qualified lead and paid conversion.
+- Campaign links preserve RSID and UTMs into the website/app journey without leaking personal or authentication data.
+- Landing pages, pricing, trial terms and claims match the live product; ad creatives do not promise unavailable native features.
+- Initial spend is capped and campaigns are reviewed against cost per install, registration, activation and paid conversion—not clicks alone.
+
+Suggested initial campaign sequence: Nigeria-first controlled launch; Meta and TikTok vertical-video install campaigns; Google App Campaigns after store listings and measurement are verified. Start with small test budgets, compare creative cohorts, and scale only after downstream activation and paid-conversion events are trustworthy. Do not activate or spend ad budgets without the account owner's explicit approval.
+
+## Governance and evidence
+
+This branch is development-only. It does not merge to `main`, deploy Supabase functions, deploy production web services, create publisher accounts, accept legal agreements, pay fees, submit store builds, publish listings, or spend advertising budget. Each action requires its own evidence and the applicable owner approval.
