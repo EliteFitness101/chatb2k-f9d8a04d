@@ -33,6 +33,31 @@
 9. **Billing review.** Decide which digital subscriptions/credits require Apple In-App Purchase or Google Play Billing, and retain Paystack for eligible physical-goods and web checkout flows.
 10. **iOS build toolchain.** Apple requires App Store uploads to use Xcode 26 or later with the iOS 26 SDK. Keep the Expo SDK 54 EAS default image (Xcode 26) or explicitly select a newer supported image; do not pin Xcode 16.\n11. **Test on real devices.** Verify sign-up, email confirmation, sign-in, session refresh, chat request, recommendation search, Elite workspace read, deep links, logout, account deletion and offline/error states.
 
+
+## Official publisher registration — exact sequence
+
+### Apple App Store
+
+1. Open [Apple Developer Program enrollment](https://developer.apple.com/programs/enroll/), sign in with the ResoFit-controlled Apple Account and enable two-factor authentication.
+2. Enroll as an **Organization** if the legal ResoFit entity is eligible and should appear as the App Store seller. Prepare the exact legal entity name, D-U-N-S number, organization-domain work email, public company website and proof that the Account Holder can bind the entity to Apple agreements.
+3. After approval, open [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) and register the App ID fit.resofit.chatb2k.
+4. Open [App Store Connect](https://appstoreconnect.apple.com/), choose Apps → + → New App, select iOS, enter ChatB2K, primary language, bundle ID fit.resofit.chatb2k, and a unique SKU. Record the App Store Connect numeric App ID.
+5. Replace the App Store Connect ID placeholder in mobile/eas.json. Configure signing through EAS after the organization account is connected.
+6. Upload an iOS build to TestFlight, add internal testers, then complete the app privacy, age rating, screenshots, support/privacy URLs, review notes and in-app purchase declarations before submitting for App Review.
+
+Apple's current upload rule requires Xcode 26 or later and the iOS 26 SDK. The Expo SDK 54 EAS default uses Xcode 26; do not override it with an older image.
+
+### Google Play
+
+1. Open [Google Play Console](https://play.google.com/console/) and create or access the ResoFit organization developer account.
+2. Complete organization identity verification and review the Android developer verification page in Play Console.
+3. Select Create app, enter ChatB2K, default language English, app type, free/paid distribution and required declarations.
+4. Use package name fit.resofit.chatb2k. Google Play normally registers a new package name automatically when the app is created; check the package registration status and resolve any ownership conflict before release.
+5. Configure Play App Signing, upload the Android App Bundle to internal testing, add testers and verify the installation/update path.
+6. Complete the store listing, app access instructions, Data Safety, content rating, target audience, privacy policy, account deletion URL/flow and billing declarations before production rollout.
+
+The Android developer-verification enforcement began in selected countries on September 30, 2026, with broader global expansion planned for 2027. Check the current Play Console status rather than assuming automatic registration succeeded.
+
 ## Build and submission sequence
 
 ```sh
