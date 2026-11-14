@@ -115,7 +115,7 @@ jobs:
           PY
           )"
           if [ -n "${BIGO_TEST_HOST_ID:-}" ]; then
-            HOSTS="$(printf '%s\\n' "${HOSTS}" | awk -F'|' -v wanted="${BIGO_TEST_HOST_ID}" '$1 == wanted {print}')"
+            HOSTS="$(printf '%s\n' "${HOSTS}" | awk -F'|' -v wanted="${BIGO_TEST_HOST_ID}" '$1 == wanted {print}')"
             if [ -z "${HOSTS}" ]; then
               echo "::error::Requested controlled-test host is not present in the authoritative source registry."
               exit 1
