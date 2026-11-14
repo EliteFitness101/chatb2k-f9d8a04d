@@ -10,7 +10,7 @@ const clientSecret=Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET")||"";
 const refreshToken=Deno.env.get("GOOGLE_DRIVE_REFRESH_TOKEN")||"";
 const CRON_SECRET=Deno.env.get("BUFFER_CRON_SECRET")||Deno.env.get("CONTENT_CRON_SECRET")||"";
 const out=(body:unknown,status=200)=>Response.json(body,{status,headers:{"cache-control":"no-store"}});
-const isSupportedMedia=(u:string)=>{try{const x=new URL(u);const blob=/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i.test(u);const dropbox=x.protocol==="https:"&&(x.hostname==="www.dropbox.com"||x.hostname==="dl.dropboxusercontent.com")&&/^\/scl\/fi\/[A-Za-z0-9_-]+\/[^/]+$/.test(x.pathname)&&/^[A-Za-z0-9_-]+$/.test(x.searchParams.get("rlkey")||"")&&x.searchParams.get("dl")==="1";return x.protocol==="https:"&&(blob||dropbox)}catch{return false}};
+const isSupportedMedia=(u:string)=>{try{const x=new URL(u);const blob=/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i.test(u);const dropbox=x.protocol==="https:"&&(x.hostname==="www.dropbox.com"||x.hostname==="dl.dropboxusercontent.com")&&/^\/scl\/fi\/[A-Za-z0-9_-]+\/[^/]+$/.test(x.pathname)&&/^[A-Za-z0-9_-]+$/.test(x.searchParams.get("rlkey")||"")&&x.searchParams.get("dl")==="1";const r2=x.protocol==="https:"&&x.hostname==="media.resofit.fit"&&/^\/chatb2k\/bigo-highlights\/[a-f0-9-]+\.mp4$/i.test(x.pathname)&&!x.search&&!x.hash;return x.protocol==="https:"&&(blob||dropbox||r2)}catch{return false}};
 async function accessToken(){
  if(!serviceKey)throw new Error("Supabase service key is not configured in the archive runtime");
  const response=await fetch("https://chatb2k.resofit.fit/api/google/drive-mcp/access-token",{
@@ -112,7 +112,7 @@ Deno.serve(async req=>{
    try{
     let asset:any=null;
     if(row.content_asset_id){const q=await db.from("content_asset_registry").select("id,asset_type,mime_type,canonical_url,campaign,rights_status,commercial_status,qa_status,intelligence").eq("id",row.content_asset_id).maybeSingle();if(q.error)throw q.error;asset=q.data;}
-    const url=String(row.blob_url||asset?.canonical_url||"");
+    const url=String(asset?.canonical_url||row.blob_url||"");
     if(!isSupportedMedia(url))throw new Error("Public allowlisted media URL required (Vercel Blob or Dropbox shared link)");
     if(asset&&(!["video","image","audio"].includes(String(asset.asset_type||""))||!["video/mp4","video/quicktime","image/jpeg","image/png","image/webp","image/gif","audio/mpeg","audio/mp4","audio/wav"].includes(String(asset.mime_type||"").toLowerCase())))throw new Error("Supported video, image, or audio media required");
     const needsReview=false; // Private archival is not publication; source rights metadata is preserved for downstream distribution policy.
