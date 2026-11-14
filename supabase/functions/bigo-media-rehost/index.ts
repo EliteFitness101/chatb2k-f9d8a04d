@@ -9,12 +9,57 @@ const db = createClient(SUPABASE_URL, SERVICE_ROLE);
 const out = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 function same(a: string, b: string) { if (!a || !b || a.length !== b.length) return false; let d=0; for(let i=0;i<a.length;i++) d|=a.charCodeAt(i)^b.charCodeAt(i); return d===0; }
 async function expectedSecret() { const env=Deno.env.get("BUFFER_CRON_SECRET")||""; if(env)return env; const {data,error}=await db.rpc("get_buffer_cron_secret"); if(error||!data)throw new Error("Buffer cron secret unavailable"); return String(data); }
-async function r2WriteToken() {
-  const env = Deno.env.get("R2_WRITE_TOKEN") || "";
-  if (env.trim()) return env.trim();
-  const { data, error } = await db.rpc("chatb2k_get_runtime_secret", { p_name: "R2_WRITE_TOKEN" });
-  if (error || typeof data !== "string" || !data.trim()) return "";
-  return data.trim();
+type R2Config = { accountId:string; bucket:string; accessKeyId:string; secretAccessKey:string; publicBaseUrl:string };
+function r2Config(): R2Config | null {
+  const accountId=(Deno.env.get("R2_ACCOUNT_ID")||"").trim();
+  const bucket=(Deno.env.get("R2_BUCKET_NAME")||Deno.env.get("R2_BUCKET")||"").trim();
+  const accessKeyId=(Deno.env.get("R2_ACCESS_KEY_ID")||"").trim();
+  const secretAccessKey=(Deno.env.get("R2_SECRET_ACCESS_KEY")||"").trim();
+  const publicBaseUrl=(Deno.env.get("R2_PUBLIC_BASE_URL")||"https://media.resofit.fit").trim().replace(/\/+$/,"");
+  if(!accountId||!bucket||!accessKeyId||!secretAccessKey)return null;
+  const u=new URL(publicBaseUrl);
+  if(u.protocol!=="https:"||u.hostname!=="media.resofit.fit")throw new Error("R2_PUBLIC_BASE_URL must be https://media.resofit.fit");
+  return {accountId,bucket,accessKeyId,secretAccessKey,publicBaseUrl};
+}
+function awsEncode(v:string){return encodeURIComponent(v).replace(/[!'()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase());}
+function hex(b:ArrayBuffer){return Array.from(new Uint8Array(b),x=>x.toString(16).padStart(2,"0")).join("");}
+async function sha256Hex(v:ArrayBuffer|string){return hex(await crypto.subtle.digest("SHA-256",typeof v==="string"?new TextEncoder().encode(v):v));}
+async function hmac(k:Uint8Array,v:string){const key=await crypto.subtle.importKey("raw",k,{name:"HMAC",hash:"SHA-256"},false,["sign"]);return new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(v)));}
+async function signedR2(cfg:R2Config,method:"PUT"|"HEAD",key:string,data?:ArrayBuffer,mime?:string){
+  const host=cfg.accountId+".r2.cloudflarestorage.com";
+  const uri="/"+awsEncode(cfg.bucket)+"/"+key.split("/").map(awsEncode).join("/");
+  const now=new Date();
+  const amz=now.toISOString().replace(/[:-]|\.\d{3}/g,"");
+  const day=amz.slice(0,8);
+  const payload=await sha256Hex(data||new ArrayBuffer(0));
+  const h:Record<string,string>={host,"x-amz-content-sha256":payload,"x-amz-date":amz};
+  if(method==="PUT")h["content-type"]=mime||"application/octet-stream";
+  const names=Object.keys(h).sort();
+  const signed=names.join(";");
+  const canonicalHeaders=names.map(n=>n+":"+h[n].trim()+"\n").join("");
+  const scope=day+"/auto/s3/aws4_request";
+  const canonical=[method,uri,"",canonicalHeaders,signed,payload].join("\n");
+  const toSign=["AWS4-HMAC-SHA256",amz,scope,await sha256Hex(canonical)].join("\n");
+  const kd=await hmac(new TextEncoder().encode("AWS4"+cfg.secretAccessKey),day);
+  const kr=await hmac(kd,"auto");
+  const ks=await hmac(kr,"s3");
+  const signing=await hmac(ks,"aws4_request");
+  const keyObj=await crypto.subtle.importKey("raw",signing,{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const sig=hex(await crypto.subtle.sign("HMAC",keyObj,new TextEncoder().encode(toSign)));
+  const headers=new Headers({"x-amz-content-sha256":payload,"x-amz-date":amz,"authorization":"AWS4-HMAC-SHA256 Credential="+cfg.accessKeyId+"/"+scope+", SignedHeaders="+signed+", Signature="+sig});
+  if(method==="PUT")headers.set("content-type",mime||"application/octet-stream");
+  return await fetch("https://"+host+uri,{method,headers,body:method==="PUT"?data:undefined,signal:AbortSignal.timeout(60000)});
+}
+async function uploadR2Object(key:string,data:ArrayBuffer,mime:string,cfg:R2Config,kind:"video"|"image"){
+  const put=await signedR2(cfg,"PUT",key,data,mime);
+  if(!put.ok)throw new Error("R2 S3 PUT HTTP "+put.status+" "+(await put.text()).slice(0,250));
+  const head=await signedR2(cfg,"HEAD",key);
+  if(!head.ok)throw new Error("R2 S3 HEAD HTTP "+head.status);
+  const url=cfg.publicBaseUrl+"/"+key.split("/").map(awsEncode).join("/");
+  const check=await fetch(url,{method:"HEAD",redirect:"follow",signal:AbortSignal.timeout(15000)});
+  const ct=(check.headers.get("content-type")||"").toLowerCase();
+  if(!check.ok||!ct.startsWith(kind+"/"))throw new Error("R2 public CDN HEAD HTTP "+check.status);
+  return url;
 }
 async function uploadSupabaseObject(path: string, data: ArrayBuffer, mime: string, kind: "video" | "image") {
   const { error } = await db.storage.from(BUCKET).upload(path, data, { contentType: mime, upsert: true, cacheControl: "31536000" });
@@ -26,19 +71,6 @@ async function uploadSupabaseObject(path: string, data: ArrayBuffer, mime: strin
   const contentType = (check.headers.get("content-type") || "").toLowerCase();
   if (!check.ok || !contentType.startsWith(kind + "/")) throw new Error(`Supabase Storage ${kind} readback failed: HTTP ${check.status}`);
   return url;
-}
-async function uploadR2Object(key: string, data: ArrayBuffer, mime: string, token: string, kind: "video" | "image") {
-  const endpoint = new URL("https://upload.resofit.fit/api/ingest-media");
-  endpoint.searchParams.set("key", key);
-  const uploaded = await fetch(endpoint, { method: "POST", headers: { "authorization": `Bearer ${token}`, "content-type": mime }, body: data, signal: AbortSignal.timeout(60000) });
-  const result = await uploaded.json().catch(() => ({}));
-  if (!uploaded.ok || result?.ok !== true || typeof result?.media_url !== "string") throw new Error(`Cloudflare R2 upload failed: HTTP ${uploaded.status} ${JSON.stringify(result).slice(0, 400)}`);
-  const expectedUrl = "https://media.resofit.fit/" + key;
-  if (result.media_url !== expectedUrl) throw new Error("Cloudflare R2 public URL verification failed");
-  const check = await fetch(expectedUrl, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(15000) });
-  const contentType = (check.headers.get("content-type") || "").toLowerCase();
-  if (!check.ok || !contentType.startsWith(kind + "/")) throw new Error(`Cloudflare R2 CDN readback failed: HTTP ${check.status}`);
-  return expectedUrl;
 }
 function allowedDropbox(url: string) { try { const u=new URL(url); return u.protocol==="https:"&&(u.hostname==="www.dropbox.com"||u.hostname==="dl.dropboxusercontent.com")&&/^\/scl\/fi\/[A-Za-z0-9_-]+\/[^/]+$/.test(u.pathname)&&Boolean(u.searchParams.get("rlkey"))&&u.searchParams.get("dl")==="1"; } catch { return false; } }
 function allowedBlob(url: string) { try { const u=new URL(url); const allowedPath=/^\/buffer\/assets\/bigo_highlights\//.test(u.pathname)||/^\/bigo_highlights\//.test(u.pathname)||/^\/bigo\/hosts\/[A-Za-z0-9_.-]+\/(processed|metadata)\/[^/]+$/.test(u.pathname); return u.protocol==="https:"&&u.hostname==="ab2ttlkn9no0tuoa.public.blob.vercel-storage.com"&&allowedPath&&/\.(mp4|mov|jpg|jpeg|png|webp)$/i.test(u.pathname); } catch { return false; } }
@@ -59,8 +91,9 @@ Deno.serve(async(req:Request)=>{
   if(assetError)throw assetError;
   const evidence=asset?.rights_evidence||{}; const rightsGate=asset?.rights_status==="verified"||(asset?.rights_status==="attested"&&evidence.rights_verified===true&&evidence.configured_republication_authorized===true&&evidence.allowlist_member===true&&evidence.source_registry_active===true&&evidence.source_registry_capture_enabled===true); if(!asset||asset.asset_type!=="video"||!rightsGate||asset.commercial_status!=="authorized"||asset.qa_status!=="approved"||asset.origin_review_status!=="approved"||!asset.rights_evidence||Object.keys(asset.rights_evidence).length===0||(Array.isArray(asset.publish_blockers)&&asset.publish_blockers.length>0))return out({error:"Rights/origin/QA gate did not pass"},409);
   let publicUrl=String(asset.canonical_url||""); let bytes=0; let mime=String(asset.mime_type||"video/mp4").toLowerCase();
-  let r2Token=""; try { r2Token=await r2WriteToken(); } catch { r2Token=""; }
-  const alreadyR2=allowedR2Media(publicUrl,"video"); const alreadySupabase=publicUrl.startsWith(PUBLIC_PREFIX)&&/^[0-9a-f-]{36}[.](mp4|mov)$/.test(publicUrl.slice(PUBLIC_PREFIX.length)); const alreadyRehosted=alreadySupabase&&!r2Token; let storageBackend="unknown"; let r2FallbackReason="";
+  const r2 = r2Config();
+  if(!r2)throw new Error("R2 configuration incomplete: R2_ACCOUNT_ID, R2_BUCKET_NAME, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY are required; refusing fallback storage");
+  const alreadyR2=allowedR2Media(publicUrl,"video"); const alreadySupabase=publicUrl.startsWith(PUBLIC_PREFIX)&&/^[0-9a-f-]{36}[.](mp4|mov)$/.test(publicUrl.slice(PUBLIC_PREFIX.length)); const alreadyRehosted=false; let storageBackend="unknown"; let r2FallbackReason="";
   if(alreadyR2){
     const check=await fetch(publicUrl,{method:"HEAD",redirect:"follow",signal:AbortSignal.timeout(10000)});
     if(!check.ok||!(check.headers.get("content-type")||"").toLowerCase().startsWith("video/"))return out({error:"Existing R2 media object failed HEAD verification",status:check.status},502);
@@ -85,18 +118,15 @@ Deno.serve(async(req:Request)=>{
     if(binaryMime&&!isFtyp)return out({error:"Binary source failed MP4/QuickTime signature verification",mime},415);
     if(binaryMime)mime=new URL(publicUrl).pathname.toLowerCase().endsWith(".mov")?"video/quicktime":"video/mp4";
     const ext=mime==="video/quicktime"?"mov":"mp4"; const path=`bigo-highlights/${assetId}.${ext}`; const r2Key=`chatb2k/bigo-highlights/${assetId}.${ext}`;
-    if(r2Token){
+    if(r2){
       try {
-        publicUrl=await uploadR2Object(r2Key,data,mime,r2Token,"video");
+        publicUrl=await uploadR2Object(r2Key,data,mime,r2,"video");
         storageBackend="cloudflare-r2";
       } catch(error) {
-        r2FallbackReason=String(error).slice(0,220);
-        publicUrl=await uploadSupabaseObject(path,data,mime,"video");
-        storageBackend="supabase-storage-fallback";
+        throw new Error("R2 upload/verification failed; fallback disabled: "+String(error).slice(0,300));
       }
     } else {
-      publicUrl=await uploadSupabaseObject(path,data,mime,"video");
-      storageBackend="supabase-storage-fallback";
+      throw new Error("R2 is required; fallback storage is disabled");
     }
     const {error:registryUpdateError}=await db.from("content_asset_registry").update({canonical_url:publicUrl,mime_type:mime,updated_at:new Date().toISOString()}).eq("id",assetId);
     if(registryUpdateError)throw new Error(`Registry update failed: ${JSON.stringify(registryUpdateError)}`);
@@ -108,7 +138,7 @@ Deno.serve(async(req:Request)=>{
     const coverHead=await fetch(coverUrl,{method:"HEAD",redirect:"follow",signal:AbortSignal.timeout(10000)});
     if(!coverHead.ok||!(coverHead.headers.get("content-type")||"").toLowerCase().startsWith("image/"))throw new Error(`Existing R2/CDN cover failed HEAD verification: HTTP ${coverHead.status}`);
     coverStorageBackend="cloudflare-r2";
-  }else if(coverAlreadySupabase&&!r2Token){
+  }else if(coverAlreadySupabase&&!r2){
     const coverHead=await fetch(coverUrl,{method:"HEAD",redirect:"follow",signal:AbortSignal.timeout(10000)});
     if(!coverHead.ok||!(coverHead.headers.get("content-type")||"").toLowerCase().startsWith("image/"))throw new Error(`Existing Supabase cover failed HEAD verification: HTTP ${coverHead.status}`);
     coverStorageBackend="supabase-storage";
@@ -123,17 +153,15 @@ Deno.serve(async(req:Request)=>{
     const coverExt=coverMime==="image/png"?"png":coverMime==="image/webp"?"webp":"jpg";
     const coverPath=`bigo-highlights/${assetId}-cover.${coverExt}`;
     const coverR2Key=`chatb2k/bigo-highlights/${assetId}-cover.${coverExt}`;
-    if(r2Token){
+    if(r2){
       try {
-        coverUrl=await uploadR2Object(coverR2Key,coverData,coverMime,r2Token,"image");
+        coverUrl=await uploadR2Object(coverR2Key,coverData,coverMime,r2,"image");
         coverStorageBackend="cloudflare-r2";
-      } catch {
-        coverUrl=await uploadSupabaseObject(coverPath,coverData,coverMime,"image");
-        coverStorageBackend="supabase-storage-fallback";
+      } catch(error) {
+        throw new Error("R2 cover upload/verification failed; fallback disabled: "+String(error).slice(0,300));
       }
     }else{
-      coverUrl=await uploadSupabaseObject(coverPath,coverData,coverMime,"image");
-      coverStorageBackend="supabase-storage-fallback";
+      throw new Error("R2 is required for covers; fallback storage is disabled");
     }
   }
   const {error:queueUpdateError}=await db.from("content_queue").update({asset_url:publicUrl,status:item.status==="scheduled"?"scheduled":"approved",error_message:null,updated_at:new Date().toISOString(),metadata:{...(item.metadata||{}),cover_url:coverUrl||item.metadata?.cover_url,rehosted_from:String(item.asset_url||""),rehosted_at:new Date().toISOString(),rehost_bucket:storageBackend,cover_rehost_bucket:coverStorageBackend,r2_fallback_reason:r2FallbackReason||null}}).eq("id",queueId);
