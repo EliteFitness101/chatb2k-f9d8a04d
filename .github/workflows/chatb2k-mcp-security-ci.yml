@@ -1,0 +1,33 @@
+name: ChatB2K MCP Security CI
+
+on:
+  push:
+    branches:
+      - fix/chatb2k101-actor-bound-gateway-current
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "supabase/functions/chatb2k-mcp/**"
+      - "supabase/functions/chatb2k-ecosystem-tool-gateway/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatb2k-mcp-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deno-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check ChatB2K MCP
+        run: deno check --no-lock --node-modules-dir=auto supabase/functions/chatb2k-mcp/index.ts
+      - name: Type-check ChatB2K ecosystem gateway
+        run: deno check --no-lock --node-modules-dir=auto supabase/functions/chatb2k-ecosystem-tool-gateway/index.ts
