@@ -1,0 +1,100 @@
+name: BIGO Token-Only Diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bigo-token-only-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  token-check:
+    name: BIGO token endpoint check (no capture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install diagnostic dependencies
+        run: python -m pip install --disable-pip-version-check "streamlink==8.6.3" requests
+
+      - name: Check BIGO token issuance
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import re
+          import secrets
+          import time
+          import requests
+          from streamlink.utils.crypto import encrypt_openssl
+
+          TOKEN_T = "https://sec.bigo.sg/v1/webjs/t"
+          TOKEN_STATUS = "https://sec.bigo.sg/v1/webjs/status"
+          KEY = b"undefinedval0x01"
+          HEADERS = {
+              "User-Agent": "Mozilla/5.0",
+              "Accept": "*/*",
+          }
+
+          def callback():
+              return f"jsonpcallback_{int(time.time() * 1000)}_{secrets.randbelow(1000001)}"
+
+          def parse_jsonp(response_text):
+              match = re.match(r"jsonp\\w+\\((?P<json>.+?)\\);", response_text, re.S)
+              if not match:
+                  raise ValueError("Unexpected JSONP response format")
+              return json.loads(match.group("json"))
+
+          report = {"token_time_endpoint": {}, "token_status_endpoint": {}}
+          try:
+              first = requests.get(
+                  TOKEN_T, params={"callback": callback()},
+                  headers=HEADERS, timeout=12
+              )
+              report["token_time_endpoint"]["http_status"] = first.status_code
+              first.raise_for_status()
+              time_data = parse_jsonp(first.text)
+              report["token_time_endpoint"]["response_keys"] = sorted(time_data.keys())
+              server_time = time_data.get("time")
+              if not server_time:
+                  raise ValueError("Time response omitted required field")
+
+              payload = {
+                  "dr": secrets.token_hex(16),
+                  "business": "bigolive-video",
+                  "scene": "",
+                  "at_time": server_time,
+                  "ver": "2.0",
+              }
+              encrypted = encrypt_openssl(
+                  json.dumps(payload, separators=(",", ":")).encode(), KEY
+              )
+              second = requests.get(
+                  TOKEN_STATUS,
+                  params={
+                      "callback": callback(),
+                      "data": base64.b64encode(encrypted).decode(),
+                  },
+                  headers=HEADERS, timeout=12
+              )
+              report["token_status_endpoint"]["http_status"] = second.status_code
+              second.raise_for_status()
+              status_data = parse_jsonp(second.text)
+              report["token_status_endpoint"]["response_keys"] = sorted(status_data.keys())
+              report["token_status_endpoint"]["code"] = status_data.get("code")
+              report["token_status_endpoint"]["info"] = status_data.get("info")
+              report["token_status_endpoint"]["token_present"] = bool(status_data.get("token"))
+              report["result"] = (
+                  "TOKEN_ISSUED" if status_data.get("token")
+                  else "TOKEN_NOT_ISSUED"
+              )
+          except Exception as exc:
+              report["result"] = "DIAGNOSTIC_ERROR"
+              report["error_type"] = type(exc).__name__
+              report["error"] = str(exc)[:180] if isinstance(exc, (ValueError, requests.RequestException)) else "Diagnostic step failed; response content suppressed"
+
+          print(json.dumps(report, sort_keys=True))
+          PY
