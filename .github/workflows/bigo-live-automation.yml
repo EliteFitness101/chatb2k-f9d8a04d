@@ -4,8 +4,6 @@ run-name: BIGO capture/archive verification — ${{ github.event_name }} — run
 # Production capture workflow — Cloudflare R2 is the primary public media store; Dropbox is an optional secondary archive.
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       host_id:
