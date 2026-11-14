@@ -26,7 +26,7 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# Vercel Blob is the primary media delivery store.
+# Cloudflare R2 is the primary public media delivery store.
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -435,7 +435,7 @@ if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = 
   fi
 fi
 
-# Dropbox is optional secondary archival. Vercel Blob is mandatory for public delivery.
+# Dropbox is optional secondary archival. Cloudflare R2 is mandatory for public delivery.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
     DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
@@ -736,8 +736,8 @@ ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
 python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${R2_URL}" "${COVER_URL}" "verified_r2_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
 host,ts,root,video,cover,blob_status=sys.argv[1:]
-is_blob=video.startswith("https://")
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"r2_verified","video_url":video,"cover_url":cover,"archive_verification":"Cloudflare R2 object GET and SHA-256 byte-for-byte read-back","media_delivery_provider":"cloudflare_r2","r2_readback_status":blob_status,"r2_object_readback_verified":is_blob and blob_status=="verified_r2_object_readback","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
+is_r2=video.startswith("https://media.resofit.fit/")
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"r2_verified","video_url":video,"cover_url":cover,"archive_verification":"Cloudflare R2 object GET and SHA-256 byte-for-byte read-back","media_delivery_provider":"cloudflare_r2","r2_readback_status":blob_status,"r2_object_readback_verified":is_r2 and blob_status=="verified_r2_object_readback","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
 PYSTATUS
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json" || echo "::warning::Secondary Dropbox receipt archive failed for $HOST."
