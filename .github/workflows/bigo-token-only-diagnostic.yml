@@ -34,26 +34,20 @@ jobs:
           TOKEN_T = "https://sec.bigo.sg/v1/webjs/t"
           TOKEN_STATUS = "https://sec.bigo.sg/v1/webjs/status"
           KEY = b"undefinedval0x01"
-          HEADERS = {
-              "User-Agent": "Mozilla/5.0",
-              "Accept": "*/*",
-          }
+          HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
 
           def callback():
               return f"jsonpcallback_{int(time.time() * 1000)}_{secrets.randbelow(1000001)}"
 
           def parse_jsonp(response_text):
-              match = re.match(r"jsonp\\w+\\((?P<json>.+?)\\);", response_text, re.S)
+              match = re.match(r"jsonp\w+\((?P<json>.+?)\);", response_text, re.S)
               if not match:
-                  raise ValueError("Unexpected JSONP response format")
+                  raise ValueError("Unexpected BIGO JSONP response format")
               return json.loads(match.group("json"))
 
           report = {"token_time_endpoint": {}, "token_status_endpoint": {}}
           try:
-              first = requests.get(
-                  TOKEN_T, params={"callback": callback()},
-                  headers=HEADERS, timeout=12
-              )
+              first = requests.get(TOKEN_T, params={"callback": callback()}, headers=HEADERS, timeout=12)
               report["token_time_endpoint"]["http_status"] = first.status_code
               first.raise_for_status()
               time_data = parse_jsonp(first.text)
@@ -69,16 +63,12 @@ jobs:
                   "at_time": server_time,
                   "ver": "2.0",
               }
-              encrypted = encrypt_openssl(
-                  json.dumps(payload, separators=(",", ":")).encode(), KEY
-              )
+              encrypted = encrypt_openssl(json.dumps(payload, separators=(",", ":")).encode(), KEY)
               second = requests.get(
                   TOKEN_STATUS,
-                  params={
-                      "callback": callback(),
-                      "data": base64.b64encode(encrypted).decode(),
-                  },
-                  headers=HEADERS, timeout=12
+                  params={"callback": callback(), "data": base64.b64encode(encrypted).decode()},
+                  headers=HEADERS,
+                  timeout=12,
               )
               report["token_status_endpoint"]["http_status"] = second.status_code
               second.raise_for_status()
@@ -87,10 +77,7 @@ jobs:
               report["token_status_endpoint"]["code"] = status_data.get("code")
               report["token_status_endpoint"]["info"] = status_data.get("info")
               report["token_status_endpoint"]["token_present"] = bool(status_data.get("token"))
-              report["result"] = (
-                  "TOKEN_ISSUED" if status_data.get("token")
-                  else "TOKEN_NOT_ISSUED"
-              )
+              report["result"] = "TOKEN_ISSUED" if status_data.get("token") else "TOKEN_NOT_ISSUED"
           except Exception as exc:
               report["result"] = "DIAGNOSTIC_ERROR"
               report["error_type"] = type(exc).__name__
