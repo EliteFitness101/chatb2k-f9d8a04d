@@ -4,12 +4,6 @@ run-name: BIGO capture/archive verification — ${{ github.event_name }} — run
 # Production capture workflow — Cloudflare R2 is the primary public media store; Dropbox is an optional secondary archive.
 
 on:
-  # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/bigo-live-automation.yml'
-      - 'scripts/bigo-capture-host.sh'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -46,7 +40,7 @@ env:
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
   DRIVE_UPLOAD_URL: https://chatb2k.resofit.fit/api/google/drive-mcp/bigo-upload-session
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
-  CAPTURE_STORAGE_ONLY: ${{ github.event_name == 'push' || inputs.host_id != '' }}
+  CAPTURE_STORAGE_ONLY: ${{ inputs.host_id != '' }}
   BIGO_CAPTURE_PARALLELISM: ${{ vars.BIGO_CAPTURE_PARALLELISM }}
 
 jobs:
