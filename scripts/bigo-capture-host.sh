@@ -26,7 +26,7 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# Vercel Blob is the primary media delivery store.
+# Cloudflare R2 is the primary public media delivery store.
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -435,13 +435,13 @@ if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = 
   fi
 fi
 
-# Dropbox is optional secondary archival. Vercel Blob is mandatory for public delivery.
+# Dropbox is optional secondary archival. Cloudflare R2 is mandatory for public delivery.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
     DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
     export DROPBOX_ACCESS_TOKEN
   else
-    echo "::warning::Dropbox OAuth refresh failed; primary Vercel Blob delivery remains available."
+    echo "::warning::Dropbox OAuth refresh failed; primary Vercel R2 delivery remains available."
   fi
 fi
 dropbox_upload() {
@@ -604,37 +604,65 @@ PYDIR
 }
 
 export FILE COVER
-# Upload processed media and cover to Vercel Blob first; public URLs are verified by SHA-256 read-back.
-blob_upload() {
+# Direct Cloudflare R2 is the primary and only public media store. Verify every object
+# by reading it back from R2 and comparing byte count plus SHA-256 before publishing.
+r2_upload() {
   local SRC="$1" KEY="$2" MIME="$3"
-  [ -n "${BLOB_READ_WRITE_TOKEN:-}" ] || { echo "Vercel Blob token is missing" >&2; return 2; }
-  [ -s "$SRC" ] || { echo "Blob upload source is empty: $SRC" >&2; return 1; }
-  ( cd /tmp/bigo-blob-sdk && BLOB_READ_WRITE_TOKEN="$BLOB_READ_WRITE_TOKEN" node --input-type=module - "$SRC" "$KEY" "$MIME" <<'JSBLOB'
-import { readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
-import { put } from '@vercel/blob';
-const [src, pathname, contentType] = process.argv.slice(2);
-const token = process.env.BLOB_READ_WRITE_TOKEN;
-if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is missing');
-const bytes = await readFile(src);
-const digest = createHash('sha256').update(bytes).digest('hex');
-const blob = await put(pathname, bytes, { access: 'public', token, contentType, addRandomSuffix: false });
-if (!blob?.url?.startsWith('https://')) throw new Error('Vercel Blob did not return a public HTTPS URL');
-const response = await fetch(blob.url, { cache: 'no-store' });
-if (!response.ok) throw new Error(`Blob read-back failed (HTTP ${response.status})`);
-const readback = Buffer.from(await response.arrayBuffer());
-const readbackDigest = createHash('sha256').update(readback).digest('hex');
-if (readback.length !== bytes.length || readbackDigest !== digest) throw new Error('Blob read-back byte count or SHA-256 mismatch');
-process.stdout.write(JSON.stringify({url: blob.url, size: bytes.length, sha256: digest, verified: true}));
-JSBLOB
-  ) | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("verified") is True; print(d["url"])'
+  [ -n "${R2_ACCOUNT_ID:-}" ] && [ -n "${R2_ENDPOINT:-}" ] &&
+    [ -n "${R2_BUCKET_NAME:-}" ] && [ -n "${R2_ACCESS_KEY_ID:-}" ] &&
+    [ -n "${R2_SECRET_ACCESS_KEY:-}" ] && [ -n "${R2_PUBLIC_BASE_URL:-}" ] || {
+      echo "R2 configuration is incomplete; refusing media upload." >&2; return 2;
+    }
+  [ -s "$SRC" ] || { echo "R2 upload source is empty: $SRC" >&2; return 1; }
+  python3 - "$SRC" "$KEY" "$MIME" <<'PYR2'
+import boto3, hashlib, os, sys
+from botocore.config import Config
+src, key, mime = sys.argv[1:4]
+endpoint = os.environ["R2_ENDPOINT"].rstrip("/")
+bucket = os.environ["R2_BUCKET_NAME"]
+public_base = os.environ["R2_PUBLIC_BASE_URL"].rstrip("/")
+client = boto3.client(
+    "s3", endpoint_url=endpoint,
+    aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+    aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+    region_name="auto",
+    config=Config(signature_version="s3v4", retries={"max_attempts": 4, "mode": "standard"}),
+)
+digest = hashlib.sha256()
+size = 0
+with open(src, "rb") as stream:
+    while True:
+        chunk = stream.read(1024 * 1024)
+        if not chunk: break
+        digest.update(chunk); size += len(chunk)
+expected = digest.hexdigest()
+client.upload_file(src, bucket, key, ExtraArgs={"ContentType": mime})
+obj = client.get_object(Bucket=bucket, Key=key)
+readback_hash = hashlib.sha256()
+readback_size = 0
+body = obj["Body"]
+try:
+    while True:
+        chunk = body.read(1024 * 1024)
+        if not chunk: break
+        readback_hash.update(chunk); readback_size += len(chunk)
+finally:
+    body.close()
+if readback_size != size or readback_hash.hexdigest() != expected:
+    raise SystemExit("R2 object read-back size or SHA-256 mismatch")
+print(public_base + "/" + key)
+print(f"R2 read-back verified: {size} bytes; SHA-256 {expected}", file=sys.stderr)
+PYR2
 }
-BLOB_URL="$(blob_upload "$FILE" "bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
-COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
+ASSET_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+VIDEO_KEY="chatb2k/bigo-highlights/${ASSET_ID}.mp4"
+COVER_KEY="chatb2k/bigo-covers/${ASSET_ID}.jpg"
+R2_URL="$(r2_upload "$FILE" "$VIDEO_KEY" "video/mp4")"
+COVER_URL="$(r2_upload "$COVER" "$COVER_KEY" "image/jpeg")"
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
   if audio_qa "$GBP_FILE" "Google Business derivative"; then
-    GBP_URL="$(blob_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
+    GBP_URL="$(r2_upload "$GBP_FILE" "chatb2k/bigo-highlights/${ASSET_ID}-google-business-30s.mp4" "video/mp4")"
   else
     echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
     rm -f "$GBP_FILE"
@@ -671,14 +699,14 @@ if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
     echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST; metadata read-back is still pending"
   else
     DRIVE_SYNC_STATUS="partial"
-    echo "::warning::Google Drive archive is partial for $HOST; verified Blob delivery remains available."
+    echo "::warning::Google Drive archive is partial for $HOST; verified R2 delivery remains available."
   fi
 else
   DRIVE_SYNC_STATUS="not_configured"
   echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Blob delivery remains available."
 fi
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$R2_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
@@ -687,11 +715,11 @@ def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'vercel_blob','blob_store':'vercel_blob','blob_readback_verified':bool(blob)}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'cloudflare_r2','media_store':'cloudflare_r2','r2_readback_verified':bool(blob)}}
 print(json.dumps({'highlight':hitem}))
 PY
 
-# Save an optional secondary Dropbox metadata copy after the primary Blob object read-back succeeds.
+# Save an optional secondary Dropbox metadata copy after the primary R2 object read-back succeeds.
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json" || echo "::warning::Secondary Dropbox metadata archive failed for $HOST."
 fi
@@ -705,11 +733,11 @@ fi
 
 # Save a per-host verification receipt after the primary Blob objects pass SHA-256 read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
-python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${R2_URL}" "${COVER_URL}" "verified_r2_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
 host,ts,root,video,cover,blob_status=sys.argv[1:]
-is_blob=video.startswith("https://")
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"blob_verified","video_url":video,"cover_url":cover,"archive_verification":"Vercel Blob public GET and SHA-256 byte-for-byte read-back","media_delivery_provider":"vercel_blob","blob_readback_status":blob_status,"blob_object_readback_verified":is_blob and blob_status=="verified_object_readback","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
+is_r2=video.startswith("https://media.resofit.fit/")
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"r2_verified","video_url":video,"cover_url":cover,"archive_verification":"Cloudflare R2 object GET and SHA-256 byte-for-byte read-back","media_delivery_provider":"cloudflare_r2","r2_readback_status":blob_status,"r2_object_readback_verified":is_r2 and blob_status=="verified_r2_object_readback","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
 PYSTATUS
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json" || echo "::warning::Secondary Dropbox receipt archive failed for $HOST."

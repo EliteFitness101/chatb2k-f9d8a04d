@@ -1,18 +1,16 @@
 
-name: BIGO Live -> Vercel Blob -> ChatB2K -> Buffer/Drive
+name: BIGO Live -> Cloudflare R2 -> ChatB2K -> Buffer/Drive
 run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
-# Production capture workflow — Vercel Blob is primary public media storage; Dropbox is an optional secondary archive.
+# Production capture workflow — Cloudflare R2 is the primary public media store; Dropbox is an optional secondary archive.
 
 on:
-  # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/bigo-live-automation.yml'
-      - 'scripts/bigo-capture-host.sh'
-  schedule:
-    - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      host_id:
+        description: 'Optional single verified BIGO host ID for a controlled storage-only capture test'
+        required: false
+        type: string
+        default: '748833040'
 
 permissions:
   contents: read
@@ -28,13 +26,19 @@ env:
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
-  BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+  R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+  R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_PUBLIC_BASE_URL: https://media.resofit.fit
+  BIGO_TEST_HOST_ID: ${{ inputs.host_id || '' }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
   DRIVE_UPLOAD_URL: https://chatb2k.resofit.fit/api/google/drive-mcp/bigo-upload-session
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
-  CAPTURE_STORAGE_ONLY: ${{ github.event_name == 'push' }}
+  CAPTURE_STORAGE_ONLY: ${{ inputs.host_id != '' }}
   BIGO_CAPTURE_PARALLELISM: ${{ vars.BIGO_CAPTURE_PARALLELISM }}
 
 jobs:
@@ -52,7 +56,7 @@ jobs:
             sudo apt-get install -y -qq ffmpeg
           fi
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
-          npm install --prefix /tmp/bigo-blob-sdk --no-audit --no-fund @vercel/blob
+          python3 -m pip install --disable-pip-version-check -q 'boto3>=1.34,<2'
           ffmpeg -version | head -n 1
           streamlink --version
 
@@ -66,11 +70,13 @@ jobs:
           else
             echo "::notice::BIGO authenticated-session secret is present; value is not logged."
           fi
-          if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then
-            echo "::error::BLOB_READ_WRITE_TOKEN is missing; refusing capture without the primary blob store."
-            exit 1
-          fi
-          echo "::notice::Vercel Blob credential is present; value is not logged."
+          for name in R2_ACCOUNT_ID R2_ENDPOINT R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_BASE_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required R2 setting $name is missing; refusing capture."
+              exit 1
+            fi
+          done
+          echo "::notice::R2 configuration is present; credential values are not logged."
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
@@ -100,6 +106,14 @@ jobs:
               print(host + "|" + (source or "https://www.bigo.tv/" + host))
           PY
           )"
+          if [ -n "${BIGO_TEST_HOST_ID:-}" ]; then
+            HOSTS="$(printf '%s\n' "${HOSTS}" | awk -F'|' -v wanted="${BIGO_TEST_HOST_ID}" '$1 == wanted {print}')"
+            if [ -z "${HOSTS}" ]; then
+              echo "::error::Requested controlled-test host is not present in the authoritative source registry."
+              exit 1
+            fi
+            echo "::notice::Controlled storage-only capture restricted to the requested registered host."
+          fi
           if [ -z "${HOSTS}" ]; then
             echo "::error::No BIGO hosts are configured in the source registry or additive environment inputs."
             exit 1
