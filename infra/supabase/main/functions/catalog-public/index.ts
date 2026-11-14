@@ -184,8 +184,21 @@ Deno.serve(async (req) => {
           const externalCheckoutEnabled = source?.enabled === true
             && source.checkout_mode === "external"
             && sourceMeta.external_checkout_enabled === true
-            && sourceMeta.checkout_flow_verified === true;
-          const resaleAuthorized = sourceMeta.resale_authorized === true && offerMeta.resale_authorized === true;
+            && sourceMeta.checkout_flow_verified === true
+            && offerMeta.supplier_checkout_flow_verified === true;
+          const supplierContractEvidenceUrl = String(sourceMeta.supplier_contract_evidence_url || offerMeta.supplier_contract_evidence_url || "");
+          const thirdPartySupplierContractVerified = sourceMeta.third_party_supplier_contract_verified === true
+            && offerMeta.third_party_supplier_contract_verified === true
+            && supplierContractEvidenceUrl.startsWith("https://");
+          const resaleAuthorizationEvidenceUrl = String(sourceMeta.resale_authorization_evidence_url || offerMeta.resale_authorization_evidence_url || "");
+          const resaleAuthorized = sourceMeta.resale_authorized === true
+            && offerMeta.resale_authorized === true
+            && thirdPartySupplierContractVerified
+            && resaleAuthorizationEvidenceUrl.startsWith("https://");
+          const mediaRightsEvidenceUrl = String(offerMeta.media_rights_evidence_url || sourceMeta.media_rights_evidence_url || "");
+          const mediaRightsVerified = offerMeta.media_rights_verified === true
+            && sourceMeta.media_rights_verified === true
+            && mediaRightsEvidenceUrl.startsWith("https://");
           const fulfillmentReady = (offer?.availability === "available" || offer?.availability === "in_stock")
             && offerMeta.stock_verified === true
             && offerMeta.fulfillment_ready === true;
@@ -197,13 +210,15 @@ Deno.serve(async (req) => {
           const reasons = [
             !sourcePageVerified ? "direct supplier product page identity not verified" : "",
             !externalCheckoutEnabled ? "ResoFit-managed supplier checkout contract not verified" : "",
-            !resaleAuthorized ? "resale authorization not recorded" : "",
+            !resaleAuthorized ? "supplier contract and resale authorization evidence not verified" : "",
+            !mediaRightsVerified ? "media rights evidence not verified" : "",
             !fulfillmentReady ? "live stock and fulfilment evidence not verified" : ""
           ].filter(Boolean);
           return {
             ...item,
             source_product_url: sourceUrl || null,
-            image_url: typeof offerMeta.image_url === "string" && offerMeta.image_url.startsWith("https://") ? offerMeta.image_url : (typeof item.image_url === "string" && item.image_url.startsWith("https://") ? item.image_url : null),
+            image_url: mediaRightsVerified ? (typeof offerMeta.image_url === "string" && offerMeta.image_url.startsWith("https://") ? offerMeta.image_url : (typeof item.image_url === "string" && item.image_url.startsWith("https://") ? item.image_url : null)) : null,
+            image_rights_verified: mediaRightsVerified,
             price: Number(offer?.price) > 0 ? Number(offer.price) : null,
             price_range_max: Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) > 0 ? Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) : null,
             supplier_price: Number(offerMeta.supplier_price ?? offer?.price) > 0 ? Number(offerMeta.supplier_price ?? offer.price) : null,
@@ -217,6 +232,8 @@ Deno.serve(async (req) => {
             source_listing_mode: sourcePageVerified ? "supplier_direct_listing_only" : "review_pending",
             external_checkout_enabled: externalCheckoutEnabled,
             resale_authorized: resaleAuthorized,
+            third_party_supplier_contract_verified: thirdPartySupplierContractVerified,
+            media_rights_verified: mediaRightsVerified,
             fulfillment_ready: fulfillmentReady,
             purchase_enabled: purchaseEnabled,
             price_visibility: sourcePageVerified && Number(offer?.price) > 0 ? "supplier_snapshot" : "hidden",
