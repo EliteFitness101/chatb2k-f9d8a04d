@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const ACTOR_SIGNING_SECRET = Deno.env.get("CHATB2K_MCP_ACTOR_SIGNING_SECRET") ?? "";
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 const CONTROL_URL = `${SUPABASE_URL}/functions/v1/chatb2k-omnidimensional-control-plane`;
 const GATEWAY_URL = `${SUPABASE_URL}/functions/v1/chatb2k-ecosystem-tool-gateway`;
@@ -46,32 +47,17 @@ function decodeBase64Url(value: string): Uint8Array {
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
 async function authenticate(req: Request): Promise<Actor | null> {
-  const token = req.headers.get("authorization")?.match(/^Bearer[ \t]+(.+)$/i)?.[1] ?? "";
-  if (!token || !SERVICE_KEY) return null;
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  let claims: Record<string, unknown>;
-  try { claims = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1]))); } catch { return null; }
-  const now = Math.floor(Date.now() / 1000);
-  const iat = Number(claims.iat ?? 0), exp = Number(claims.exp ?? 0);
-  if (claims.aud !== "chatb2k-mcp" || claims.scope !== "chatb2k:mcp" ||
-      !iat || exp <= now || exp - iat > 300 || iat > now + 30) return null;
-  try {
-    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-    const signature = decodeBase64Url(parts[2]);
-    const signatureBuffer = new ArrayBuffer(signature.byteLength);
-    new Uint8Array(signatureBuffer).set(signature);
-    const valid = await crypto.subtle.verify("HMAC", key, signatureBuffer, new TextEncoder().encode(parts[0] + "." + parts[1]));
-    if (!valid) return null;
-  } catch { return null; }
-  const id = String(claims.sub ?? "");
-  const email = String(claims.email ?? "").toLowerCase();
-  if (!id || !email) return null;
+  const token = req.headers.get("authorization")?.match(/^Bearer[ \\t]+(.+)$/i)?.[1] ?? "";
+  if (!token) return null;
+  // Verify the caller's real Supabase Auth access token; never trust caller-supplied JWT claims.
+  const { data: { user }, error: authError } = await db.auth.getUser(token);
+  if (authError || !user?.id || !user.email || user.email_confirmed_at == null) return null;
+  const id = user.id;
+  const email = user.email.toLowerCase();
   const { data: roleRows, error } = await db.from("user_roles").select("role").eq("user_id", id);
   if (error) return null;
   const roles = (roleRows ?? []).map((r: { role: string }) => String(r.role ?? "").toLowerCase());
   const isPrivileged = email === "ceo@resofit.fit" ||
-    email === "resonancefitnesswork@gmail.com" ||
     roles.some((r: string) => ["admin", "super_admin"].includes(r));
   return isPrivileged ? { id, email, roles } : null;
 }
@@ -99,11 +85,12 @@ async function controlPlane(actorToken: string, action: string, payload: Record<
 }
 async function gateway(payload: Record<string, unknown>, actor: Actor) {
   const agentId = String(payload.agent_id ?? "");
+  if (!ACTOR_SIGNING_SECRET) throw new Error("CHATB2K_MCP_ACTOR_SIGNING_SECRET_NOT_CONFIGURED");
   const now = Math.floor(Date.now() / 1000);
   const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-  const claims = btoa(JSON.stringify({ sub: actor.id, email: actor.email, aud: "chatb2k-ecosystem-tool-gateway", scope: "chatb2k:gateway:actor", agent_id: agentId, iat: now, exp: now + 60 })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const claims = btoa(JSON.stringify({ iss: "chatb2k-mcp", sub: actor.id, email: actor.email, aud: "chatb2k-ecosystem-tool-gateway", scope: "chatb2k:gateway:actor", agent_id: agentId, iat: now, exp: now + 60 })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const unsigned = header + "." + claims;
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(ACTOR_SIGNING_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
   const assertion = unsigned + "." + btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const r = await fetch(GATEWAY_URL, {
