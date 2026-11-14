@@ -5,10 +5,10 @@ const CALLBACK_URI =
   "https://chatb2k.resofit.fit/api/google/drive-mcp/callback";
 const GOOGLE_CLIENT_ID =
   process.env.GOOGLE_CLIENT_ID ?? process.env.GOOGLE_DRIVE_CLIENT_ID;
-const DEFAULT_SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
-];
+
+// Keep Drive authorization isolated from Gemini's Generative Language quota scope.
+// Do not merge GOOGLE_OAUTH_SCOPES here: Google rejects the combined scope request.
+const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 
 export const Route = createFileRoute("/api/google/drive-mcp/start")({
   server: {
@@ -17,13 +17,6 @@ export const Route = createFileRoute("/api/google/drive-mcp/start")({
         if (!GOOGLE_CLIENT_ID) {
           return new Response("Google OAuth is not configured", { status: 503 });
         }
-
-        const configuredScopes =
-          process.env.GOOGLE_OAUTH_SCOPES
-            ?.split(/\s+/)
-            .map((scope) => scope.trim())
-            .filter(Boolean) ?? [];
-        const scopes = configuredScopes.length ? configuredScopes : DEFAULT_SCOPES;
 
         const stateBytes = crypto.getRandomValues(new Uint8Array(32));
         const state = Array.from(stateBytes, (byte) =>
@@ -38,7 +31,7 @@ export const Route = createFileRoute("/api/google/drive-mcp/start")({
           prompt: "consent",
           include_granted_scopes: "true",
           state,
-          scope: scopes.join(" "),
+          scope: DRIVE_SCOPES.join(" "),
         });
 
         return new Response(null, {
