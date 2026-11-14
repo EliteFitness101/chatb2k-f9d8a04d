@@ -128,12 +128,13 @@ def normalize(current, role, path):
     # Preserve deployment labels as claims, but do not present them as verified infrastructure.
     prior_claims = data.get("authority_claims") or {}
     prior_platform = data.get("platform_source") or {}
+    prior_clearance = data.pop("clearance_state", None) or (data.get("clearance_claims") or {}).get("supplied_state") or {}
     claimed_authority = data.pop("corporate_authority", None) or data.pop("principal", None) or prior_claims.get("corporate_entity")
     origin_claim = data.pop("content_origin_authority", None) or prior_platform.get("attribution_claim")
     data["schema_version"] = 2
     data["config_role"] = role
     data["status"] = "configuration_only_not_global_clearance"
-    data["persistence_source_of_truth"] = "/config/clearance.config.json"
+    data["persistence_source_of_truth"] = "/Xbang/BIGO/_registry/clearance.config.json"
     data["authority_claims"] = {
         "corporate_entity": claimed_authority or "not_specified",
         "verification_status": "user_supplied_claim_not_independently_verified",
@@ -142,6 +143,11 @@ def normalize(current, role, path):
         "name": "BIGO TV",
         "attribution_claim": origin_claim or "BIGO platform",
         "verification_status": "platform_attribution_does_not_establish_rights_in_individual_streams",
+    }
+    data["clearance_claims"] = {
+        "supplied_state": prior_clearance,
+        "verification_status": "user_supplied_claim_not_independently_verified",
+        "note": "A manifest-level claim is not independent evidence of ownership or republication rights.",
     }
     data["authorization_policy"] = POLICY
     data["required_capture_provenance_fields"] = REQUIRED_PROVENANCE
