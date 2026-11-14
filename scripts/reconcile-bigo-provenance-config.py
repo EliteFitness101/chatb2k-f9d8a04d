@@ -18,10 +18,11 @@ from datetime import datetime, timezone
 API = "https://api.dropboxapi.com/2"
 CONTENT = "https://content.dropboxapi.com/2"
 FILES = [
-    ("/config/clearance.config.json", "canonical"),
-    ("/ResoFit/BIGO/hosts/master-config.json", "legacy_mirror"),
-    ("/config/clearance.config-backup.json", "historical_backup"),
-    ("/ResoFit/BIGO/hosts/master-config-backup.json", "historical_backup"),
+    # Dropbox assets are stored in distinct team namespaces.
+    ("13697176353", "/BIGO/_registry/clearance.config.json", "canonical"),
+    ("13715806289", "/hosts/master-config.json", "legacy_mirror"),
+    ("15018215635", "/config/clearance.config-backup.json", "historical_backup"),
+    ("13715806289", "/hosts/master-config-backup.json", "historical_backup"),
 ]
 
 POLICY = {
@@ -66,14 +67,27 @@ def request(url, method="POST", headers=None, body=None):
         raise RuntimeError(f"Dropbox/API HTTP {exc.code}: {detail}") from exc
 
 
-def json_api(path, token, payload):
-    status, body, _ = request(
+def namespace_headers(namespace_id):
+    return {
+        "Dropbox-API-Path-Root": json.dumps(
+            {".tag": "namespace_id", "namespace_id": namespace_id},
+            separators=(",", ":"),
+        )
+    }
+
+
+def json_api(path, token, payload, namespace_id):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        **namespace_headers(namespace_id),
+    }
+    _, body, _ = request(
         f"{API}/{path}",
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        headers=headers,
         body=json.dumps(payload).encode(),
     )
     return json.loads(body.decode("utf-8"))
-
 
 def get_token():
     key = os.environ.get("DROPBOX_APP_KEY", "")
@@ -93,15 +107,19 @@ def get_token():
     return token
 
 
-def download(path, token):
+def download(path, token, namespace_id):
     arg = json.dumps({"path": path})
-    _, body, headers = request(
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Dropbox-API-Arg": arg,
+        **namespace_headers(namespace_id),
+    }
+    _, body, response_headers = request(
         f"{CONTENT}/files/download",
-        headers={"Authorization": f"Bearer {token}", "Dropbox-API-Arg": arg},
+        headers=headers,
     )
-    metadata = json.loads(headers.get("Dropbox-API-Result", "{}"))
+    metadata = json.loads(response_headers.get("Dropbox-API-Result", "{}"))
     return json.loads(body.decode("utf-8")), metadata
-
 
 def normalize(current, role, path):
     data = dict(current)
@@ -145,8 +163,8 @@ def normalize(current, role, path):
 def main():
     token = get_token()
     if "--check-only" in sys.argv:
-        current, _ = download("/config/clearance.config.json", token)
-        normalized = normalize(current, "canonical", "/config/clearance.config.json")
+        current, _ = download("/BIGO/_registry/clearance.config.json", token, "13697176353")
+        normalized = normalize(current, "canonical", "/BIGO/_registry/clearance.config.json")
         current_cmp = dict(current)
         normalized_cmp = dict(normalized)
         for value in (current_cmp, normalized_cmp):
@@ -155,14 +173,14 @@ def main():
         if current_cmp != normalized_cmp:
             print(json.dumps({"ok": False, "reason": "canonical Dropbox provenance config requires reconciliation"}))
             return 1
-        print(json.dumps({"ok": True, "config": "/config/clearance.config.json", "policy_version": 2}))
+        print(json.dumps({"ok": True, "config": "/BIGO/_registry/clearance.config.json", "policy_version": 2}))
         return 0
     changed = []
     unchanged = []
     now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-    for path, role in FILES:
-        current, _ = download(path, token)
-        metadata = json_api("files/get_metadata", token, {"path": path})
+    for namespace_id, path, role in FILES:
+        current, _ = download(path, token, namespace_id)
+        metadata = json_api("files/get_metadata", token, {"path": path}, namespace_id)
         desired = normalize(current, role, path)
         comparable_current = dict(current)
         comparable_desired = dict(desired)
@@ -197,11 +215,12 @@ def main():
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/octet-stream",
                 "Dropbox-API-Arg": json.dumps(arg, separators=(",", ":")),
+                **namespace_headers(namespace_id),
             },
             body=(json.dumps(desired, indent=2, ensure_ascii=False) + "\n").encode(),
         )
         # Read-after-write verification: compare normalized policy after upload.
-        written, _ = download(path, token)
+        written, _ = download(path, token, namespace_id)
         if normalize(written, role, path) != normalize(desired, role, path):
             raise RuntimeError(f"Dropbox read-after-write verification failed for {path}")
         changed.append(path)
