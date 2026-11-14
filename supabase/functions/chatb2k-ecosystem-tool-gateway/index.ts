@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const ACTOR_SIGNING_SECRET = Deno.env.get("CHATB2K_MCP_ACTOR_SIGNING_SECRET") ?? "";
 const cors = {"Access-Control-Allow-Origin":"https://www.resofit.fit","Access-Control-Allow-Headers":"authorization, apikey, content-type, x-request-id","Access-Control-Allow-Methods":"POST, OPTIONS","Content-Type":"application/json","Cache-Control":"no-store"};
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {status, headers:cors});
 const INTERNAL_READ_TOOLS: Record<string,{slug:string;description:string}> = {
@@ -96,6 +97,19 @@ async function dispatchBindings(bindingIds:string[],mode:string,action:string,pa
  return {ok:results.every(x=>x.ok===true),agent_id:agentId,mode,action,idempotency_key:idempotencyKey,requested:bindingIds.length,results};
 }
 function claimsFromJwt(token:string):Record<string,unknown>|null{try{const p=token.split(".");if(p.length!==3)return null;const b=p[1].replace(/-/g,"+").replace(/_/g,"/");return JSON.parse(atob(b.padEnd(Math.ceil(b.length/4)*4,"=")));}catch{return null;}}
+function decodeJwtPart(value:string):Uint8Array{const b=value.replace(/-/g,"+").replace(/_/g,"/");const raw=atob(b.padEnd(Math.ceil(b.length/4)*4,"="));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
+async function verifyMcpActorAssertion(token:string,agentId:string){try{
+ const parts=token.split(".");if(parts.length!==3||!ACTOR_SIGNING_SECRET)return null;
+ const claims=claimsFromJwt(token);if(!claims)return null;
+ const now=Math.floor(Date.now()/1000);
+ if(claims.iss!=="chatb2k-mcp"||claims.aud!=="chatb2k-ecosystem-tool-gateway"||claims.scope!=="chatb2k:gateway:actor"||claims.agent_id!==agentId||!claims.sub||claims.email!=="ceo@resofit.fit"||agentId!=="chatb2k101"||Number(claims.exp)<=now||Number(claims.iat)>now+10)return null;
+ const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(ACTOR_SIGNING_SECRET),{name:"HMAC",hash:"SHA-256"},false,["verify"]);
+ const signature=decodeJwtPart(parts[2]);
+  const signatureBuffer=new ArrayBuffer(signature.byteLength);
+  new Uint8Array(signatureBuffer).set(signature);
+  const valid=await crypto.subtle.verify("HMAC",key,signatureBuffer,new TextEncoder().encode(parts[0]+"."+parts[1]));
+ return valid?claims:null;
+ }catch{return null;}}
 async function audit(role:string,actor:string,agent:string,action:string,tool:string|null,rid:string,outcome:string,status:number,started:number,metadata:Record<string,unknown>={}){try{await fetch(SUPABASE_URL+"/rest/v1/chatb2k_tool_gateway_audit",{method:"POST",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({actor_role:role,actor_id:actor,action,tool_name:tool,request_id:rid,outcome,http_status:status,latency_ms:Date.now()-started,metadata:{agent_id:agent,...metadata}})});}catch(e){console.error("audit_failed",String(e));}}
 async function loadAgent(agentId:string){const u=SUPABASE_URL+"/rest/v1/chatb2k_agent_registry?select=agent_id,name,permission_level,enabled,status,health_status,allowed_tools,allowed_routes,allowed_actions,kill_switch_enabled&agent_id=eq."+encodeURIComponent(agentId)+"&limit=1";const r=await fetch(u,{headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}});if(!r.ok)throw new Error("AGENT_REGISTRY_UNAVAILABLE");const rows=await r.json();return rows[0]??null;}
 async function callInternal(tool:string,input:Record<string,unknown>){const t=INTERNAL_READ_TOOLS[tool];if(!t)throw new Error("TOOL_NOT_ALLOWLISTED");const r=await fetch(SUPABASE_URL+"/functions/v1/"+t.slug,{method:"POST",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":"application/json"},body:JSON.stringify(input)});const raw=await r.text();let data:unknown;try{data=JSON.parse(raw);}catch{data={response_text:raw.slice(0,2000)};}return {tool,endpoint:t.slug,status:r.status,ok:r.ok,data};}
@@ -110,11 +124,17 @@ Deno.serve(async(req:Request)=>{
  let body:Record<string,unknown>;try{body=await req.json();}catch{return json({error:"INVALID_JSON",request_id:rid},400);}
  const action=String(body.action??"");const agentId=String(body.agent_id??"");
  if(!agentId)return json({error:"AGENT_ID_REQUIRED",request_id:rid},400);
+ const mcpActor=await verifyMcpActorAssertion(req.headers.get("x-chatb2k-actor")??"",agentId);
+ if(!mcpActor)return json({error:"AUTHENTICATED_MCP_ACTOR_ASSERTION_REQUIRED",request_id:rid},403);
  try{
   const agent=await loadAgent(agentId);
+  const elevated=["ROOT","GLOBAL_ADMIN"].includes(String(agent?.permission_level));
+  if(elevated&&(agentId!=="chatb2k101"||mcpActor.sub===undefined||mcpActor.email!=="ceo@resofit.fit")){
+   await audit(role,actor,agentId,action,null,rid,"root_actor_denied",403,started);
+   return json({error:"CEO_ROOT_ACTOR_BINDING_REQUIRED",request_id:rid},403);
+  }
   if(!agent||agent.enabled!==true||agent.status!=="ENABLED"||agent.kill_switch_enabled===true||agent.health_status==="FAILED"){await audit(role,actor,agentId,action,null,rid,"agent_denied",403,started);return json({error:"AGENT_NOT_AUTHORIZED_OR_DISABLED",request_id:rid},403);}
   const allowed=Array.isArray(agent.allowed_tools)?agent.allowed_tools.map(String):[];
-  const elevated=["ROOT","GLOBAL_ADMIN"].includes(String(agent.permission_level));
   const list=Object.entries(INTERNAL_READ_TOOLS).filter(([name])=>elevated||allowed.includes(name)).map(([name,v])=>({name,endpoint:v.slug,description:v.description,permission:"read_only"}));
   const ext=Object.entries(EXTERNAL_READ_TOOLS).filter(([name])=>elevated||allowed.includes(name)).map(([name,v])=>({name,category:v.category,permission:"read_only",configured:Boolean(Deno.env.get(v.env))}));
   const rootTools=elevated?Object.entries(ROOT_WRITE_TOOLS).map(([name,v])=>({name,permission:v.permission,description:v.description,configured:name.startsWith("vercel.")?Boolean(Deno.env.get("VERCEL_API_TOKEN")):true})):[];
