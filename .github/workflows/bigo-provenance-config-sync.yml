@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: '17 2 * * *'
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/reconcile-bigo-provenance-config.py'
+      - '.github/workflows/bigo-token-only-diagnostic.yml'
+      - '.github/workflows/bigo-provenance-config-sync.yml'
 
 permissions:
   contents: read
@@ -19,7 +24,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-provenance-fix:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Python syntax without contacting Dropbox
+        run: python3 -m py_compile scripts/reconcile-bigo-provenance-config.py
+      - name: Verify namespace routing and fail-closed diagnostic
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("scripts/reconcile-bigo-provenance-config.py").read_text()
+          diagnostic = Path(".github/workflows/bigo-token-only-diagnostic.yml").read_text()
+          required = [
+              '"13697176353"', '"13715806289"', '"15018215635"',
+              'Dropbox-API-Path-Root', '/BIGO/_registry/clearance.config.json',
+              'data["clearance_claims"]',
+          ]
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit("provenance validation failed: " + ", ".join(missing))
+          if 'if report["result"] != "TOKEN_ISSUED":' not in diagnostic:
+              raise SystemExit("token diagnostic must fail when no token is issued")
+          print("provenance namespace and token fail-closed checks passed")
+          PY
+
   reconcile-dropbox-config:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
