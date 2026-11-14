@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const ACTOR_SIGNING_SECRET = Deno.env.get("CHATB2K_MCP_ACTOR_SIGNING_SECRET") ?? "";
 const cors = {"Access-Control-Allow-Origin":"https://www.resofit.fit","Access-Control-Allow-Headers":"authorization, apikey, content-type, x-request-id","Access-Control-Allow-Methods":"POST, OPTIONS","Content-Type":"application/json","Cache-Control":"no-store"};
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {status, headers:cors});
 const INTERNAL_READ_TOOLS: Record<string,{slug:string;description:string}> = {
@@ -98,11 +99,11 @@ async function dispatchBindings(bindingIds:string[],mode:string,action:string,pa
 function claimsFromJwt(token:string):Record<string,unknown>|null{try{const p=token.split(".");if(p.length!==3)return null;const b=p[1].replace(/-/g,"+").replace(/_/g,"/");return JSON.parse(atob(b.padEnd(Math.ceil(b.length/4)*4,"=")));}catch{return null;}}
 function decodeJwtPart(value:string):Uint8Array{const b=value.replace(/-/g,"+").replace(/_/g,"/");const raw=atob(b.padEnd(Math.ceil(b.length/4)*4,"="));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function verifyMcpActorAssertion(token:string,agentId:string){try{
- const parts=token.split(".");if(parts.length!==3||!SERVICE_KEY)return null;
+ const parts=token.split(".");if(parts.length!==3||!ACTOR_SIGNING_SECRET)return null;
  const claims=claimsFromJwt(token);if(!claims)return null;
  const now=Math.floor(Date.now()/1000);
- if(claims.aud!=="chatb2k-ecosystem-tool-gateway"||claims.scope!=="chatb2k:gateway:actor"||claims.agent_id!==agentId||Number(claims.exp)<=now||Number(claims.iat)>now+10)return null;
- const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(SERVICE_KEY),{name:"HMAC",hash:"SHA-256"},false,["verify"]);
+ if(claims.iss!=="chatb2k-mcp"||claims.aud!=="chatb2k-ecosystem-tool-gateway"||claims.scope!=="chatb2k:gateway:actor"||claims.agent_id!==agentId||!claims.sub||claims.email!=="ceo@resofit.fit"||agentId!=="chatb2k101"||Number(claims.exp)<=now||Number(claims.iat)>now+10)return null;
+ const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(ACTOR_SIGNING_SECRET),{name:"HMAC",hash:"SHA-256"},false,["verify"]);
  const signature=decodeJwtPart(parts[2]);
   const signatureBuffer=new ArrayBuffer(signature.byteLength);
   new Uint8Array(signatureBuffer).set(signature);
