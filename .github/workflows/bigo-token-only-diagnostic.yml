@@ -84,4 +84,6 @@ jobs:
               report["error"] = str(exc)[:180] if isinstance(exc, (ValueError, requests.RequestException)) else "Diagnostic step failed; response content suppressed"
 
           print(json.dumps(report, sort_keys=True))
+          if report["result"] != "TOKEN_ISSUED":
+              raise SystemExit(1)
           PY
