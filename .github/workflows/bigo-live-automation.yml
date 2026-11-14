@@ -18,7 +18,7 @@ on:
         description: 'Optional single verified BIGO host ID for a controlled storage-only capture test'
         required: false
         type: string
-        default: ''
+        default: '748833040'
 
 permissions:
   contents: read
