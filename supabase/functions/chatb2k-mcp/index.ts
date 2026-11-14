@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const ACTOR_SIGNING_SECRET = Deno.env.get("CHATB2K_MCP_ACTOR_SIGNING_SECRET") ?? "";
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 const CONTROL_URL = `${SUPABASE_URL}/functions/v1/chatb2k-omnidimensional-control-plane`;
 const GATEWAY_URL = `${SUPABASE_URL}/functions/v1/chatb2k-ecosystem-tool-gateway`;
@@ -46,29 +47,16 @@ function decodeBase64Url(value: string): Uint8Array {
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
 async function authenticate(req: Request): Promise<Actor | null> {
-  const token = req.headers.get("authorization")?.match(/^Bearer[ \t]+(.+)$/i)?.[1] ?? "";
-  if (!token || !SERVICE_KEY) return null;
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  let claims: Record<string, unknown>;
-  try { claims = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1]))); } catch { return null; }
-  const now = Math.floor(Date.now() / 1000);
-  const iat = Number(claims.iat ?? 0), exp = Number(claims.exp ?? 0);
-  if (claims.aud !== "chatb2k-mcp" || claims.scope !== "chatb2k:mcp" ||
-      !iat || exp <= now || exp - iat > 300 || iat > now + 30) return null;
-  try {
-    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SERVICE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-    const valid = await crypto.subtle.verify("HMAC", key, decodeBase64Url(parts[2]), new TextEncoder().encode(parts[0] + "." + parts[1]));
-    if (!valid) return null;
-  } catch { return null; }
-  const id = String(claims.sub ?? "");
-  const email = String(claims.email ?? "").toLowerCase();
-  if (!id || !email) return null;
+  const token = req.headers.get("authorization")?.match(/^Bearer[ \\t]+(.+)$/i)?.[1] ?? "";
+  if (!token) return null;
+  const { data: { user }, error: authError } = await db.auth.getUser(token);
+  if (authError || !user?.id || !user.email || user.email_confirmed_at == null) return null;
+  const id = user.id;
+  const email = user.email.toLowerCase();
   const { data: roleRows, error } = await db.from("user_roles").select("role").eq("user_id", id);
   if (error) return null;
   const roles = (roleRows ?? []).map((r: { role: string }) => String(r.role ?? "").toLowerCase());
   const isPrivileged = email === "ceo@resofit.fit" ||
-    email === "resonancefitnesswork@gmail.com" ||
     roles.some((r: string) => ["admin", "super_admin"].includes(r));
   return isPrivileged ? { id, email, roles } : null;
 }
@@ -94,10 +82,19 @@ async function controlPlane(actorToken: string, action: string, payload: Record<
   try { data = JSON.parse(raw); } catch { data = { response_excerpt: raw.slice(0, 1000) }; }
   return { http_status: r.status, ok: r.ok, data };
 }
-async function gateway(payload: Record<string, unknown>) {
+async function gateway(payload: Record<string, unknown>, actor: Actor) {
+  if (!ACTOR_SIGNING_SECRET) throw new Error("CHATB2K_MCP_ACTOR_SIGNING_SECRET_NOT_CONFIGURED");
+  const agentId = String(payload.agent_id ?? "");
+  const now = Math.floor(Date.now() / 1000);
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const claims = btoa(JSON.stringify({ iss: "chatb2k-mcp", sub: actor.id, email: actor.email, aud: "chatb2k-ecosystem-tool-gateway", scope: "chatb2k:gateway:actor", agent_id: agentId, iat: now, exp: now + 60 })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  const unsigned = header + "." + claims;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(ACTOR_SIGNING_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
+  const assertion = unsigned + "." + btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
   const r = await fetch(GATEWAY_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", "x-request-id": crypto.randomUUID() },
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", "x-request-id": crypto.randomUUID(), "x-chatb2k-actor": assertion },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(30000),
   });
@@ -135,11 +132,25 @@ async function runTool(name: string, args: Record<string, unknown>, actor: Actor
     });
     return { ok: true, persisted: true, proposal: report, run, audit_recorded: !auditError, note: "Proposal only; no code generation, deployment or execution occurred." };
   }
-  if (name === "agent_tool_list") {
-    return await gateway({ action: "list_tools", agent_id: args.agent_id });
-  }
-  if (name === "agent_tool_invoke") {
-    return await gateway({ action: "invoke", agent_id: args.agent_id, tool: args.tool, input: args.input ?? {} });
+  if (name === "agent_tool_list" || name === "agent_tool_invoke") {
+    const requestedAgentId = String(args.agent_id ?? "").trim();
+    if (!requestedAgentId) throw new Error("AGENT_ID_REQUIRED");
+    const { data: agent, error } = await db.from("chatb2k_agent_registry")
+      .select("agent_id,permission_level,enabled,status,health_status,kill_switch_enabled")
+      .eq("agent_id", requestedAgentId).maybeSingle();
+    if (error || !agent || agent.enabled !== true || agent.status !== "ENABLED" ||
+        agent.health_status === "FAILED" || agent.kill_switch_enabled === true) {
+      throw new Error("AGENT_NOT_AUTHORIZED_OR_DISABLED");
+    }
+    const isRoot = ["ROOT", "GLOBAL_ADMIN"].includes(String(agent.permission_level));
+    if (!isRoot || requestedAgentId !== "chatb2k101" || actor.email !== "ceo@resofit.fit") {
+      throw new Error("CEO_ROOT_IDENTITY_BINDING_REQUIRED");
+    }
+    return await gateway({
+      action: name === "agent_tool_list" ? "list_tools" : "invoke",
+      agent_id: "chatb2k101",
+      ...(name === "agent_tool_invoke" ? { tool: args.tool, input: args.input ?? {} } : {}),
+    }, actor);
   }
   throw new Error("TOOL_NOT_FOUND");
 }
