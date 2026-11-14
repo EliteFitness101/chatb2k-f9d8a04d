@@ -175,12 +175,27 @@ Deno.serve(async (req) => {
           // manifest even before a cross-project commerce_offers mirror exists.
           const manifestPageEvidence = item.source_page_evidence && typeof item.source_page_evidence === "object"
             ? item.source_page_evidence : {};
-          const sourcePageVerified = Boolean(sourceUrl) && (
+          const isFresh = (value: unknown, maxAgeMs = 24 * 60 * 60 * 1000) => {
+            const timestamp = Date.parse(String(value ?? ""));
+            const now = Date.now();
+            return Number.isFinite(timestamp) && timestamp <= now && now - timestamp <= maxAgeMs;
+          };
+          const sourcePageCheckedAt = offerMeta.source_page_checked_at || offerMeta.verified_at || manifestPageEvidence.checked_at;
+          const sourcePageFresh = isFresh(sourcePageCheckedAt, 7 * 24 * 60 * 60 * 1000);
+          const sourcePageVerified = Boolean(sourceUrl) && sourcePageFresh && (
             offerMeta.direct_product_url_verified === true
             || (item.source_page_verified === true
               && manifestPageEvidence.method === "web_page_identity_review"
               && manifestPageEvidence.product_url === sourceUrl)
           );
+          const priceFresh = isFresh(offerMeta.price_checked_at);
+          const stockFresh = isFresh(offerMeta.stock_checked_at || offerMeta.verified_at);
+          const sellerFresh = isFresh(offerMeta.seller_checked_at);
+          const variantsFresh = isFresh(offerMeta.variants_checked_at);
+          const deliveryFresh = isFresh(offerMeta.delivery_checked_at);
+          const codFresh = isFresh(offerMeta.cod_checked_at);
+          const currentPriceVerified = priceFresh && offerMeta.price_verified === true && Number(offer?.price) > 0;
+          const currentStockVerified = stockFresh && offerMeta.stock_verified === true && offerMeta.stock_status_verified === true;
           const externalCheckoutEnabled = source?.enabled === true
             && source.checkout_mode === "external"
             && sourceMeta.external_checkout_enabled === true
@@ -189,18 +204,22 @@ Deno.serve(async (req) => {
           const supplierContractEvidenceUrl = String(sourceMeta.supplier_contract_evidence_url || offerMeta.supplier_contract_evidence_url || "");
           const thirdPartySupplierContractVerified = sourceMeta.third_party_supplier_contract_verified === true
             && offerMeta.third_party_supplier_contract_verified === true
+            && isFresh(sourceMeta.supplier_contract_verified_at || offerMeta.supplier_contract_verified_at, 365 * 24 * 60 * 60 * 1000)
             && supplierContractEvidenceUrl.startsWith("https://");
           const resaleAuthorizationEvidenceUrl = String(sourceMeta.resale_authorization_evidence_url || offerMeta.resale_authorization_evidence_url || "");
           const resaleAuthorized = sourceMeta.resale_authorized === true
             && offerMeta.resale_authorized === true
             && thirdPartySupplierContractVerified
+            && isFresh(sourceMeta.resale_authorization_verified_at || offerMeta.resale_authorization_verified_at, 365 * 24 * 60 * 60 * 1000)
             && resaleAuthorizationEvidenceUrl.startsWith("https://");
           const mediaRightsEvidenceUrl = String(offerMeta.media_rights_evidence_url || sourceMeta.media_rights_evidence_url || "");
           const mediaRightsVerified = offerMeta.media_rights_verified === true
             && sourceMeta.media_rights_verified === true
+            && isFresh(offerMeta.media_rights_verified_at || sourceMeta.media_rights_verified_at, 365 * 24 * 60 * 60 * 1000)
             && mediaRightsEvidenceUrl.startsWith("https://");
-          const fulfillmentReady = (offer?.availability === "available" || offer?.availability === "in_stock")
-            && offerMeta.stock_verified === true
+          const fulfillmentReady = currentStockVerified
+            && isFresh(offerMeta.fulfillment_checked_at)
+            && offerMeta.fulfillment_verified === true
             && offerMeta.fulfillment_ready === true;
           const purchaseEnabled = sourcePageVerified
             && externalCheckoutEnabled
@@ -219,14 +238,18 @@ Deno.serve(async (req) => {
             source_product_url: sourceUrl || null,
             image_url: mediaRightsVerified ? (typeof offerMeta.image_url === "string" && offerMeta.image_url.startsWith("https://") ? offerMeta.image_url : (typeof item.image_url === "string" && item.image_url.startsWith("https://") ? item.image_url : null)) : null,
             image_rights_verified: mediaRightsVerified,
-            price: Number(offer?.price) > 0 ? Number(offer.price) : null,
-            price_range_max: Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) > 0 ? Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) : null,
-            supplier_price: Number(offerMeta.supplier_price ?? offer?.price) > 0 ? Number(offerMeta.supplier_price ?? offer.price) : null,
+            price: currentPriceVerified ? Number(offer.price) : null,
+            price_range_max: currentPriceVerified && Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) > 0 ? Number(offerMeta.retail_price_range_max_ngn ?? item.price_range_max) : null,
+            supplier_price: currentPriceVerified && Number(offerMeta.supplier_price ?? offer?.price) > 0 ? Number(offerMeta.supplier_price ?? offer.price) : null,
             price_currency: offer?.currency || item.price_currency || "NGN",
-            source_seller_name: offerMeta.source_seller_name || item.source_seller_name || null,
-            stock_status: offer?.availability || item.stock_status || "unknown",
-            stock_label: offerMeta.observed_stock_state || item.stock_label || offer?.availability || "unknown",
-            stock_quantity: Number.isFinite(Number(offerMeta.observed_stock_quantity)) ? Number(offerMeta.observed_stock_quantity) : null,
+            source_seller_name: sellerFresh && offerMeta.seller_verified === true ? (offerMeta.source_seller_name || null) : null,
+            stock_status: currentStockVerified ? (offer?.availability || "unknown") : "unknown",
+            stock_label: currentStockVerified ? (offerMeta.observed_stock_state || offer?.availability || "unknown") : "not currently verified",
+            stock_quantity: currentStockVerified && Number.isFinite(Number(offerMeta.observed_stock_quantity)) ? Number(offerMeta.observed_stock_quantity) : null,
+            variants: variantsFresh && offerMeta.variants_verified === true && Array.isArray(offerMeta.variants) ? offerMeta.variants : [],
+            delivery_fee: deliveryFresh && offerMeta.delivery_verified === true ? (offerMeta.delivery_fee ?? null) : null,
+            delivery_eta: deliveryFresh && offerMeta.delivery_verified === true ? (offerMeta.delivery_eta ?? null) : null,
+            cod_status: codFresh && offerMeta.cod_verified === true ? (offerMeta.cod_status ?? "unknown") : "unknown",
             source_page_verified: sourcePageVerified,
             source_listing_link_enabled: sourcePageVerified,
             source_listing_mode: sourcePageVerified ? "supplier_direct_listing_only" : "review_pending",
@@ -236,7 +259,7 @@ Deno.serve(async (req) => {
             media_rights_verified: mediaRightsVerified,
             fulfillment_ready: fulfillmentReady,
             purchase_enabled: purchaseEnabled,
-            price_visibility: sourcePageVerified && Number(offer?.price) > 0 ? "supplier_snapshot" : "hidden",
+            price_visibility: currentPriceVerified ? "current_supplier_page_snapshot" : "hidden",
             status_label: purchaseEnabled ? "Supplier offer verified" : sourcePageVerified ? "Supplier listing page checked · checkout not verified" : "Supplier review pending",
             block_reason: purchaseEnabled ? null : reasons.join("; ")
           };
