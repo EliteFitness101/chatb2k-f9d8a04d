@@ -174,7 +174,7 @@ except Exception as e:
     except Exception as pe:
         profile_error=type(pe).__name__
     error_text=str(e)
-    token_rejected=('invalid!' in error_text.lower() or "key 'token' not found" in error_text.lower())
+    token_rejected=('invalid!' in error_text.lower() or error_text.strip().strip("'").lower()=='token' or "key 'token' not found" in error_text.lower())
     discovery_status='live_token_unavailable' if token_rejected and profile_alive is True else ('token_unavailable_room_state_unknown' if token_rejected else 'discovery_failed')
     print(json.dumps({
         'alive':profile_alive is True,
