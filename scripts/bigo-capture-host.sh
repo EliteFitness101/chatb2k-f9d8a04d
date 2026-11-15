@@ -343,8 +343,12 @@ except Exception: tail=''
 discovery=str(d.get('discovery_error') or '')
 reason=tail or discovery or 'stream unavailable'
 lower=reason.lower()
-status='offline' if ('channel is offline' in lower or 'no playable streams found' in lower) else 'capture_failed'
-print(json.dumps({'status':status,'reason':reason,'discovery_error':discovery or None}))
+if d.get('discovery_status') in ('live_token_unavailable','token_unavailable_room_state_unknown'):
+    status='token_unavailable'
+    reason='BIGO token service rejected playback-token request; room liveness=' + str(d.get('profile_alive'))
+else:
+    status='offline' if ('channel is offline' in lower or 'no playable streams found' in lower) else 'capture_failed'
+print(json.dumps({'status':status,'reason':reason,'discovery_error':discovery or None,'discovery_status':d.get('discovery_status'),'profile_alive':d.get('profile_alive')}))
 PY
 )"
   echo "::warning::BIGO host $HOST capture failed after bounded retries: $REASON"
