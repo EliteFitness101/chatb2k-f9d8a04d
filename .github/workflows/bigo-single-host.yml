@@ -12,7 +12,6 @@ jobs:
     env:
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
       BIGO_SINGLE_HOST_ID: ${{ secrets.BIGO_SINGLE_HOST_ID }}
-      BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
     steps:
       - uses: actions/checkout@v4
       - name: Install capture dependencies
@@ -30,11 +29,6 @@ jobs:
           HOST_SAFE="$(printf '%s' "${BIGO_SINGLE_HOST_ID}" | tr -c 'A-Za-z0-9._-' '_')"
           chmod +x scripts/bigo-capture-host.sh
           mkdir -p /tmp/bigo-results
-          if [ -z "${BIGO_SESSION_COOKIE:-}" ]; then
-            echo "::warning::BIGO_SESSION_COOKIE is not configured; token-gated rooms may remain unavailable."
-          else
-            echo "::notice::BIGO session cookie is present; value is not logged."
-          fi
           bash scripts/bigo-capture-host.sh "${BIGO_SINGLE_HOST_ID}" "https://www.bigo.tv/${BIGO_SINGLE_HOST_ID}"
           cat "/tmp/bigo-results/${HOST_SAFE}.json"
       - name: Upload capture diagnostics
