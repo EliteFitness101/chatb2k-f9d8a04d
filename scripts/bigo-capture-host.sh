@@ -153,7 +153,40 @@ except Exception as e:
             print(json.dumps(out)); raise SystemExit
     except Exception:
         pass
-    print(json.dumps({'alive':False,'name':host,'title':'BIGO Live Highlight','room_id':host,'hls_src':'','discovery_error':str(e)}))
+    # BIGO's public profile endpoint can report room liveness even when the
+    # token-gated playback endpoint rejects this runner's network region.
+    profile_alive=None
+    profile_error=''
+    try:
+        pr=requests.get(
+            'https://tr.bigolive.tv/backend_api/official_website/OUserCenter/getUserInfoStudio',
+            params={'bigoId':host},
+            headers=request_headers('application/json'),
+            timeout=10
+        )
+        pr.raise_for_status()
+        pd=pr.json()
+        room=pd.get('data') if isinstance(pd,dict) and isinstance(pd.get('data'),dict) else pd
+        if isinstance(room,dict):
+            value=room.get('alive',room.get('isLive',room.get('is_live')))
+            if value is not None:
+                profile_alive=str(value).strip().lower() in ('1','true','yes','live')
+    except Exception as pe:
+        profile_error=type(pe).__name__
+    error_text=str(e)
+    token_rejected=('invalid!' in error_text.lower() or "key 'token' not found" in error_text.lower())
+    discovery_status='live_token_unavailable' if token_rejected and profile_alive is True else ('token_unavailable_room_state_unknown' if token_rejected else 'discovery_failed')
+    print(json.dumps({
+        'alive':profile_alive is True,
+        'name':host,
+        'title':'BIGO Live Highlight',
+        'room_id':host,
+        'hls_src':'',
+        'discovery_status':discovery_status,
+        'profile_alive':profile_alive,
+        'profile_error':profile_error or None,
+        'discovery_error':('BIGO token service rejected the request; no playback token was issued' if token_rejected else error_text)
+    }))
 PY
 )"
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
