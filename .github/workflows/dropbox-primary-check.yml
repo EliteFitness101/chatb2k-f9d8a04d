@@ -50,4 +50,4 @@ jobs:
           assert "BLOB_READ_WRITE_TOKEN" in workflow
           assert "complete dynamic source-of-truth inventory" in workflow
           print("PASS: dynamic inventory, configurable concurrency, primary Blob upload and SHA-256 read-back; Dropbox optional.")
-          PYY
+          PY

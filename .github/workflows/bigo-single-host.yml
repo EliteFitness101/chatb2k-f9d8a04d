@@ -27,10 +27,9 @@ jobs:
           : "${BLOB_READ_WRITE_TOKEN:?BLOB_READ_WRITE_TOKEN is required}"
           : "${BIGO_SINGLE_HOST_ID:?BIGO_SINGLE_HOST_ID is required}"
           HOST_SAFE="$(printf '%s' "${BIGO_SINGLE_HOST_ID}" | tr -c 'A-Za-z0-9._-' '_')"
-          curl -fsSL "https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh" -o /tmp/bigo-capture-host.sh
-          chmod +x /tmp/bigo-capture-host.sh
+          chmod +x scripts/bigo-capture-host.sh
           mkdir -p /tmp/bigo-results
-          bash /tmp/bigo-capture-host.sh "${BIGO_SINGLE_HOST_ID}" "https://www.bigo.tv/${BIGO_SINGLE_HOST_ID}"
+          bash scripts/bigo-capture-host.sh "${BIGO_SINGLE_HOST_ID}" "https://www.bigo.tv/${BIGO_SINGLE_HOST_ID}"
           cat "/tmp/bigo-results/${HOST_SAFE}.json"
       - name: Upload capture diagnostics
         if: always()

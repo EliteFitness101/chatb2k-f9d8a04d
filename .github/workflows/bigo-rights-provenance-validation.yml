@@ -29,8 +29,8 @@ jobs:
           assert 'async function resolveBigoRights' in pipeline
           assert 'allowed=!!source&&active&&allowlisted' in pipeline
           assert 'rights_evidence:rights.evidence' in pipeline
-          assert 'independent_rights_verified:false' in pipeline
-          assert 'ownership_verified:false' in pipeline
+          assert 'independent_rights_verified:manifestRights&&allowed' in pipeline
+          assert 'ownership_verified:manifestRights&&allowed' in pipeline
           assert 'async function approveAllowlist(' not in pipeline
           assert "'original_url':room_url" in capture
           assert "'source_stream_url':source_stream_url" in capture
