@@ -34,8 +34,14 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg chromium
+          sudo apt-get install -y -qq ffmpeg
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
+
+      - name: Set up Chrome browser (no Snap dependency)
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
 
       - name: Capture, normalize and prepare ChatB2K batch
         shell: bash
