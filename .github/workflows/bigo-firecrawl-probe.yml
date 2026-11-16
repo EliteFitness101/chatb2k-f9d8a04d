@@ -6,6 +6,11 @@ on:
     paths:
       - '.github/workflows/bigo-firecrawl-probe.yml'
   workflow_dispatch:
+    inputs:
+      host_id:
+        description: 'Optional single BIGO host ID to probe first'
+        required: false
+        type: string
   schedule:
     - cron: '*/30 * * * *'
 
@@ -19,6 +24,7 @@ jobs:
     env:
       FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
       BIGO_LIVE_PROBE_HOST_IDS: ${{ secrets.BIGO_LIVE_PROBE_HOST_IDS }}
+      BIGO_PROBE_TARGET_HOST_ID: ${{ inputs.host_id || '' }}
     steps:
       - name: Probe public BIGO metadata
         shell: bash
@@ -27,8 +33,11 @@ jobs:
           : "${FIRECRAWL_API_KEY:?FIRECRAWL_API_KEY is required}"
           python3 - <<'PY'
           import json, os, urllib.request
-          ids=[x.strip() for x in os.environ.get("BIGO_LIVE_PROBE_HOST_IDS","").replace(",","\n").splitlines() if x.strip()]
-          ids=list(dict.fromkeys(ids))
+          target=os.environ.get("BIGO_PROBE_TARGET_HOST_ID", "").strip()
+          if target and not all(c.isalnum() or c in "-_" for c in target):
+              raise SystemExit("Invalid host_id: use only letters, numbers, hyphens, or underscores.")
+          configured=[x.strip() for x in os.environ.get("BIGO_LIVE_PROBE_HOST_IDS","").replace(",","\n").splitlines() if x.strip()]
+          ids=list(dict.fromkeys(([target] if target else []) + configured))
           if not ids:
               print("No BIGO_LIVE_PROBE_HOST_IDS configured; probe exits cleanly.")
               json.dump({"status":"no_probe_ids","candidates":[]},open("/tmp/bigo-firecrawl-report.json","w"))
