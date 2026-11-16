@@ -13,11 +13,16 @@ if [ -z "$HOST_INPUT" ]; then exit 2; fi
 # source provenance, but use only its final path segment as the room identifier.
 HOST="$(python3 - "$HOST_INPUT" <<'PYHOST'
 import re,sys
-from urllib.parse import urlparse
+from urllib.parse import urlparse,parse_qs
 value=sys.argv[1].strip()
 if value.startswith(("https://","http://")):
     parsed=urlparse(value)
-    value=parsed.path.rstrip("/").split("/")[-1]
+    query=parse_qs(parsed.query)
+    # BIGO signed /sid/ links identify the actual broadcaster in the h= parameter.
+    if parsed.path.startswith("/sid/") and query.get("h"):
+        value=query["h"][0].strip()
+    else:
+        value=parsed.path.rstrip("/").split("/")[-1]
 value=value.strip()
 if not value or value in {".",".."} or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",value):
     raise SystemExit("Invalid BIGO host identifier")
