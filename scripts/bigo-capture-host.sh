@@ -13,16 +13,7 @@ COVER="/tmp/bigo-${HOST}-${TS}.jpg"
 LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
-# Streamlink's BIGO plugin accepts profile URLs, not signed /sid/ room pages.
-# Keep the supplied room URL for the later direct-page/HLS fallback, but start
-# discovery and Streamlink against the stable public host profile.
-SOURCE_URL="https://www.bigo.tv/${HOST}"
-if [ -n "${SOURCE_OVERRIDE}" ] && [[ "${SOURCE_OVERRIDE}" != https://www.bigo.tv/sid/* && "${SOURCE_OVERRIDE}" != https://slink.bigovideo.tv/* ]]; then
-  SOURCE_URL="${SOURCE_OVERRIDE}"
-fi
-if [ -n "${SOURCE_OVERRIDE}" ] && [[ "${SOURCE_OVERRIDE}" == https://www.bigo.tv/sid/* || "${SOURCE_OVERRIDE}" == https://slink.bigovideo.tv/* ]]; then
-  echo "::notice::BIGO host ${HOST} using stable profile URL for Streamlink; signed source retained for fallback"
-fi
+SOURCE_URL="${SOURCE_OVERRIDE:-https://www.bigo.tv/${HOST}}"
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
 # hls_src to the older unauthenticated getInternalStudioInfo request.
