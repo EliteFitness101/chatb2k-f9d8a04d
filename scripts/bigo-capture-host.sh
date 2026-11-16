@@ -42,18 +42,29 @@ def jsonp(text):
     return json.loads(m.group('json'))
 
 def resolve_token():
+    # BIGO's web token endpoint may return a valid JSONP response without a
+    # playback token. Treat that as an unavailable optional optimization, not
+    # as a fatal capture error; browser/Streamlink and legacy metadata paths
+    # must still run without a session cookie.
     tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(authenticated=False),timeout=12)
     tr.raise_for_status()
-    ts=jsonp(tr.text)['time']
+    time_data=jsonp(tr.text)
+    ts=time_data.get('time')
+    if not ts:
+        return None
     payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
     try:
         from streamlink.utils.crypto import encrypt_openssl
     except Exception:
-        raise RuntimeError('streamlink crypto module unavailable')
+        return None
     encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
     sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
     sr.raise_for_status()
-    return jsonp(sr.text)['token']
+    status_data=jsonp(sr.text)
+    token=status_data.get('token')
+    if not token and isinstance(status_data.get('data'),dict):
+        token=status_data['data'].get('token')
+    return token or None
 
 def build(d):
     return {
@@ -66,19 +77,22 @@ def build(d):
 
 try:
     token=resolve_token()
-    r=requests.post(API,params={'siteId':host,'verify':'','token':token},
-                     headers=request_headers('application/json'),timeout=15)
-    r.raise_for_status()
-    d=r.json().get('data') or {}
-    out=build(d)
-    out['discovery_method']='bigo_tokenized_api'
-    if out['hls_src']:
-        print(json.dumps(out)); raise SystemExit
-    # Preserve the older working path as a secondary fallback.
+    if token:
+        r=requests.post(API,params={'siteId':host,'verify':'','token':token},
+                         headers=request_headers('application/json'),timeout=15)
+        r.raise_for_status()
+        d=r.json().get('data') or {}
+        out=build(d)
+        out['discovery_method']='bigo_tokenized_api'
+        if out['hls_src']:
+            print(json.dumps(out)); raise SystemExit
+    # Token is optional. Always retain the original unauthenticated metadata path.
     r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
     r.raise_for_status()
     out=build(r.json().get('data') or {})
     out['discovery_method']='bigo_legacy_api'
+    if not token and not out['hls_src']:
+        out['discovery_note']='playback token unavailable; legacy metadata returned no HLS'
     print(json.dumps(out))
 except Exception as e:
     try:
@@ -90,7 +104,7 @@ except Exception as e:
             print(json.dumps(out)); raise SystemExit
     except Exception:
         pass
-    print(json.dumps({'alive':False,'name':host,'title':'BIGO Live Highlight','room_id':host,'hls_src':'','discovery_error':str(e)}))
+    print(json.dumps({'alive':False,'name':host,'title':'BIGO Live Highlight','room_id':host,'hls_src':'','discovery_error':f'BIGO metadata discovery unavailable: {type(e).__name__}'}))
 PY
 )"
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
