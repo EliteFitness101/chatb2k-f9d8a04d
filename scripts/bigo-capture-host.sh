@@ -95,13 +95,13 @@ KEY=b'undefinedval0x01'
 # Match the browser-originated request profile used by the earlier token-aware
 # capture implementation. Keep one HTTP session so BIGO can retain any issued
 # clearance/session cookies between timestamp, token and room-info requests.
-UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+UA='Mozilla/5.0'
 session=requests.Session()
-def request_headers(accept='*/*'):
-    headers={'User-Agent':UA,'Accept':accept,'Referer':f'https://www.bigo.tv/{host}','Origin':'https://www.bigo.tv'}
-    cookie=os.environ.get('BIGO_SESSION_COOKIE','').strip()
-    if cookie:
-        headers['Cookie']=cookie
+COOKIE=os.environ.get('BIGO_SESSION_COOKIE','').strip()
+def request_headers(accept='*/*', authenticated=True):
+    headers={'User-Agent':UA,'Accept':accept}
+    if COOKIE and authenticated:
+        headers['Cookie']=COOKIE
     return headers
 
 def callback():
@@ -114,7 +114,7 @@ def jsonp(text):
     return json.loads(m.group('json'))
 
 def resolve_token():
-    tr=session.get(TOKEN_T,params={'callback':callback()},headers=request_headers('application/javascript, */*;q=0.01'),timeout=12)
+    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(authenticated=False),timeout=12)
     tr.raise_for_status()
     ts=jsonp(tr.text)['time']
     payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
@@ -123,7 +123,7 @@ def resolve_token():
     except Exception:
         raise RuntimeError('streamlink crypto module unavailable')
     encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
-    sr=session.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers('application/javascript, */*;q=0.01'),timeout=12)
+    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
     sr.raise_for_status()
     return jsonp(sr.text)['token']
 
@@ -138,8 +138,8 @@ def build(d):
 
 try:
     token=resolve_token()
-    r=session.post(API,params={'siteId':host,'verify':'','token':token},
-                     headers=request_headers('application/json, text/plain, */*'),timeout=15)
+    r=requests.post(API,params={'siteId':host,'verify':'','token':token},
+                     headers=request_headers('application/json'),timeout=15)
     r.raise_for_status()
     d=r.json().get('data') or {}
     out=build(d)
@@ -147,7 +147,7 @@ try:
     if out['hls_src']:
         print(json.dumps(out)); raise SystemExit
     # Preserve the older working path as a secondary fallback.
-    r=session.post(API,data={'siteId':host},headers=request_headers('application/json, text/plain, */*'),timeout=12)
+    r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
     r.raise_for_status()
     out=build(r.json().get('data') or {})
     out['discovery_method']='bigo_legacy_api'
