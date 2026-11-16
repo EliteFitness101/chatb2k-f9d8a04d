@@ -84,20 +84,36 @@ jobs:
             exit 1
           fi
           HOSTS="$(python3 - "${BIGO_HOST_IDS:-}" "${BIGO_VERIFIED_HOST_IDS:-}" "${REGISTRY_HOSTS}" <<'PY'
-          import sys
+          import sys,re
+          from urllib.parse import urlparse,parse_qs
+          def normalize(raw, source=""):
+              value=(raw or "").strip()
+              candidate=value if value.startswith(("https://","http://")) else source.strip()
+              if candidate.startswith(("https://","http://")):
+                  parsed=urlparse(candidate)
+                  query=parse_qs(parsed.query)
+                  if parsed.path.startswith("/sid/") and query.get("h"):
+                      value=query["h"][0].strip()
+                  elif value.startswith(("https://","http://")):
+                      value=parsed.path.rstrip("/").split("/")[-1]
+              value=value.strip()
+              return value if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",value) else ""
           registry={}
           for line in sys.argv[3].splitlines():
               parts=line.split("|",1)
-              host=parts[0].strip() if parts else ""
+              raw=parts[0].strip() if parts else ""
+              source=parts[1].strip() if len(parts)>1 else ""
+              host=normalize(raw,source)
               if host:
-                  registry[host]=parts[1].strip() if len(parts)>1 else ""
-          # Source registry is authoritative; environment/Actions-secret IDs are additive.
-          for raw in (sys.argv[1] + "\n" + sys.argv[2]).replace(",", "\n").splitlines():
-              host=raw.strip()
+                  registry[host]=source or ("https://www.bigo.tv/"+host)
+          # Explicit and verified IDs are additive. If an input is a signed /sid/
+          # URL, use its h= broadcaster identity rather than the opaque URL path.
+          for raw in (sys.argv[1] + "\\n" + sys.argv[2]).replace(",", "\\n").splitlines():
+              host=normalize(raw)
               if host and host not in registry:
-                  registry[host]=""
-          for host, source in registry.items():
-              print(host + "|" + (source or "https://www.bigo.tv/" + host))
+                  registry[host]="https://www.bigo.tv/"+host
+          for host,source in registry.items():
+              print(host+"|"+source)
           PY
           )"
           if [ -z "${HOSTS}" ]; then
