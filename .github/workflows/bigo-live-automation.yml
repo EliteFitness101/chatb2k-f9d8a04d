@@ -78,7 +78,9 @@ jobs:
           printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts.txt
           echo "Selected $(wc -l < /tmp/bigo-hosts.txt) host(s) for capture"
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
-          chmod +x /tmp/bigo-capture-host.sh
+          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-streamlink-capture.py -o /tmp/bigo-streamlink-capture.py
+          chmod +x /tmp/bigo-capture-host.sh /tmp/bigo-streamlink-capture.py
+          export BIGO_STREAMLINK_WRAPPER=/tmp/bigo-streamlink-capture.py
           run_capture() {
             local HOST_ID="$1"
             local SOURCE_URL="$2"
