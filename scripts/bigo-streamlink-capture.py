@@ -47,8 +47,12 @@ def legacy_get_streams(self):
 
 def main():
     if len(sys.argv) != 2:
-        raise SystemExit("usage: bigo-streamlink-capture.py https://www.bigo.tv/HOST_ID")
-    url = sys.argv[1]
+        raise SystemExit("usage: bigo-streamlink-capture.py HOST_ID")
+    host_id = sys.argv[1].strip()
+    if not host_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for ch in host_id):
+        raise SystemExit("invalid BIGO host ID")
+    # Always resolve the stable broadcaster profile, never a rotating /sid/ URL.
+    url = f"https://www.bigo.tv/{host_id}"
     session = Streamlink()
     session.http.headers.update({"User-Agent": "Mozilla/5.0"})
     cookie = __import__("os").environ.get("BIGO_COOKIE_HEADER", "").strip()
