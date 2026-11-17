@@ -33,8 +33,8 @@ env:
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
   BIGO_COOKIE_HEADER: ${{ secrets.BIGO_COOKIE_HEADER }}
-  BIGO_TARGET_HOST_ID: ${{ inputs.bigo_host_id }}
-  BIGO_TARGET_SHARE_URL: ${{ inputs.bigo_share_url }}
+  BIGO_TARGET_HOST_ID: ${{ github.event.inputs.bigo_host_id }}
+  BIGO_TARGET_SHARE_URL: ${{ github.event.inputs.bigo_share_url }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
 
 jobs:
