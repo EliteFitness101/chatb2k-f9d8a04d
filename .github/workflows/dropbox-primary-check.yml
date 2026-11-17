@@ -1,4 +1,4 @@
-name: BIGO Blob-primary migration checks
+name: BIGO Dropbox-primary capture checks
 
 on:
   push:
@@ -18,28 +18,28 @@ permissions:
   contents: read
 
 jobs:
-  blob-primary-static:
+  dropbox-primary-static:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - name: Validate capture shell syntax
         run: bash -n scripts/bigo-capture-host.sh
-      - name: Assert Vercel Blob is the primary capture path
+      - name: Assert Dropbox is the canonical capture path
         run: |
           python3 - <<'PY'
           from pathlib import Path
           script = Path("scripts/bigo-capture-host.sh").read_text()
           workflow = Path(".github/workflows/bigo-live-automation.yml").read_text()
           required = [
-              "BLOB_READ_WRITE_TOKEN",
-              "from '@vercel/blob'",
-              "access: 'public'",
-              "readbackDigest",
-              "BIGO_CAPTURE_PARALLELISM",
-              "Supabase BIGO source-of-truth registry loaded",
+              "Dropbox is the canonical media store for this capture path",
+              "Dropbox credentials are required",
               "files/upload_session/start",
               "files/get_metadata",
+              "Dropbox read-back content hash mismatch",
+              "DROPBOX_REFRESH_TOKEN",
+              "bigo-live-pipeline",
+              "BIGO_VERIFIED_HOST_IDS",
           ]
           missing = [item for item in required if item not in script + workflow]
           assert not missing, f"Missing production capture controls: {missing}"
@@ -47,7 +47,8 @@ jobs:
           assert "kisexy" not in workflow
           assert "R2_WRITE_TOKEN" not in script + workflow
           assert "cloudflare_r2" not in script
-          assert "BLOB_READ_WRITE_TOKEN" in workflow
-          assert "complete dynamic source-of-truth inventory" in workflow
-          print("PASS: dynamic inventory, configurable concurrency, primary Blob upload and SHA-256 read-back; Dropbox optional.")
+          assert "BLOB_READ_WRITE_TOKEN" not in script + workflow
+          assert "from '@vercel/blob'" not in script
+          assert "https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline" in workflow
+          print("PASS: Dropbox upload and content-hash read-back are mandatory; ChatB2K pipeline remains the ingestion boundary; Blob/R2 are not primary.")
           PY
