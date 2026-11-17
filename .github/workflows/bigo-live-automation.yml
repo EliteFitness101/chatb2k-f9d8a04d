@@ -18,6 +18,8 @@ permissions:
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
+  BIGO_LIVE_PROBE_HOST_IDS: ${{ secrets.BIGO_LIVE_PROBE_HOST_IDS }}
+  FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
@@ -49,40 +51,71 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
-            REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
-          else
-            REGISTRY_HOSTS=""
-            echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
-          fi
-          HOSTS="$(python3 - "${BIGO_HOST_IDS:-}" "${REGISTRY_HOSTS}" <<'PY'
-          import sys
-          allow=[]
-          for raw in sys.argv[1].replace(",", "\n").splitlines():
-              host=raw.strip()
-              if host and host not in allow:
-                  allow.append(host)
+          : "${FIRECRAWL_API_KEY:?FIRECRAWL_API_KEY is required for live-host discovery}"
+          : "${BIGO_VERIFIED_HOST_IDS:?BIGO_VERIFIED_HOST_IDS is required; refusing unverified capture}"
+          curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json
+          # Candidate universe = active Supabase source registry + configured Firecrawl discovery IDs.
+          # Capture eligibility is the intersection with the independently maintained verified-host list.
+          python3 - <<'PY'
+          import json, os, re, sys, urllib.request, urllib.error
+          sources=json.load(open("/tmp/bigo-sources.json"))
           registry={}
-          for line in sys.argv[2].splitlines():
-              parts=line.split("|",1)
-              if parts and parts[0].strip():
-                  registry[parts[0].strip()]=parts[1].strip() if len(parts)>1 else ""
-          for host in list(registry):
-              if host not in allow:
-                  allow.append(host)
-          for host in allow:
-              print(host + "|" + (registry.get(host) or "https://www.bigo.tv/" + host))
+          for item in sources.get("hosts",[]):
+              host=str(item.get("bigo_id") or "").strip()
+              if host and re.fullmatch(r"[A-Za-z0-9._-]+",host):
+                  registry[host]=str(item.get("source_url") or "")
+          def ids(value):
+              return [x.strip() for x in value.replace(",","\n").splitlines() if x.strip()]
+          verified=set(ids(os.environ.get("BIGO_VERIFIED_HOST_IDS","")))
+          probe=ids(os.environ.get("BIGO_LIVE_PROBE_HOST_IDS",""))
+          candidates=list(dict.fromkeys(list(registry)+probe))
+          candidates=[h for h in candidates if h in verified]
+          if not candidates:
+              raise SystemExit("No host is both registered/discovered and independently verified; fail closed.")
+          report={"candidate_count":len(candidates),"verified_count":len(verified),"live":[],"rejected":[]}
+          def scrape(host):
+              url="https://www.bigo.tv/"+host
+              payload=json.dumps({"url":url,"formats":["html","markdown"],"onlyMainContent":False}).encode()
+              req=urllib.request.Request("https://api.firecrawl.dev/v2/scrape",data=payload,
+                  headers={"Authorization":"Bearer "+os.environ["FIRECRAWL_API_KEY"],"Content-Type":"application/json"},method="POST")
+              with urllib.request.urlopen(req,timeout=35) as response:
+                  data=json.load(response)
+              doc=data.get("data",data)
+              body=(doc.get("html") or "")+"\n"+(doc.get("markdown") or "")
+              body=body.replace(r"\u0026","&").replace(r"\/","/")
+              matches=re.findall(r"https://[^\s\"'<>]+?\.m3u8(?:\?[^\s\"'<>]+)?",body,re.I)
+              manifest=next((u.rstrip("),;") for u in matches if ".m3u8" in u.lower()),"")
+              if manifest:
+                  try:
+                      req=urllib.request.Request(manifest,headers={"User-Agent":"Mozilla/5.0","Range":"bytes=0-65535"})
+                      with urllib.request.urlopen(req,timeout=15) as response:
+                          playlist=response.read(65536).decode("utf-8","replace")
+                      if "#EXTM3U" not in playlist or not ("#EXTINF" in playlist or "#EXT-X-STREAM-INF" in playlist):
+                          return None,"manifest did not return a valid HLS playlist"
+                  except Exception as exc:
+                      return None,"HLS manifest probe failed: "+type(exc).__name__+": "+str(exc)[:180]
+              if not manifest:
+                  return None,"no HLS manifest exposed by Firecrawl"
+              return manifest,None
+          for host in candidates[:50]:
+              try:
+                  manifest,error=scrape(host)
+                  if manifest:
+                      report["live"].append({"host_id":host,"source_url":manifest})
+                  else:
+                      report["rejected"].append({"host_id":host,"reason":error})
+              except Exception as exc:
+                  report["rejected"].append({"host_id":host,"reason":type(exc).__name__+": "+str(exc)[:240]})
+          json.dump(report,open("/tmp/bigo-firecrawl-live-report.json","w"))
+          with open("/tmp/bigo-hosts.txt","w") as out:
+              for item in report["live"]:
+                  out.write(item["host_id"]+"|"+item["source_url"]+"\n")
+          print("Firecrawl live HLS verified: %d/%d candidates; rejected: %d" %
+                (len(report["live"]),len(candidates),len(report["rejected"])))
+          if not report["live"]:
+              raise SystemExit("No independently verified broadcaster exposed a live HLS manifest; no capture attempted.")
           PY
-          )"
-          if [ -n "${BIGO_HOST_IDS:-}" ]; then
-            echo "::notice::Explicit BIGO_HOST_IDS are included in the capture pool."
-          fi
-          if [ -z "${HOSTS}" ]; then
-            echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
-            exit 1
-          fi
-          printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts.txt
-          echo "Selected $(wc -l < /tmp/bigo-hosts.txt) host(s) for capture"
+          echo "Selected $(wc -l < /tmp/bigo-hosts.txt) Firecrawl-live, verified host(s) for capture"
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-streamlink-capture.py -o /tmp/bigo-streamlink-capture.py
           chmod +x /tmp/bigo-capture-host.sh /tmp/bigo-streamlink-capture.py
@@ -129,6 +162,14 @@ jobs:
             echo "::notice::No live hosts captured this cycle; no capture errors recorded."
             exit 0
           fi
+
+      - name: Preserve Firecrawl live-host decision evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigo-firecrawl-live-gate-${{ github.run_id }}
+          path: /tmp/bigo-firecrawl-live-report.json
+          if-no-files-found: warn
 
       - name: Ingest, enrich and auto-post BIGO batch
         run: |

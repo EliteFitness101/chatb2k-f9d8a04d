@@ -113,6 +113,12 @@ PY
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
 STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hls_src",""))' "$INFO")"
+# A fresh Firecrawl HLS manifest is authoritative for this capture attempt.
+# Pass it into Streamlink immediately so BIGO HLS decryption is used before FFmpeg fallback.
+if [ -z "$STREAM_URL" ] && [[ "$SOURCE_OVERRIDE" == https://*".m3u8"* ]]; then
+  STREAM_URL="$SOURCE_OVERRIDE"
+  echo "::notice::BIGO host $HOST using Firecrawl-verified HLS manifest through Streamlink"
+fi
 # Prefer freshly discovered HLS over a cached/expiring registry source URL.
 # Keep the registry URL as fallback provenance, but do not let it block current
 # room discovery when BIGO rotates its signed playback URL.
