@@ -10,6 +10,15 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      bigo_host_id:
+        description: "BIGO host ID from the supplied share link"
+        required: true
+        type: string
+      bigo_share_url:
+        description: "BIGO share URL (for example https://www.bigo.tv/sid/...)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +33,8 @@ env:
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
   BIGO_COOKIE_HEADER: ${{ secrets.BIGO_COOKIE_HEADER }}
+  BIGO_TARGET_HOST_ID: ${{ github.event.inputs.bigo_host_id }}
+  BIGO_TARGET_SHARE_URL: ${{ github.event.inputs.bigo_share_url }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
 
 jobs:
@@ -70,6 +81,14 @@ jobs:
           verified=set(parse_ids(os.environ.get("BIGO_VERIFIED_HOST_IDS","")))
           probe=parse_ids(os.environ.get("BIGO_LIVE_PROBE_HOST_IDS",""))
           candidates=dict(registry)
+          target_host=os.environ.get("BIGO_TARGET_HOST_ID","").strip()
+          target_url=os.environ.get("BIGO_TARGET_SHARE_URL","").strip()
+          if target_host or target_url:
+              if not re.fullmatch(r"[A-Za-z0-9._-]+",target_host):
+                  raise SystemExit("Invalid BIGO_TARGET_HOST_ID")
+              if not (target_url.startswith("https://www.bigo.tv/sid/") or target_url.startswith("https://slink.bigovideo.tv/")):
+                  raise SystemExit("BIGO_TARGET_SHARE_URL must be an approved BIGO share URL")
+              candidates[target_host]=target_url
           for host in probe:
               if re.fullmatch(r"[A-Za-z0-9._-]+",host) and host in verified and host not in candidates:
                   candidates[host]="https://www.bigo.tv/"+host
