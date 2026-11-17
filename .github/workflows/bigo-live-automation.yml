@@ -74,8 +74,7 @@ jobs:
               raise SystemExit("No host is both registered/discovered and independently verified; fail closed.")
           report={"candidate_count":len(candidates),"verified_count":len(verified),"profile_verified":[],"rejected":[]}
           def scrape(host):
-    # BIGO's public profile page is identity evidence, not a static HLS source.
-    # Playback manifests are short-lived and are resolved by the existing BIGO API/Streamlink path.
+    # Firecrawl verifies the BIGO profile identity; BIGO API/Streamlink resolves rotating live HLS.
     url="https://www.bigo.tv/user/"+host
     payload=json.dumps({"url":url,"formats":["html","markdown"],"onlyMainContent":False}).encode()
     req=urllib.request.Request("https://api.firecrawl.dev/v2/scrape",data=payload,
@@ -86,10 +85,9 @@ jobs:
             with urllib.request.urlopen(req,timeout=35) as response:
                 data=json.load(response)
             doc=data.get("data",data)
-            body=(doc.get("html") or "")+"\\n"+(doc.get("markdown") or "")
-            # Require the requested BIGO ID to appear as page identity, not just a generic 200 page.
-            identity=(re.search(r"BIGO\\s*ID\\s*[:：]\\s*"+re.escape(host)+r"\\b",body,re.I)
-                      or re.search(r"/user/"+re.escape(host)+r"(?:[/?#\\\"'\\s]|$)",body,re.I))
+            body=(doc.get("html") or "")+"\n"+(doc.get("markdown") or "")
+            identity=(re.search(r"BIGO\s*ID\s*[:：]\s*"+re.escape(host)+r"\b",body,re.I)
+                      or re.search(r"/user/"+re.escape(host)+r"(?:[/?#\"'\s]|$)",body,re.I))
             if not identity:
                 return None,"Firecrawl page did not confirm requested BIGO profile identity"
             return "",None
@@ -119,6 +117,24 @@ for host in candidates[:50]:
                 (len(report["live"]),len(candidates),len(report["rejected"])))
           if not report["live"]:
               raise SystemExit("No independently verified broadcaster exposed a live HLS manifest; no capture attempted.")
+for host in candidates[:50]:
+    try:
+        manifest,error=scrape(host)
+        if manifest is not None:
+            report["profile_verified"].append({"host_id":host,"source_url":""})
+        else:
+            report["rejected"].append({"host_id":host,"reason":error})
+    except Exception as exc:
+        report["rejected"].append({"host_id":host,"reason":type(exc).__name__+": "+str(exc)[:240]})
+    time.sleep(2)
+json.dump(report,open("/tmp/bigo-firecrawl-live-report.json","w"))
+with open("/tmp/bigo-hosts.txt","w") as out:
+    for item in report["profile_verified"]:
+        out.write(item["host_id"]+"|"+item["source_url"]+"\n")
+print("Firecrawl profile identities verified: %d/%d candidates; rejected: %d" %
+      (len(report["profile_verified"]),len(candidates),len(report["rejected"])))
+if not report["profile_verified"]:
+    raise SystemExit("No independently verified BIGO profile identity was confirmed; no capture attempted.")
           PY
           echo "Selected $(wc -l < /tmp/bigo-hosts.txt) Firecrawl-live, verified host(s) for capture"
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
