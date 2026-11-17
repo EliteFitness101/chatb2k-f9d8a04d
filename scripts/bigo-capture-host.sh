@@ -137,11 +137,9 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  if [ -z "${BIGO_STREAMLINK_WRAPPER:-}" ] || [ ! -f "${BIGO_STREAMLINK_WRAPPER}" ]; then
-    echo "::error::Token-free BIGO Streamlink compatibility shim is missing."
-    exit 1
-  fi
-  timeout 55s python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  # Primary path: consume the freshly resolved HLS/room URL with Streamlink.
+  # Keep the token-free compatibility shim as a secondary fallback only.
+  timeout 55s streamlink --webbrowser yes "${STREAMLINK_AUTH_ARGS[@]}" --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -198,10 +196,13 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-    PIPE_RC=("${PIPESTATUS[@]}")
-    CURL_RC="${PIPE_RC[0]:-1}"
-    FFMPEG_RC="${PIPE_RC[1]:-1}"
+    if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
+      timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -headers "Cookie: ${BIGO_COOKIE_HEADER}
+" -rw_timeout 15000000 -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    else
+      timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    fi
+    FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
     sleep "$ATTEMPT"
