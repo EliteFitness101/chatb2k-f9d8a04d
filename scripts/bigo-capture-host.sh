@@ -116,6 +116,10 @@ PY
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
 STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hls_src",""))' "$INFO")"
+DISCOVERY_METHOD="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("discovery_method","unknown"))' "$INFO")"
+DISCOVERY_ALIVE="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1]).get("alive",False)).lower())' "$INFO")"
+DISCOVERY_ERROR="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("discovery_error",""))' "$INFO")"
+echo "::notice::BIGO discovery host=$HOST method=$DISCOVERY_METHOD alive=$DISCOVERY_ALIVE hls_available=$([ -n "$STREAM_URL" ] && echo true || echo false) error_type=$([ -n "$DISCOVERY_ERROR" ] && echo present || echo none)"
 # A fresh Firecrawl HLS manifest is authoritative for this capture attempt.
 # Pass it into Streamlink immediately so BIGO HLS decryption is used before FFmpeg fallback.
 if [ -z "$STREAM_URL" ] && [[ "$SOURCE_OVERRIDE" == https://*".m3u8"* ]]; then
