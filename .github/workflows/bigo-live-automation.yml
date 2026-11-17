@@ -58,28 +58,22 @@ jobs:
           # Capture eligibility is the intersection with the independently maintained verified-host list.
           python3 - <<'PY'
           import json, os, re, sys, time, urllib.request, urllib.error
-          
           sources=json.load(open("/tmp/bigo-sources.json"))
           registry={}
           for item in sources.get("hosts",[]):
               host=str(item.get("bigo_id") or "").strip()
               if host and re.fullmatch(r"[A-Za-z0-9._-]+",host):
                   registry[host]=str(item.get("source_url") or "")
-          
           def ids(value):
               return [x.strip() for x in value.replace(",","\n").splitlines() if x.strip()]
-          
           verified=set(ids(os.environ.get("BIGO_VERIFIED_HOST_IDS","")))
           probe=ids(os.environ.get("BIGO_LIVE_PROBE_HOST_IDS",""))
           candidates=list(dict.fromkeys(list(registry)+probe))
           candidates=[h for h in candidates if h in verified]
           if not candidates:
               raise SystemExit("No host is both registered/discovered and independently verified; fail closed.")
-          
           report={"candidate_count":len(candidates),"verified_count":len(verified),"profile_verified":[],"rejected":[]}
-          
           def scrape(host):
-              # Firecrawl verifies profile identity; BIGO API/Streamlink resolves rotating live HLS.
               url="https://www.bigo.tv/user/"+host
               payload=json.dumps({"url":url,"formats":["html","markdown"],"onlyMainContent":False}).encode()
               req=urllib.request.Request("https://api.firecrawl.dev/v2/scrape",data=payload,
@@ -105,7 +99,6 @@ jobs:
                       last_error=type(exc).__name__+": "+str(exc)[:180]
                       break
               return False,last_error or "Firecrawl profile scrape failed"
-          
           for host in candidates[:50]:
               ok,error=scrape(host)
               if ok:
@@ -113,7 +106,6 @@ jobs:
               else:
                   report["rejected"].append({"host_id":host,"reason":error})
               time.sleep(2)
-          
           json.dump(report,open("/tmp/bigo-firecrawl-live-report.json","w"))
           with open("/tmp/bigo-hosts.txt","w") as out:
               for item in report["profile_verified"]:
