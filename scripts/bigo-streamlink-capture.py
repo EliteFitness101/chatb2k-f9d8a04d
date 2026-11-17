@@ -46,9 +46,10 @@ def legacy_get_streams(self):
 
 
 def main():
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: bigo-streamlink-capture.py HOST_ID")
+    if len(sys.argv) not in (2, 3):
+        raise SystemExit("usage: bigo-streamlink-capture.py HOST_ID [HLS_URL]")
     host_id = sys.argv[1].strip()
+    source_url = sys.argv[2].strip() if len(sys.argv) == 3 else ""
     if not host_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for ch in host_id):
         raise SystemExit("invalid BIGO host ID")
     # Always resolve the stable broadcaster profile, never a rotating /sid/ URL.
@@ -62,11 +63,16 @@ def main():
     # Replace only the token-required resolver; keep the installed plugin's
     # current HLS stream implementation and packet decryption unchanged.
     Bigo._get_streams = legacy_get_streams
-    plugin = Bigo(session, url)
-    streams = plugin.streams()
-    stream = streams.get("live") or streams.get("best")
-    if stream is None:
-        raise SystemExit("BIGO legacy metadata returned no live HLS stream")
+    if source_url and ".m3u8" in source_url.lower():
+        # Use Streamlink's BIGO HLS reader/decryptor on the fresh signed manifest.
+        # This preserves segment resolution and BIGO packet handling.
+        stream = BigoHLSStream(session, source_url)
+    else:
+        plugin = Bigo(session, url)
+        streams = plugin.streams()
+        stream = streams.get("live") or streams.get("best")
+        if stream is None:
+            raise SystemExit("BIGO legacy metadata returned no live HLS stream")
 
     with stream.open() as reader:
         while True:
