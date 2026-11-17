@@ -27,10 +27,13 @@ API='https://ta.bigo.tv/official_website/studio/getInternalStudioInfo'
 TOKEN_T='https://sec.bigo.sg/v1/webjs/t'
 TOKEN_STATUS='https://sec.bigo.sg/v1/webjs/status'
 KEY=b'undefinedval0x01'
-UA='Mozilla/5.0'
+UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 COOKIE=os.environ.get('BIGO_COOKIE_HEADER','').strip()
+# Reuse one browser-shaped session across token and room-info requests so BIGO
+# can retain any clearance cookies it issues. A user cookie remains optional.
+session=requests.Session()
 def request_headers(accept='*/*', authenticated=True):
-    h={'User-Agent':UA,'Accept':accept}
+    h={'User-Agent':UA,'Accept':accept,'Referer':f'https://www.bigo.tv/{host}','Origin':'https://www.bigo.tv'}
     if COOKIE and authenticated:
         h['Cookie']=COOKIE
     return h
@@ -49,7 +52,7 @@ def resolve_token():
     # playback token. Treat that as an unavailable optional optimization, not
     # as a fatal capture error; browser/Streamlink and legacy metadata paths
     # must still run without a session cookie.
-    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(authenticated=False),timeout=12)
+    tr=session.get(TOKEN_T,params={'callback':callback()},headers=request_headers('application/javascript, */*;q=0.01',authenticated=False),timeout=12)
     tr.raise_for_status()
     time_data=jsonp(tr.text)
     ts=time_data.get('time')
@@ -61,7 +64,7 @@ def resolve_token():
     except Exception:
         return None
     encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
-    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
+    sr=session.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers('application/javascript, */*;q=0.01'),timeout=12)
     sr.raise_for_status()
     status_data=jsonp(sr.text)
     token=status_data.get('token')
@@ -81,8 +84,8 @@ def build(d):
 try:
     token=resolve_token()
     if token:
-        r=requests.post(API,params={'siteId':host,'verify':'','token':token},
-                         headers=request_headers('application/json'),timeout=15)
+        r=session.post(API,params={'siteId':host,'verify':'','token':token},
+                         headers=request_headers('application/json, text/plain, */*'),timeout=15)
         r.raise_for_status()
         d=r.json().get('data') or {}
         out=build(d)
@@ -90,7 +93,7 @@ try:
         if out['hls_src']:
             print(json.dumps(out)); raise SystemExit
     # Token is optional. Always retain the original unauthenticated metadata path.
-    r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
+    r=session.post(API,data={'siteId':host},headers=request_headers('application/json, text/plain, */*'),timeout=12)
     r.raise_for_status()
     out=build(r.json().get('data') or {})
     out['discovery_method']='bigo_legacy_api'
@@ -99,7 +102,7 @@ try:
     print(json.dumps(out))
 except Exception as e:
     try:
-        r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
+        r=session.post(API,data={'siteId':host},headers=request_headers('application/json, text/plain, */*'),timeout=12)
         r.raise_for_status()
         out=build(r.json().get('data') or {})
         out['discovery_method']='bigo_legacy_api'
