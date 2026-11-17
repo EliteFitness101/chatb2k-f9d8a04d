@@ -5,6 +5,7 @@ on:
     branches: [fix/bigo-dropbox-primary-20261010]
     paths:
       - 'scripts/bigo-capture-host.sh'
+      - 'scripts/bigo-streamlink-capture.py'
       - '.github/workflows/bigo-live-automation.yml'
       - '.github/workflows/dropbox-primary-check.yml'
   pull_request:
@@ -30,6 +31,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           script = Path("scripts/bigo-capture-host.sh").read_text()
+          wrapper = Path("scripts/bigo-streamlink-capture.py").read_text()
           workflow = Path(".github/workflows/bigo-live-automation.yml").read_text()
           required = [
               "Dropbox is the canonical media store for this capture path",
@@ -50,5 +52,10 @@ jobs:
           assert "BLOB_READ_WRITE_TOKEN" not in script + workflow
           assert "from '@vercel/blob'" not in script
           assert "https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline" in workflow
-          print("PASS: Dropbox upload and content-hash read-back are mandatory; ChatB2K pipeline remains the ingestion boundary; Blob/R2 are not primary.")
+          assert 'python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" "$STREAM_URL"' in script
+          assert "BigoHLSStream(session, source_url)" in wrapper
+          assert '-i "$STREAM_URL"' in script
+          assert 'curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$STREAM_URL" | ffmpeg' not in script
+          assert r"\.m3u8(?:" in script
+          print("PASS: Dropbox archive read-back is mandatory; resolved BIGO HLS is passed to Streamlink and FFmpeg opens manifest URLs directly; ChatB2K remains the ingestion boundary.")
           PY

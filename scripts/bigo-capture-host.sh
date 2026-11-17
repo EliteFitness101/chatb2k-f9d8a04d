@@ -120,6 +120,10 @@ if [ -n "$STREAM_URL" ]; then
   SOURCE_URL="$STREAM_URL"
   echo "::notice::BIGO host $HOST using freshly discovered HLS source"
 fi
+if [ -z "$STREAM_URL" ] && [[ "$SOURCE_OVERRIDE" == *".m3u8"* ]]; then
+  STREAM_URL="$SOURCE_OVERRIDE"
+  echo "::notice::BIGO host $HOST using registry HLS manifest fallback"
+fi
 # BIGO may require an authenticated session for public-room playback. Store the full
 # Cookie header as a masked GitHub Actions secret; never print it to workflow logs.
 STREAMLINK_AUTH_ARGS=()
@@ -127,6 +131,36 @@ CURL_AUTH_ARGS=()
 if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
   STREAMLINK_AUTH_ARGS=(--http-header "Cookie=${BIGO_COOKIE_HEADER}")
   CURL_AUTH_ARGS=(-H "Cookie: ${BIGO_COOKIE_HEADER}")
+fi
+
+# Restore the proven pre-wrapper fallback: inspect the canonical broadcaster page
+# for a fresh signed HLS manifest when the metadata API has no usable URL.
+if [ -z "$STREAM_URL" ] && [[ "$BIGO_ROOM_URL" == https://www.bigo.tv/* ]]; then
+  PAGE="/tmp/bigo-${HOST}-page.html"
+  rm -f "$PAGE"
+  if curl -A "Mozilla/5.0" "${CURL_AUTH_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$BIGO_ROOM_URL" -o "$PAGE"; then
+    DISCOVERED_HLS="$(python3 - "$PAGE" <<'PYHLS'
+import re,sys
+try:
+    page=open(sys.argv[1],encoding="utf-8",errors="replace").read()
+except Exception:
+    page=""
+page=page.replace(r"\\/", "/").replace(r"\\u0026", "&").replace(r"\\\\/", "/")
+matches=re.findall(r"""https?://[^\\s"'<>`]+?\\.m3u8(?:\\?[^\\s"'<>`]*)?""", page, re.I)
+print(next((u for u in matches if u.startswith("https://")), ""))
+PYHLS
+    )"
+    if [ -n "$DISCOVERED_HLS" ]; then
+      STREAM_URL="$DISCOVERED_HLS"
+      echo "::notice::BIGO host $HOST discovered fresh HLS from canonical broadcaster page"
+    else
+      echo "::notice::BIGO host $HOST canonical broadcaster page contained no HLS manifest"
+    fi
+  fi
+  rm -f "$PAGE"
+fi
+if [ -n "$STREAM_URL" ]; then
+  SOURCE_URL="$STREAM_URL"
 fi
 CAPTURE_OK=0
 # Capture duration is runtime-configurable. When unset, FFmpeg captures until the live source
@@ -144,7 +178,7 @@ for ATTEMPT in 1 2; do
     echo "::error::Token-free BIGO Streamlink compatibility shim is missing."
     exit 1
   fi
-  timeout 55s python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -152,26 +186,10 @@ for ATTEMPT in 1 2; do
   if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
   sleep "$ATTEMPT"
 done
-# Some registry sources are BIGO shortlinks/session URLs that Streamlink does not recognize.
-# Probe those supplied source URLs directly before falling back to BIGO API discovery.
-if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* || "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
-  echo "::notice::BIGO host $HOST trying supplied source URL directly"
-  for ATTEMPT in 1 2; do
-    rm -f "$RAW"
-    set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-    PIPE_RC=("${PIPESTATUS[@]}")
-    CURL_RC="${PIPE_RC[0]:-1}"
-    FFMPEG_RC="${PIPE_RC[1]:-1}"
-    set -e
-    if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
-    sleep "$ATTEMPT"
-  done
-fi
 # Direct HLS is the fallback when Streamlink cannot resolve or capture the room.
-# Signed BIGO /sid/ pages are not media URLs. When direct probing returns HTML, extract the
-# current HLS manifest embedded in the signed page and reuse the proven direct-HLS fallback.
-if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
+# BIGO /sid/ pages and BIGO shortlinks are not media URLs. Resolve the supplied page and extract
+# its current HLS manifest before opening media; never pass page HTML to FFmpeg.
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && { [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; }; then
   PAGE="/tmp/bigo-${HOST}-signed.html"
   rm -f "$PAGE"
   if curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$SOURCE_OVERRIDE" -o "$PAGE"; then
@@ -183,7 +201,7 @@ try:
 except Exception:
     s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
-urls=re.findall(r'https?://[^"\'<>\\s]+m3u8[^"\'<>\\s]*',s,re.I)
+urls=re.findall(r'https?://[^"\'<>\s]+?\.m3u8(?:\?[^"\'<>\s]*)?',s,re.I)
 print(urls[0] if urls else "")
 PY
     )"
@@ -197,14 +215,16 @@ PY
   rm -f "$PAGE"
 fi
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
-  echo "::notice::BIGO host $HOST trying direct HLS fallback"
+  echo "::notice::BIGO host $HOST trying direct HLS fallback with FFmpeg URL input"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$STREAM_URL" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
-    PIPE_RC=("${PIPESTATUS[@]}")
-    CURL_RC="${PIPE_RC[0]:-1}"
-    FFMPEG_RC="${PIPE_RC[1]:-1}"
+    FFMPEG_HTTP_ARGS=()
+    if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
+      FFMPEG_HTTP_ARGS=(-headers $'Cookie: '"${BIGO_COOKIE_HEADER}"$'\r\nUser-Agent: Mozilla/5.0\r\n')
+    fi
+    timeout 45s ffmpeg -hide_banner -loglevel error "${FFMPEG_HTTP_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
     sleep "$ATTEMPT"
