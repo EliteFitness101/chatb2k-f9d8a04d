@@ -56,31 +56,40 @@ jobs:
           # raw capture may proceed for registry-approved sources; publishing is
           # separately restricted by BIGO_VERIFIED_HOST_IDS in the ingestion step.
           python3 - <<'PY'
-          import json, re
+          import json, os, re
           sources=json.load(open("/tmp/bigo-sources.json"))
           registry={}
           for item in sources.get("hosts",[]):
               host=str(item.get("bigo_id") or "").strip()
               if not host or not re.fullmatch(r"[A-Za-z0-9._-]+",host):
                   continue
-              source=str(item.get("source_url") or "").strip()
-              if not source:
-                  source="https://www.bigo.tv/"+host
+              source=str(item.get("source_url") or "").strip() or ("https://www.bigo.tv/"+host)
               registry[host]=source
-          if not registry:
-              raise SystemExit("Supabase returned no active capture-enabled BIGO sources; no capture attempted.")
+          def parse_ids(value):
+              return [x.strip() for x in value.replace(",","\n").splitlines() if x.strip()]
+          verified=set(parse_ids(os.environ.get("BIGO_VERIFIED_HOST_IDS","")))
+          probe=parse_ids(os.environ.get("BIGO_LIVE_PROBE_HOST_IDS",""))
+          candidates=dict(registry)
+          for host in probe:
+              if re.fullmatch(r"[A-Za-z0-9._-]+",host) and host in verified and host not in candidates:
+                  candidates[host]="https://www.bigo.tv/"+host
+          if not candidates:
+              raise SystemExit("No active registry sources or verified BIGO probe IDs; no capture attempted.")
           report={
-              "candidate_count":len(registry),
-              "source":"supabase.bigo_sources active + capture_enabled",
-              "capture_eligibility":"registry",
+              "candidate_count":len(candidates),
+              "registry_candidate_count":len(registry),
+              "verified_probe_candidate_count":sum(1 for h in probe if h in verified),
+              "source":"active capture-enabled registry + verified BIGO_LIVE_PROBE_HOST_IDS",
+              "capture_eligibility":"registry or verified configured probe",
               "publication_eligibility":"BIGO_VERIFIED_HOST_IDS enforced separately",
-              "candidates":[{"host_id":host,"source_url":url} for host,url in registry.items()]
+              "candidates":[{"host_id":host,"source_url":url} for host,url in candidates.items()]
           }
           json.dump(report,open("/tmp/bigo-firecrawl-live-report.json","w"))
           with open("/tmp/bigo-hosts.txt","w") as out:
-              for host,url in registry.items():
+              for host,url in candidates.items():
                   out.write(host+"|"+url+"\n")
-          print("BIGO capture candidates from active registry: %d" % len(registry))
+          print("BIGO capture candidates: %d (registry=%d, verified probes=%d)" %
+                (len(candidates),len(registry),report["verified_probe_candidate_count"]))
           PY
           echo "Selected $(wc -l < /tmp/bigo-hosts.txt) active, capture-enabled BIGO source(s)"
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
