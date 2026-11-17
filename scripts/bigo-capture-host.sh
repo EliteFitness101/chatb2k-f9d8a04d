@@ -147,6 +147,21 @@ for ATTEMPT in 1 2; do
   if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
   sleep "$ATTEMPT"
 done
+# Secondary compatibility path: retain the existing token-free BIGO resolver,
+# but only after native Streamlink has tried the freshly resolved source.
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "${BIGO_STREAMLINK_WRAPPER:-}" ] && [ -f "${BIGO_STREAMLINK_WRAPPER}" ]; then
+  echo "::notice::BIGO host $HOST trying token-free compatibility resolver"
+  for ATTEMPT in 1 2; do
+    rm -f "$RAW"
+    set +e
+    timeout 55s python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" 2>>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    PIPE_RC=("${PIPESTATUS[@]}")
+    FFMPEG_RC="${PIPE_RC[1]:-1}"
+    set -e
+    if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
+    sleep "$ATTEMPT"
+  done
+fi
 # Some registry sources are BIGO shortlinks/session URLs that Streamlink does not recognize.
 # Probe those supplied source URLs directly before falling back to BIGO API discovery.
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* || "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
