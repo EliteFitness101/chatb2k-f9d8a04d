@@ -65,7 +65,7 @@ jobs:
               if host and re.fullmatch(r"[A-Za-z0-9._-]+",host):
                   registry[host]=str(item.get("source_url") or "")
           def ids(value):
-              return [x.strip() for x in value.replace(",","\\n").splitlines() if x.strip()]
+              return [x.strip() for x in value.replace(",","\n").splitlines() if x.strip()]
           verified=set(ids(os.environ.get("BIGO_VERIFIED_HOST_IDS","")))
           probe=ids(os.environ.get("BIGO_LIVE_PROBE_HOST_IDS",""))
           candidates=list(dict.fromkeys(list(registry)+probe))
@@ -81,9 +81,9 @@ jobs:
               with urllib.request.urlopen(req,timeout=35) as response:
                   data=json.load(response)
               doc=data.get("data",data)
-              body=(doc.get("html") or "")+"\\n"+(doc.get("markdown") or "")
-              body=body.replace(r"\\u0026","&").replace(r"\\/","/")
-              matches=re.findall(r'https://[^\\s"\\'<>\\]+?\\.m3u8(?:\\?[^\\s"\\'<>\\]+)?',body,re.I)
+              body=(doc.get("html") or "")+"\n"+(doc.get("markdown") or "")
+              body=body.replace(r"\u0026","&").replace(r"\/","/")
+              matches=re.findall(r"https://[^\s\"'<>]+?\.m3u8(?:\?[^\s\"'<>]+)?",body,re.I)
               manifest=next((u.rstrip("),;") for u in matches if ".m3u8" in u.lower()),"")
               if not manifest:
                   return None,"no HLS manifest exposed by Firecrawl"
@@ -100,7 +100,7 @@ jobs:
           json.dump(report,open("/tmp/bigo-firecrawl-live-report.json","w"))
           with open("/tmp/bigo-hosts.txt","w") as out:
               for item in report["live"]:
-                  out.write(item["host_id"]+"|"+item["source_url"]+"\\n")
+                  out.write(item["host_id"]+"|"+item["source_url"]+"\n")
           print("Firecrawl live HLS verified: %d/%d candidates; rejected: %d" %
                 (len(report["live"]),len(candidates),len(report["rejected"])))
           if not report["live"]:
