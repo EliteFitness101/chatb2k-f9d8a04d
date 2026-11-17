@@ -120,6 +120,10 @@ if [ -n "$STREAM_URL" ]; then
   SOURCE_URL="$STREAM_URL"
   echo "::notice::BIGO host $HOST using freshly discovered HLS source"
 fi
+if [ -z "$STREAM_URL" ] && [[ "$SOURCE_OVERRIDE" == *".m3u8"* ]]; then
+  STREAM_URL="$SOURCE_OVERRIDE"
+  echo "::notice::BIGO host $HOST using registry HLS manifest fallback"
+fi
 # BIGO may require an authenticated session for public-room playback. Store the full
 # Cookie header as a masked GitHub Actions secret; never print it to workflow logs.
 STREAMLINK_AUTH_ARGS=()
@@ -167,7 +171,7 @@ try:
 except Exception:
     s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
-urls=re.findall(r'https?://[^"\'<>\\s]+m3u8[^"\'<>\\s]*',s,re.I)
+urls=re.findall(r'https?://[^"\'<>\s]+?\.m3u8(?:\?[^"\'<>\s]*)?',s,re.I)
 print(urls[0] if urls else "")
 PY
     )"
@@ -181,16 +185,16 @@ PY
   rm -f "$PAGE"
 fi
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
-  echo "::notice::BIGO host $HOST trying direct HLS fallback"
+  echo "::notice::BIGO host $HOST trying direct HLS fallback with FFmpeg URL input"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
     FFMPEG_HTTP_ARGS=()
     if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
-      FFMPEG_HTTP_ARGS=(-headers "Cookie: ${BIGO_COOKIE_HEADER}"
-    PIPE_RC=("${PIPESTATUS[@]}")
-    CURL_RC="${PIPE_RC[0]:-1}"
-    FFMPEG_RC="${PIPE_RC[1]:-1}"
+      FFMPEG_HTTP_ARGS=(-headers $'Cookie: '"${BIGO_COOKIE_HEADER}"$'\r\nUser-Agent: Mozilla/5.0\r\n')
+    fi
+    timeout 45s ffmpeg -hide_banner -loglevel error "${FFMPEG_HTTP_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
     sleep "$ATTEMPT"
