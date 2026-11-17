@@ -56,6 +56,6 @@ jobs:
           assert "BigoHLSStream(session, source_url)" in wrapper
           assert '-i "$STREAM_URL"' in script
           assert 'curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$STREAM_URL" | ffmpeg' not in script
-          assert r"\\.m3u8(?:" in script
+          assert r"\.m3u8(?:" in script
           print("PASS: Dropbox archive read-back is mandatory; resolved BIGO HLS is passed to Streamlink and FFmpeg opens manifest URLs directly; ChatB2K remains the ingestion boundary.")
           PY
