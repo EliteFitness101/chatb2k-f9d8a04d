@@ -83,14 +83,17 @@ jobs:
           fi
           printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts.txt
           echo "Selected $(wc -l < /tmp/bigo-hosts.txt) host(s) for capture"
-          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
-          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/main/scripts/bigo-streamlink-capture.py -o /tmp/bigo-streamlink-capture.py
+          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
+          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-streamlink-capture.py -o /tmp/bigo-streamlink-capture.py
           chmod +x /tmp/bigo-capture-host.sh /tmp/bigo-streamlink-capture.py
           export BIGO_STREAMLINK_WRAPPER=/tmp/bigo-streamlink-capture.py
           run_capture() {
             local HOST_ID="$1"
             local SOURCE_URL="$2"
-            bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}" || true
+            if ! bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}"; then
+              echo "::error::Capture failed for host ${HOST_ID}"
+              touch "/tmp/bigo-results/${HOST_ID}.failed"
+            fi
           }
           ACTIVE=0
           while IFS='|' read -r HOST_ID SOURCE_URL; do
@@ -116,8 +119,14 @@ jobs:
           json.dump(out,open("/tmp/bigo-batch.json","w"))
           print(f"Verified BIGO batch: {len(out['highlights'])} highlight(s)")
           PY
+          if compgen -G "/tmp/bigo-results/*.failed" > /dev/null; then
+            echo "::error::One or more host capture attempts failed; empty batch is not a successful capture cycle."
+            if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+              exit 1
+            fi
+          fi
           if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
-            echo "::notice::No live hosts captured this cycle; continuing."
+            echo "::notice::No live hosts captured this cycle; no capture errors recorded."
             exit 0
           fi
 
