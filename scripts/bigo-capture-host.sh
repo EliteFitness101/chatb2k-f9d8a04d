@@ -13,8 +13,10 @@ COVER="/tmp/bigo-${HOST}-${TS}.jpg"
 LOG="/tmp/streamlink-${HOST}.log"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER"
 
-ROOM_URL="https://www.bigo.tv/${HOST}"
-SOURCE_URL="${SOURCE_OVERRIDE:-${ROOM_URL}}"
+BIGO_ROOM_URL="https://www.bigo.tv/${HOST}"
+SOURCE_URL="${BIGO_ROOM_URL}"
+PAGE_URL="$BIGO_ROOM_URL"
+PAGE_KIND="canonical room page"
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
 # hls_src to the older unauthenticated getInternalStudioInfo request.
@@ -165,7 +167,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "${BIGO_STREAMLINK_WRAPPER:-}" ] && [ -f "${B
 fi
 # Some registry sources are BIGO shortlinks/session URLs that Streamlink does not recognize.
 # Probe those supplied source URLs directly before falling back to BIGO API discovery.
-if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* || "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
+if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; then
   echo "::notice::BIGO host $HOST trying supplied source URL directly"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
@@ -178,34 +180,6 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
     sleep "$ATTEMPT"
   done
-fi
-# Direct HLS is the fallback when Streamlink cannot resolve or capture the room.
-# Signed BIGO /sid/ pages are not media URLs. When direct probing returns HTML, extract the
-# current HLS manifest embedded in the signed page and reuse the proven direct-HLS fallback.
-if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
-  PAGE="/tmp/bigo-${HOST}-signed.html"
-  rm -f "$PAGE"
-  if curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$SOURCE_OVERRIDE" -o "$PAGE"; then
-    DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
-import re,sys
-p=sys.argv[1]
-try:
-    s=open(p,errors="replace").read()
-except Exception:
-    s=""
-s=s.replace("\\\\/","/").replace("\\u0026","&")
-urls=re.findall(r'https?://[^"\'<>\\s]+m3u8[^"\'<>\\s]*',s,re.I)
-print(urls[0] if urls else "")
-PY
-    )"
-    if [ -n "$DISCOVERED_HLS" ]; then
-      STREAM_URL="$DISCOVERED_HLS"
-      echo "::notice::BIGO host $HOST discovered HLS manifest from signed /sid/ page"
-    else
-      echo "::notice::BIGO host $HOST signed /sid/ page contained no discoverable HLS manifest"
-    fi
-  fi
-  rm -f "$PAGE"
 fi
 if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   echo "::notice::BIGO host $HOST trying direct HLS fallback"
@@ -422,7 +396,7 @@ export FILE COVER
 BLOB_URL="$(dropbox_upload "$FILE" "/ResoFit/BIGO/processed/${HOST}-${TS}.mp4" true)"
 COVER_URL="$(dropbox_upload "$COVER" "/ResoFit/BIGO/metadata/${HOST}-${TS}-cover.jpg" true)"
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$ROOM_URL" "$STREAM_URL" "$AUDIO_STREAMS" <<'PY' > "$RESULT"
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$BIGO_ROOM_URL" "$STREAM_URL" "$AUDIO_STREAMS" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
