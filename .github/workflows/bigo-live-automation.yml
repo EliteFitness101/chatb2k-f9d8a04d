@@ -85,6 +85,15 @@ jobs:
               body=body.replace(r"\u0026","&").replace(r"\/","/")
               matches=re.findall(r"https://[^\s\"'<>]+?\.m3u8(?:\?[^\s\"'<>]+)?",body,re.I)
               manifest=next((u.rstrip("),;") for u in matches if ".m3u8" in u.lower()),"")
+              if manifest:
+                  try:
+                      req=urllib.request.Request(manifest,headers={"User-Agent":"Mozilla/5.0","Range":"bytes=0-65535"})
+                      with urllib.request.urlopen(req,timeout=15) as response:
+                          playlist=response.read(65536).decode("utf-8","replace")
+                      if "#EXTM3U" not in playlist or not ("#EXTINF" in playlist or "#EXT-X-STREAM-INF" in playlist):
+                          return None,"manifest did not return a valid HLS playlist"
+                  except Exception as exc:
+                      return None,"HLS manifest probe failed: "+type(exc).__name__+": "+str(exc)[:180]
               if not manifest:
                   return None,"no HLS manifest exposed by Firecrawl"
               return manifest,None
