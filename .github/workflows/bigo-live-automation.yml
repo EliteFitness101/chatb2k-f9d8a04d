@@ -79,7 +79,7 @@ jobs:
           json.dump(report,open("/tmp/bigo-firecrawl-live-report.json","w"))
           with open("/tmp/bigo-hosts.txt","w") as out:
               for host,url in registry.items():
-                  out.write(host+"|"+url+"\\n")
+                  out.write(host+"|"+url+"\n")
           print("BIGO capture candidates from active registry: %d" % len(registry))
           PY
           echo "Selected $(wc -l < /tmp/bigo-hosts.txt) active, capture-enabled BIGO source(s)"
