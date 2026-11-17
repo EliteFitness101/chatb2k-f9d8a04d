@@ -132,6 +132,36 @@ if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
   STREAMLINK_AUTH_ARGS=(--http-header "Cookie=${BIGO_COOKIE_HEADER}")
   CURL_AUTH_ARGS=(-H "Cookie: ${BIGO_COOKIE_HEADER}")
 fi
+
+# Restore the proven pre-wrapper fallback: inspect the canonical broadcaster page
+# for a fresh signed HLS manifest when the metadata API has no usable URL.
+if [ -z "$STREAM_URL" ] && [[ "$BIGO_ROOM_URL" == https://www.bigo.tv/* ]]; then
+  PAGE="/tmp/bigo-${HOST}-page.html"
+  rm -f "$PAGE"
+  if curl -A "Mozilla/5.0" "${CURL_AUTH_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$BIGO_ROOM_URL" -o "$PAGE"; then
+    DISCOVERED_HLS="$(python3 - "$PAGE" <<'PYHLS'
+import re,sys
+try:
+    page=open(sys.argv[1],encoding="utf-8",errors="replace").read()
+except Exception:
+    page=""
+page=page.replace(r"\\/", "/").replace(r"\\u0026", "&").replace(r"\\\\/", "/")
+matches=re.findall(r"""https?://[^\\s"'<>`]+?\\.m3u8(?:\\?[^\\s"'<>`]*)?""", page, re.I)
+print(next((u for u in matches if u.startswith("https://")), ""))
+PYHLS
+    )"
+    if [ -n "$DISCOVERED_HLS" ]; then
+      STREAM_URL="$DISCOVERED_HLS"
+      echo "::notice::BIGO host $HOST discovered fresh HLS from canonical broadcaster page"
+    else
+      echo "::notice::BIGO host $HOST canonical broadcaster page contained no HLS manifest"
+    fi
+  fi
+  rm -f "$PAGE"
+fi
+if [ -n "$STREAM_URL" ]; then
+  SOURCE_URL="$STREAM_URL"
+fi
 CAPTURE_OK=0
 # Capture duration is runtime-configurable. When unset, FFmpeg captures until the live source
 # closes/Streamlink's bounded probe ends; no fixed clip duration is imposed by source code.
