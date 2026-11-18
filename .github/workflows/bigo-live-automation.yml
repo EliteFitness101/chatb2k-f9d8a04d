@@ -8,6 +8,7 @@ on:
       - '.github/workflows/bigo-live-automation.yml'
       - 'scripts/bigo-capture-host.sh'
       - 'scripts/bigo-streamlink-capture.py'
+      - 'scripts/bigo-firecrawl-hls.py'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -37,6 +38,7 @@ env:
   # BIGO currently rejects playback-token requests from some egress regions.
   # Set this to an authorized Asia-region HTTPS/SOCKS proxy; Dropbox/Supabase stay direct.
   BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
+  FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
   BIGO_TARGET_HOST_ID: ${{ github.event.inputs.bigo_host_id }}
   BIGO_TARGET_SHARE_URL: ${{ github.event.inputs.bigo_share_url }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
@@ -114,6 +116,11 @@ jobs:
           print("BIGO capture candidates: %d (registry=%d, verified probes=%d)" %
                 (len(candidates),len(registry),report["verified_probe_candidate_count"]))
           PY
+          # Resolve fresh playback manifests from the canonical room page before capture.
+          # Firecrawl failures are recorded and fall back to the existing native BIGO resolver.
+          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-firecrawl-hls.py -o /tmp/bigo-firecrawl-hls.py
+          python3 /tmp/bigo-firecrawl-hls.py --input /tmp/bigo-hosts.txt --output /tmp/bigo-hosts-resolved.txt --report /tmp/bigo-firecrawl-hls-report.json
+          mv /tmp/bigo-hosts-resolved.txt /tmp/bigo-hosts.txt
           echo "Selected $(wc -l < /tmp/bigo-hosts.txt) active, capture-enabled BIGO source(s)"
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
           curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-streamlink-capture.py -o /tmp/bigo-streamlink-capture.py
@@ -122,15 +129,16 @@ jobs:
           run_capture() {
             local HOST_ID="$1"
             local SOURCE_URL="$2"
-            if ! bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}"; then
+            local SOURCE_KIND="${3:-fallback}"
+            if ! bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}" "${SOURCE_KIND}"; then
               echo "::error::Capture failed for host ${HOST_ID}"
               touch "/tmp/bigo-results/${HOST_ID}.failed"
             fi
           }
           ACTIVE=0
-          while IFS='|' read -r HOST_ID SOURCE_URL; do
+          while IFS='|' read -r HOST_ID SOURCE_URL SOURCE_KIND; do
             [ -z "${HOST_ID}" ] && continue
-            run_capture "${HOST_ID}" "${SOURCE_URL}" &
+            run_capture "${HOST_ID}" "${SOURCE_URL}" "${SOURCE_KIND}" &
             ACTIVE=$((ACTIVE + 1))
             if [ "${ACTIVE}" -ge 8 ]; then
               wait -n || true
@@ -167,7 +175,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bigo-registry-capture-candidates-${{ github.run_id }}
-          path: /tmp/bigo-firecrawl-live-report.json
+          path: |
+            /tmp/bigo-firecrawl-live-report.json
+            /tmp/bigo-firecrawl-hls-report.json
           if-no-files-found: warn
 
       - name: Ingest, enrich and auto-post BIGO batch
