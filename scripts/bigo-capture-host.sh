@@ -92,6 +92,12 @@ def request_headers(accept='*/*'):
     headers={'User-Agent':UA,'Accept':accept}
     return headers
 
+def token_request_options():
+    # Optional approved egress for BIGO token issuance only. All room-info,
+    # HLS/CDN, Blob, Dropbox and Supabase traffic keeps its existing route.
+    proxy=os.environ.get('BIGO_EGRESS_PROXY','').strip()
+    return {'proxies':{'http':proxy,'https':proxy}} if proxy else {}
+
 def callback():
     return f"jsonpcallback_{int(time.time()*1000)}_{secrets.randbelow(1000001)}"
 
@@ -102,7 +108,7 @@ def jsonp(text):
     return json.loads(m.group('json'))
 
 def resolve_token():
-    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12)
+    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12,**token_request_options())
     tr.raise_for_status()
     ts=jsonp(tr.text)['time']
     payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
@@ -111,7 +117,7 @@ def resolve_token():
     except Exception:
         raise RuntimeError('streamlink crypto module unavailable')
     encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
-    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
+    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12,**token_request_options())
     sr.raise_for_status()
     return jsonp(sr.text)['token']
 
