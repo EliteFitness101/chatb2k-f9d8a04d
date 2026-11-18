@@ -3,6 +3,7 @@ set -euo pipefail
 
 HOST="${1:-}"
 SOURCE_OVERRIDE="${2:-}"
+SOURCE_OVERRIDE_KIND="${3:-fallback}"
 if [ -z "$HOST" ]; then exit 2; fi
 
 RESULT="/tmp/bigo-results/${HOST}.json"
@@ -194,8 +195,14 @@ PYSHARE
   rm -f "$SHARE_PAGE"
 fi
 echo "::notice::BIGO discovery host=$HOST method=$DISCOVERY_METHOD alive=$DISCOVERY_ALIVE hls_available=$([ -n "$STREAM_URL" ] && echo true || echo false) error_type=$([ -n "$DISCOVERY_ERROR" ] && echo present || echo none)"
-# A fresh Firecrawl HLS manifest is authoritative for this capture attempt.
-# Pass it into Streamlink immediately so BIGO HLS decryption is used before FFmpeg fallback.
+# A freshly extracted Firecrawl HLS manifest is authoritative for this run.
+# It is passed separately from the source URL so a cached registry manifest cannot be
+# mistaken for a fresh discovery result.
+if [ "$SOURCE_OVERRIDE_KIND" = "firecrawl" ] && [[ "$SOURCE_OVERRIDE" == https://*".m3u8"* ]]; then
+  STREAM_URL="$SOURCE_OVERRIDE"
+  echo "::notice::BIGO host $HOST using fresh Firecrawl-verified HLS manifest"
+fi
+# Preserve the existing fallback for a registry-supplied HLS manifest.
 if [ -z "$STREAM_URL" ] && [[ "$SOURCE_OVERRIDE" == https://*".m3u8"* ]]; then
   STREAM_URL="$SOURCE_OVERRIDE"
   echo "::notice::BIGO host $HOST using Firecrawl-verified HLS manifest through Streamlink"
