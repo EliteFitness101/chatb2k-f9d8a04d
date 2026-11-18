@@ -207,8 +207,8 @@ except Exception:
 page = html.unescape(page)
 page = page.replace(r"\\/", "/").replace(r"\\u0026", "&").replace(r"\\x26", "&")
 patterns = (
-    r"""https?://[^"'<>\\s]+?\\.m3u8(?:\\?[^"'<>\\s]*)?""",
-    r"""(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["']?\\s*[:=]\\s*["']([^"']+)""",
+    r"""https?://[^"'<> \t\r\n]+?\.m3u8(?:\?[^"'<> \t\r\n]*)?""",
+    r"""(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["']?\s*[:=]\s*["']([^"']+)""",
 )
 matches = []
 for pattern in patterns:
