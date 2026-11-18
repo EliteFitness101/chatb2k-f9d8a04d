@@ -17,6 +17,37 @@ BIGO_ROOM_URL="https://www.bigo.tv/${HOST}"
 SOURCE_URL="${BIGO_ROOM_URL}"
 PAGE_URL="$BIGO_ROOM_URL"
 PAGE_KIND="canonical room page"
+
+# Resolve the supplied BIGO share page before API/Streamlink attempts.
+# The share URL is a page, not a media URL; extract its current HLS manifest.
+PRE_RESOLVED_HLS=""
+if [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; then
+  SHARE_PAGE="/tmp/bigo-${HOST}-share.html"
+  rm -f "$SHARE_PAGE"
+  if curl -L --fail --silent --show-error --retry 2 --retry-delay 1 --max-time 30 "$SOURCE_OVERRIDE" -o "$SHARE_PAGE"; then
+    PRE_RESOLVED_HLS="$(python3 - "$SHARE_PAGE" <<'PYSHARE'
+import html, re, sys
+try:
+    page = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+except OSError:
+    page = ""
+page = html.unescape(page)
+page = page.replace(r"\/", "/").replace(r"\u0026", "&")
+pattern = re.compile(r"""https?://[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""", re.I)
+matches = pattern.findall(page)
+print(next((url for url in matches if url.startswith("https://")), ""))
+PYSHARE
+    )"
+    if [ -n "$PRE_RESOLVED_HLS" ]; then
+      echo "::notice::BIGO host $HOST resolved a fresh HLS manifest from the supplied share page"
+    else
+      echo "::notice::BIGO host $HOST share page returned no extractable HLS manifest"
+    fi
+  else
+    echo "::notice::BIGO host $HOST supplied share page could not be fetched; continuing normal discovery"
+  fi
+  rm -f "$SHARE_PAGE"
+fi
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
 # hls_src to the older unauthenticated getInternalStudioInfo request.
@@ -116,6 +147,10 @@ PY
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
 STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hls_src",""))' "$INFO")"
+if [ -n "$PRE_RESOLVED_HLS" ]; then
+  STREAM_URL="$PRE_RESOLVED_HLS"
+  echo "::notice::BIGO host $HOST prioritizing share-page HLS manifest over API metadata"
+fi
 DISCOVERY_METHOD="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("discovery_method","unknown"))' "$INFO")"
 DISCOVERY_ALIVE="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1]).get("alive",False)).lower())' "$INFO")"
 DISCOVERY_ERROR="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("discovery_error",""))' "$INFO")"
