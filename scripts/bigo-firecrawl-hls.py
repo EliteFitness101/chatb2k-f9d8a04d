@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve a fresh BIGO HLS manifest from the canonical room page via Firecrawl.
-
-The Firecrawl result is treated as untrusted input: the requested page identity,
-response status, HTTPS scheme, manifest path, and public destination are checked
-before a URL is handed to the capture script. Signed URLs are never printed.
-"""
+"""Resolve a fresh BIGO HLS manifest from a canonical BIGO room page via Firecrawl."""
 import argparse
 import html
 import ipaddress
@@ -12,14 +7,17 @@ import json
 import os
 import re
 import socket
-import sys
 from urllib.parse import urlparse
 
 import requests
 
 
+def normalize(value):
+    slash = chr(92)
+    return html.unescape(value).replace(slash + "/", "/").replace(slash + "u0026", "&").replace(slash + "x26", "&")
+
+
 def valid_manifest(value):
-    value = html.unescape(value).replace(r"\\/", "/").replace(r"\\u0026", "&")
     try:
         parsed = urlparse(value)
         if parsed.scheme != "https" or not parsed.hostname or not parsed.path.lower().endswith(".m3u8"):
@@ -34,21 +32,18 @@ def valid_manifest(value):
             if not ip.is_global:
                 return False
         except ValueError:
-            # Resolve DNS and reject private/loopback destinations. BIGO has used
-            # provider CDNs as well as its own domains, so do not hard-code one CDN.
             addresses = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
             if not addresses:
                 return False
             for item in addresses:
-                address = ipaddress.ip_address(item[4][0])
-                if not address.is_global:
+                if not ipaddress.ip_address(item[4][0]).is_global:
                     return False
         return True
     except (ValueError, OSError):
         return False
 
 
-def discover(host_id, api_key, fallback_url):
+def discover(host_id, api_key):
     page_url = "https://www.bigo.tv/" + host_id
     response = requests.post(
         "https://api.firecrawl.dev/v2/scrape",
@@ -72,17 +67,17 @@ def discover(host_id, api_key, fallback_url):
     source_path = parsed_source.path.strip("/").split("/")
     if not source_path or source_path[0] != host_id:
         raise RuntimeError("Firecrawl source page does not match requested BIGO host ID")
-    raw = html.unescape(data.get("rawHtml") or "")
-    raw = raw.replace(r"\\/", "/").replace(r"\\u0026", "&").replace(r"\\x26", "&")
+    raw = normalize(data.get("rawHtml") or "")
     patterns = (
-        r"""https?://[^"'<>\\s]+?\\.m3u8(?:\\?[^"'<>\\s]*)?""",
-        r"""(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["']?\\s*[:=]\\s*["']([^"']+)""",
+        r"""https?://[^"'<> ]+[.]m3u8(?:[?][^"'<> ]*)?""",
+        r"""(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["']?[ ]*[:=][ ]*["']([^"']+)""",
     )
     candidates = []
     for pattern in patterns:
-        candidates.extend(re.findall(pattern, raw, re.IGNORECASE))
+        for match in re.findall(pattern, raw, re.IGNORECASE):
+            candidates.append(match[0] if isinstance(match, tuple) else match)
     for candidate in candidates:
-        candidate = candidate.replace(r"\\u0026", "&").replace(r"\\/", "/")
+        candidate = normalize(candidate).strip().rstrip(");,")
         if valid_manifest(candidate):
             return candidate, {"status": "hls_resolved", "source_page": page_url,
                                "manifest_host": urlparse(candidate).hostname}
@@ -112,7 +107,7 @@ def main():
                 report["results"].append({"host_id": host_id, "status": "firecrawl_key_missing"})
                 continue
             try:
-                manifest, evidence = discover(host_id, api_key, fallback_url)
+                manifest, evidence = discover(host_id, api_key)
                 output.append("|".join((host_id, manifest, "firecrawl")))
                 report["results"].append({"host_id": host_id, **evidence})
             except Exception as exc:
