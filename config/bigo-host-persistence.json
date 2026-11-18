@@ -2,7 +2,7 @@
   "schema_version": 1,
   "config_role": "operational_host_inventory_and_capture_provenance",
   "status": "persisted_in_repository",
-  "updated_at": "2026-11-10T23:54:53.228Z",
+  "updated_at": "2026-11-18T00:00:00.000Z",
   "source_of_truth": {
     "active_host_inventory": "Supabase public.bigo_sources returned live by the BIGO live pipeline source-registry endpoint on every capture cycle; no fixed host count.",
     "additional_capture_ids": [
@@ -16,11 +16,9 @@
     "workflow": ".github/workflows/bigo-live-automation.yml",
     "capture_script": "scripts/bigo-capture-host.sh",
     "method": "Resolve each host from the live source registry; attempt tokenized BIGO room metadata and Streamlink capture; normalize and QA the media; upload processed video and cover to Vercel Blob; perform public GET and SHA-256 byte-for-byte read-back; optionally archive raw media and metadata to Dropbox and optionally sync Drive.",
-    "session_cookie": {
-      "required": "only_for_rooms_requiring_authenticated_access",
-      "behavior_when_absent": "Attempt public room discovery; record per-host token/authentication failures without blocking other hosts. Configure BIGO_SESSION_COOKIE as a GitHub Actions encrypted secret for authenticated rooms; never print or persist its value.",
-      "persistence": false,
-      "storage_location_if_configured": "GitHub Actions encrypted secret only"
+    "public_capture_authentication": {
+      "user_session_cookie_required": false,
+      "method": "Public BIGO metadata and stream discovery with tokenized and legacy API, Streamlink, canonical-page HLS, identity-matched /sid/ and direct FFmpeg HLS fallbacks."
     },
     "credential_storage": "Keep Dropbox OAuth credentials and any optional BIGO session cookie in GitHub Actions encrypted secrets; never store their values in Dropbox manifests or this config.",
     "storage": "Vercel Blob is the primary public delivery store; Dropbox is optional secondary archival; Google Drive is optional secondary sync."
