@@ -32,6 +32,11 @@ COOKIE=os.environ.get('BIGO_COOKIE_HEADER','').strip()
 # Reuse one browser-shaped session across token and room-info requests so BIGO
 # can retain any clearance cookies it issues. A user cookie remains optional.
 session=requests.Session()
+# Route BIGO API requests through an explicitly configured, authorized egress proxy.
+# This session is used only for BIGO metadata/token endpoints; Dropbox remains direct.
+BIGO_PROXY=os.environ.get('BIGO_EGRESS_PROXY','').strip()
+if BIGO_PROXY:
+    session.proxies.update({'http':BIGO_PROXY,'https':BIGO_PROXY})
 def request_headers(accept='*/*', authenticated=True):
     h={'User-Agent':UA,'Accept':accept,'Referer':f'https://www.bigo.tv/{host}','Origin':'https://www.bigo.tv'}
     if COOKIE and authenticated:
