@@ -119,6 +119,48 @@ STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hl
 DISCOVERY_METHOD="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("discovery_method","unknown"))' "$INFO")"
 DISCOVERY_ALIVE="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1]).get("alive",False)).lower())' "$INFO")"
 DISCOVERY_ERROR="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("discovery_error",""))' "$INFO")"
+# Resolve an explicitly supplied BIGO share page BEFORE the Streamlink profile lookup.
+# A /sid/ page can carry the only current signed playback manifest; do not wait for
+# the profile API or a failed capture attempt to inspect it.
+if [ -z "$STREAM_URL" ] && { [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; }; then
+  SHARE_PAGE="/tmp/bigo-${HOST}-share-first.html"
+  rm -f "$SHARE_PAGE"
+  if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$SOURCE_OVERRIDE" -o "$SHARE_PAGE"; then
+    SHARE_HLS="$(python3 - "$SHARE_PAGE" <<'PYSHARE'
+import html, json, re, sys
+try:
+    page=open(sys.argv[1],encoding="utf-8",errors="replace").read()
+except Exception:
+    page=""
+page=html.unescape(page)
+for old,new in ((r"\\/", "/"), (r"\\u0026", "&"), (r"\\x26", "&"), (r"\\\\/", "/")):
+    page=page.replace(old,new)
+patterns=(
+    r'https?://[^"\\'<>\\s]+?\\.m3u8(?:\\?[^"\\'<>\\s]*)?',
+    r'(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["\\']?\\s*[:=]\\s*["\\']([^"\\']+)',
+)
+found=[]
+for pattern in patterns:
+    for match in re.findall(pattern,page,re.I):
+        value=match if isinstance(match,str) else match[0]
+        value=value.replace(r"\\u0026","&").replace(r"\\/","/")
+        if value.startswith("https://") and ".m3u8" in value.lower():
+            found.append(value)
+if found:
+    print(found[0])
+PYSHARE
+    )"
+    if [ -n "$SHARE_HLS" ]; then
+      STREAM_URL="$SHARE_HLS"
+      echo "::notice::BIGO host $HOST resolved signed-share HLS before Streamlink profile lookup"
+    else
+      echo "::notice::BIGO host $HOST signed-share page loaded but contained no HLS manifest"
+    fi
+  else
+    echo "::notice::BIGO host $HOST signed-share page could not be fetched; continuing with existing discovery"
+  fi
+  rm -f "$SHARE_PAGE"
+fi
 echo "::notice::BIGO discovery host=$HOST method=$DISCOVERY_METHOD alive=$DISCOVERY_ALIVE hls_available=$([ -n "$STREAM_URL" ] && echo true || echo false) error_type=$([ -n "$DISCOVERY_ERROR" ] && echo present || echo none)"
 # A fresh Firecrawl HLS manifest is authoritative for this capture attempt.
 # Pass it into Streamlink immediately so BIGO HLS decryption is used before FFmpeg fallback.
