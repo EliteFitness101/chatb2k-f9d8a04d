@@ -127,7 +127,30 @@ DISCOVERY_ERROR="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).ge
 # Resolve an explicitly supplied BIGO share page BEFORE the Streamlink profile lookup.
 # A /sid/ page can carry the only current signed playback manifest; do not wait for
 # the profile API or a failed capture attempt to inspect it.
-if [ -z "$STREAM_URL" ] && { [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; }; then
+# A signed /sid/ URL is usable only when its embedded host identity matches HOST.
+# Registry rows can contain stale or cross-linked share URLs; reject those before
+# fetching playback metadata so a different broadcaster is never attributed to HOST.
+SHARE_SOURCE_ALLOWED=true
+if [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
+  SHARE_SOURCE_ALLOWED="$(python3 - "$SOURCE_OVERRIDE" "$HOST" <<'PYSIDCHECK'
+import sys
+from urllib.parse import urlparse, parse_qs
+try:
+    u=urlparse(sys.argv[1])
+    q=parse_qs(u.query)
+    ok=(u.scheme=="https" and u.hostname=="www.bigo.tv" and
+        u.path.startswith("/sid/") and
+        q.get("h",[""])[0].strip().lower()==sys.argv[2].strip().lower())
+    print("true" if ok else "false")
+except Exception:
+    print("false")
+PYSIDCHECK
+)"
+  if [ "$SHARE_SOURCE_ALLOWED" != true ]; then
+    echo "::warning::BIGO host $HOST rejected a signed share URL with a different or missing host identity; using canonical room discovery."
+  fi
+fi
+if [ -z "$STREAM_URL" ] && [ "$SHARE_SOURCE_ALLOWED" = true ] && { [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; }; then
   SHARE_PAGE="/tmp/bigo-${HOST}-share-first.html"
   rm -f "$SHARE_PAGE"
   SHARE_CURL_ARGS=()
