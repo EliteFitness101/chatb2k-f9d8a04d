@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Cookie-optional BIGO Streamlink compatibility shim.
+"""Cookie-optional BIGO Streamlink capture shim.
 
-Streamlink 8.6+ changed the built-in BIGO plugin to require a web playback
-token. This shim keeps the current Streamlink BIGO HLS parser/decryptor, but
-restores its prior token-free metadata request. BIGO_COOKIE_HEADER remains
-optional; no cookie or token is required by this path.
+Room discovery uses the installed Streamlink BIGO plugin, including its current
+web playback-token flow. Explicitly resolved HLS manifests use Streamlink's
+BIGO HLS reader/decryptor. BIGO_COOKIE_HEADER remains optional.
 """
 import sys
 
@@ -39,7 +38,7 @@ def main():
         streams = plugin.streams()
         stream = streams.get("live") or streams.get("best")
         if stream is None:
-            raise SystemExit("BIGO legacy metadata returned no live HLS stream")
+            raise SystemExit("Streamlink native BIGO resolver returned no live HLS stream")
 
     with stream.open() as reader:
         while True:
