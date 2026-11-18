@@ -13,11 +13,11 @@ on:
     inputs:
       bigo_host_id:
         description: "BIGO host ID from the supplied share link"
-        required: true
+        required: false
         type: string
       bigo_share_url:
         description: "BIGO share URL (for example https://www.bigo.tv/sid/...)"
-        required: true
+        required: false
         type: string
 
 permissions:
