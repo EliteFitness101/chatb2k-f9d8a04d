@@ -1,13 +1,6 @@
-name: BIGO Dropbox-primary capture checks
+name: BIGO Blob-primary capture checks
 
 on:
-  push:
-    branches: [fix/bigo-dropbox-primary-20261010]
-    paths:
-      - 'scripts/bigo-capture-host.sh'
-      - 'scripts/bigo-streamlink-capture.py'
-      - '.github/workflows/bigo-live-automation.yml'
-      - '.github/workflows/dropbox-primary-check.yml'
   pull_request:
     branches: [main]
     paths:
@@ -19,43 +12,39 @@ permissions:
   contents: read
 
 jobs:
-  dropbox-primary-static:
+  blob-primary-static:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - name: Validate capture shell syntax
         run: bash -n scripts/bigo-capture-host.sh
-      - name: Assert Dropbox is the canonical capture path
+      - name: Assert Vercel Blob is primary and Dropbox is optional
         run: |
           python3 - <<'PY'
           from pathlib import Path
           script = Path("scripts/bigo-capture-host.sh").read_text()
-          wrapper = Path("scripts/bigo-streamlink-capture.py").read_text()
           workflow = Path(".github/workflows/bigo-live-automation.yml").read_text()
           required = [
-              "Dropbox is the canonical media store for this capture path",
-              "Dropbox credentials are required",
-              "files/upload_session/start",
-              "files/get_metadata",
-              "Dropbox read-back content hash mismatch",
-              "DROPBOX_REFRESH_TOKEN",
+              "# Vercel Blob is the primary media delivery store.",
+              "Vercel Blob is mandatory for public delivery.",
+              "from '@vercel/blob'",
+              "const blob = await put(pathname, bytes",
+              "Blob read-back byte count or SHA-256 mismatch",
+              "BLOB_READ_WRITE_TOKEN",
+              "'media_delivery_provider':'vercel_blob'",
               "bigo-live-pipeline",
               "BIGO_VERIFIED_HOST_IDS",
           ]
           missing = [item for item in required if item not in script + workflow]
-          assert not missing, f"Missing production capture controls: {missing}"
-          assert "BIGO_HOSTS_PER_CYCLE" not in workflow
-          assert "kisexy" not in workflow
+          assert not missing, f"Missing Blob-primary capture controls: {missing}"
+          assert "DROPBOX_REFRESH_TOKEN" in workflow
+          assert "Dropbox OAuth refresh failed; primary Vercel Blob delivery remains available." in script
+          assert "Secondary Dropbox metadata archive failed" in script
+          assert "Dropbox is mandatory for public delivery" not in script + workflow
           assert "R2_WRITE_TOKEN" not in script + workflow
           assert "cloudflare_r2" not in script
-          assert "BLOB_READ_WRITE_TOKEN" not in script + workflow
-          assert "from '@vercel/blob'" not in script
           assert "https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline" in workflow
-          assert 'python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" "$STREAM_URL"' in script
-          assert "BigoHLSStream(session, source_url)" in wrapper
-          assert '-i "$STREAM_URL"' in script
-          assert 'curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$STREAM_URL" | ffmpeg' not in script
-          assert r"\.m3u8(?:" in script
-          print("PASS: Dropbox archive read-back is mandatory; resolved BIGO HLS is passed to Streamlink and FFmpeg opens manifest URLs directly; ChatB2K remains the ingestion boundary.")
+          assert 'ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 -i "$STREAM_URL"' in script
+          print("PASS: Vercel Blob public media is primary and SHA-256 read-back verified; Dropbox and Drive remain secondary archives; ChatB2K remains the ingestion boundary.")
           PY

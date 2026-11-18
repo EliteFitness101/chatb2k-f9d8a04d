@@ -38,8 +38,9 @@ jobs:
           assert 'SOURCE_URL="${BIGO_ROOM_URL}"' in capture
           assert 'PAGE_URL="$BIGO_ROOM_URL"' in capture
           assert 'PAGE_KIND="canonical room page"' in capture
-          assert 'https://www.bigo.tv/sid/*' in capture
-          assert 'discovered HLS manifest from signed /sid/ page' in capture
+          assert 'u.path.startswith("/sid/")' in capture
+          assert 'discovered HLS manifest from $PAGE_KIND' in capture
+          assert 'discovered HLS from identity-matched sid page' in capture
           assert 'SOURCE_OVERRIDE" == https://slink.bigovideo.tv/*' in capture
           assert "'original_url':source_url" not in capture
           import py_compile
@@ -58,7 +59,8 @@ jobs:
           assert 'return {accepted:true,highlight_id:old.id' in pipeline
           assert 'pipeline_policy_version' not in workflow
           assert 'provenance-config.outcome' not in workflow
-          assert 'storage_only:false' in workflow and 'storage_only:true' in workflow
+          assert 'CAPTURE_STORAGE_ONLY:' in workflow
+          assert 'storage_only: ($storage_only == "true")' in workflow
           assert 'BIGO_VERIFIED_HOST_IDS' in workflow
           assert 'BIGO_VERIFIED_HOST_IDS' in workflow
           print('PASS: all captured hosts are ingested; publication eligibility is evaluated at publishing; rights evidence and secret separation are preserved.')
