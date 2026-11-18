@@ -1,48 +1,14 @@
 #!/usr/bin/env python3
-"""Cookie-optional BIGO Streamlink compatibility shim.
+"""Cookie-optional BIGO Streamlink capture shim.
 
-Streamlink 8.6+ changed the built-in BIGO plugin to require a web playback
-token. This shim keeps the current Streamlink BIGO HLS parser/decryptor, but
-restores its prior token-free metadata request. BIGO_COOKIE_HEADER remains
-optional; no cookie or token is required by this path.
+Room discovery uses the installed Streamlink BIGO plugin, including its current
+web playback-token flow. Explicitly resolved HLS manifests use Streamlink's
+BIGO HLS reader/decryptor. BIGO_COOKIE_HEADER remains optional.
 """
 import sys
 
 from streamlink import Streamlink
-from streamlink.plugin.api import validate
 from streamlink.plugins.bigo import Bigo, BigoHLSStream
-
-
-def legacy_get_streams(self):
-    self.id, self.author, self.category, self.title, hls_url = self.session.http.post(
-        self._URL_API,
-        params={"siteId": self.match["site_id"], "verify": ""},
-        schema=validate.Schema(
-            validate.parse_json(),
-            {
-                "code": 0,
-                "msg": "success",
-                "data": {
-                    "roomId": validate.any(None, str),
-                    "clientBigoId": validate.any(None, str),
-                    "gameTitle": str,
-                    "roomTopic": str,
-                    "hls_src": validate.any(None, "", validate.url()),
-                },
-            },
-            validate.union_get(
-                ("data", "roomId"),
-                ("data", "clientBigoId"),
-                ("data", "gameTitle"),
-                ("data", "roomTopic"),
-                ("data", "hls_src"),
-            ),
-        ),
-    )
-    if not self.id or not hls_url:
-        return
-    # Retain Streamlink 8.6+'s BIGO web-protection MPEG-TS decryption.
-    yield "live", BigoHLSStream(self.session, hls_url)
 
 
 def main():
@@ -60,19 +26,19 @@ def main():
     if cookie:
         session.http.headers.update({"Cookie": cookie})
 
-    # Replace only the token-required resolver; keep the installed plugin's
-    # current HLS stream implementation and packet decryption unchanged.
-    Bigo._get_streams = legacy_get_streams
     if source_url and ".m3u8" in source_url.lower():
         # Use Streamlink's BIGO HLS reader/decryptor on the fresh signed manifest.
         # This preserves segment resolution and BIGO packet handling.
         stream = BigoHLSStream(session, source_url)
     else:
+        # Use Streamlink's installed native BIGO resolver. Do not monkeypatch
+        # _get_streams: newer Streamlink releases obtain the required web token
+        # here, and the old token-free metadata endpoint no longer returns HLS.
         plugin = Bigo(session, url)
         streams = plugin.streams()
         stream = streams.get("live") or streams.get("best")
         if stream is None:
-            raise SystemExit("BIGO legacy metadata returned no live HLS stream")
+            raise SystemExit("Streamlink native BIGO resolver returned no live HLS stream")
 
     with stream.open() as reader:
         while True:
