@@ -8,6 +8,7 @@ on:
       - '.github/workflows/bigo-live-automation.yml'
       - 'scripts/bigo-capture-host.sh'
       - 'scripts/bigo-streamlink-capture.py'
+      - 'scripts/bigo-firecrawl-hls.py'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -37,6 +38,7 @@ env:
   # BIGO currently rejects playback-token requests from some egress regions.
   # Set this to an authorized Asia-region HTTPS/SOCKS proxy; Dropbox/Supabase stay direct.
   BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
+  FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
   BIGO_TARGET_HOST_ID: ${{ github.event.inputs.bigo_host_id }}
   BIGO_TARGET_SHARE_URL: ${{ github.event.inputs.bigo_share_url }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
