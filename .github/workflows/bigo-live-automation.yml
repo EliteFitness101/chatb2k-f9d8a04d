@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/bigo-live-automation.yml'
       - 'scripts/bigo-capture-host.sh'
+      - 'scripts/bigo-streamlink-capture.py'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
