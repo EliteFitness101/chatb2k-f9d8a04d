@@ -199,14 +199,26 @@ if [ -z "$STREAM_URL" ] && [[ "$BIGO_ROOM_URL" == https://www.bigo.tv/* ]]; then
   rm -f "$PAGE"
   if curl -A "Mozilla/5.0" "${CURL_AUTH_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$BIGO_ROOM_URL" -o "$PAGE"; then
     DISCOVERED_HLS="$(python3 - "$PAGE" <<'PYHLS'
-import re,sys
+import html, re, sys
 try:
-    page=open(sys.argv[1],encoding="utf-8",errors="replace").read()
+    page = open(sys.argv[1], encoding="utf-8", errors="replace").read()
 except Exception:
-    page=""
-page=page.replace(r"\\/", "/").replace(r"\\u0026", "&").replace(r"\\\\/", "/")
-    r"""https?://[^\s"]+?\.m3u8(?:\?[^\s"]*)?""",
-print(next((u for u in matches if u.startswith("https://")), ""))
+    page = ""
+page = html.unescape(page)
+page = page.replace(r"\\/", "/").replace(r"\\u0026", "&").replace(r"\\x26", "&")
+patterns = (
+    r'https?://[^"\\'<>\\s]+?\\.m3u8(?:\\?[^"\\'<>\\s]*)?',
+    r'''(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["']?\\s*[:=]\\s*["']([^"']+)''',
+)
+matches = []
+for pattern in patterns:
+    matches.extend(re.findall(pattern, page, re.I))
+for match in matches:
+    url = match if isinstance(match, str) else match[0]
+    url = url.replace(r"\\u0026", "&").replace(r"\\/", "/")
+    if url.startswith("https://") and ".m3u8" in url.lower():
+        print(url)
+        break
 PYHLS
     )"
     if [ -n "$DISCOVERED_HLS" ]; then
