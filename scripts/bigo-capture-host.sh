@@ -125,9 +125,13 @@ DISCOVERY_ERROR="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).ge
 if [ -z "$STREAM_URL" ] && { [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; }; then
   SHARE_PAGE="/tmp/bigo-${HOST}-share-first.html"
   rm -f "$SHARE_PAGE"
-  if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 2 --retry-delay 1 "${CURL_AUTH_ARGS[@]}" "$SOURCE_OVERRIDE" -o "$SHARE_PAGE"; then
+  SHARE_CURL_ARGS=()
+  if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
+    SHARE_CURL_ARGS=(-H "Cookie: ${BIGO_COOKIE_HEADER}")
+  fi
+  if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 2 --retry-delay 1 "${SHARE_CURL_ARGS[@]}" "$SOURCE_OVERRIDE" -o "$SHARE_PAGE"; then
     SHARE_HLS="$(python3 - "$SHARE_PAGE" <<'PYSHARE'
-import html, json, re, sys
+import html, re, sys
 try:
     page=open(sys.argv[1],encoding="utf-8",errors="replace").read()
 except Exception:
@@ -136,8 +140,8 @@ page=html.unescape(page)
 for old,new in ((r"\\/", "/"), (r"\\u0026", "&"), (r"\\x26", "&"), (r"\\\\/", "/")):
     page=page.replace(old,new)
 patterns=(
-    r'https?://[^"\\'<>\\s]+?\\.m3u8(?:\\?[^"\\'<>\\s]*)?',
-    r'(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["\\']?\\s*[:=]\\s*["\\']([^"\\']+)',
+    r"""https?://[^"'<>s]+?\.m3u8(?:\?[^"'<>s]*)?""",
+    r"""(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["']?\s*[:=]\s*["']([^"']+)""",
 )
 found=[]
 for pattern in patterns:
