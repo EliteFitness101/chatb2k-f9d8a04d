@@ -137,17 +137,17 @@ try:
 except Exception:
     page=""
 page=html.unescape(page)
-for old,new in ((r"\\/", "/"), (r"\\u0026", "&"), (r"\\x26", "&"), (r"\\\\/", "/")):
+for old,new in ((r"\/", "/"), (r"\u0026", "&"), (r"\x26", "&"), (r"\\/", "/")):
     page=page.replace(old,new)
 patterns=(
-    r"""https?://[^"'<>s]+?\.m3u8(?:\?[^"'<>s]*)?""",
+    r"""https?://[^\s"]+?\.m3u8(?:\?[^\s"]*)?""",
     r"""(?:hls_src|hlsSrc|play_url|playUrl|stream_url|streamUrl)["']?\s*[:=]\s*["']([^"']+)""",
 )
 found=[]
 for pattern in patterns:
     for match in re.findall(pattern,page,re.I):
         value=match if isinstance(match,str) else match[0]
-        value=value.replace(r"\\u0026","&").replace(r"\\/","/")
+        value=value.replace(r"\u0026","&").replace(r"\/","/")
         if value.startswith("https://") and ".m3u8" in value.lower():
             found.append(value)
 if found:
@@ -205,7 +205,7 @@ try:
 except Exception:
     page=""
 page=page.replace(r"\\/", "/").replace(r"\\u0026", "&").replace(r"\\\\/", "/")
-matches=re.findall(r"""https?://[^\\s"'<>`]+?\\.m3u8(?:\\?[^\\s"'<>`]*)?""", page, re.I)
+    r"""https?://[^\s"]+?\.m3u8(?:\?[^\s"]*)?""",
 print(next((u for u in matches if u.startswith("https://")), ""))
 PYHLS
     )"
