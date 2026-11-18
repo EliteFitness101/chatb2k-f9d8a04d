@@ -3,6 +3,7 @@ set -euo pipefail
 
 HOST="${1:-}"
 SOURCE_OVERRIDE="${2:-}"
+SOURCE_OVERRIDE_KIND="${3:-fallback}"
 if [ -z "$HOST" ]; then exit 2; fi
 
 RESULT="/tmp/bigo-results/${HOST}.json"
@@ -127,7 +128,30 @@ DISCOVERY_ERROR="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).ge
 # Resolve an explicitly supplied BIGO share page BEFORE the Streamlink profile lookup.
 # A /sid/ page can carry the only current signed playback manifest; do not wait for
 # the profile API or a failed capture attempt to inspect it.
-if [ -z "$STREAM_URL" ] && { [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; }; then
+# A signed /sid/ URL is usable only when its embedded host identity matches HOST.
+# Registry rows can contain stale or cross-linked share URLs; reject those before
+# fetching playback metadata so a different broadcaster is never attributed to HOST.
+SHARE_SOURCE_ALLOWED=true
+if [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]]; then
+  SHARE_SOURCE_ALLOWED="$(python3 - "$SOURCE_OVERRIDE" "$HOST" <<'PYSIDCHECK'
+import sys
+from urllib.parse import urlparse, parse_qs
+try:
+    u=urlparse(sys.argv[1])
+    q=parse_qs(u.query)
+    ok=(u.scheme=="https" and u.hostname=="www.bigo.tv" and
+        u.path.startswith("/sid/") and
+        q.get("h",[""])[0].strip().lower()==sys.argv[2].strip().lower())
+    print("true" if ok else "false")
+except Exception:
+    print("false")
+PYSIDCHECK
+)"
+  if [ "$SHARE_SOURCE_ALLOWED" != true ]; then
+    echo "::warning::BIGO host $HOST rejected a signed share URL with a different or missing host identity; using canonical room discovery."
+  fi
+fi
+if [ -z "$STREAM_URL" ] && [ "$SHARE_SOURCE_ALLOWED" = true ] && { [[ "$SOURCE_OVERRIDE" == https://www.bigo.tv/sid/* ]] || [[ "$SOURCE_OVERRIDE" == https://slink.bigovideo.tv/* ]]; }; then
   SHARE_PAGE="/tmp/bigo-${HOST}-share-first.html"
   rm -f "$SHARE_PAGE"
   SHARE_CURL_ARGS=()
@@ -171,8 +195,14 @@ PYSHARE
   rm -f "$SHARE_PAGE"
 fi
 echo "::notice::BIGO discovery host=$HOST method=$DISCOVERY_METHOD alive=$DISCOVERY_ALIVE hls_available=$([ -n "$STREAM_URL" ] && echo true || echo false) error_type=$([ -n "$DISCOVERY_ERROR" ] && echo present || echo none)"
-# A fresh Firecrawl HLS manifest is authoritative for this capture attempt.
-# Pass it into Streamlink immediately so BIGO HLS decryption is used before FFmpeg fallback.
+# A freshly extracted Firecrawl HLS manifest is authoritative for this run.
+# It is passed separately from the source URL so a cached registry manifest cannot be
+# mistaken for a fresh discovery result.
+if [ "$SOURCE_OVERRIDE_KIND" = "firecrawl" ] && [[ "$SOURCE_OVERRIDE" == https://*".m3u8"* ]]; then
+  STREAM_URL="$SOURCE_OVERRIDE"
+  echo "::notice::BIGO host $HOST using fresh Firecrawl-verified HLS manifest"
+fi
+# Preserve the existing fallback for a registry-supplied HLS manifest.
 if [ -z "$STREAM_URL" ] && [[ "$SOURCE_OVERRIDE" == https://*".m3u8"* ]]; then
   STREAM_URL="$SOURCE_OVERRIDE"
   echo "::notice::BIGO host $HOST using Firecrawl-verified HLS manifest through Streamlink"
