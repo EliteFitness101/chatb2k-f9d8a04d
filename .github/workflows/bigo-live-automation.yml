@@ -1,131 +1,157 @@
+
 name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
+run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
 # Production capture workflow — Dropbox is canonical media storage; ChatB2K ingests verified Dropbox URLs for enrichment, Buffer, and Drive archive.
 
 on:
+  # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
   push:
     branches: [main]
     paths:
       - '.github/workflows/bigo-live-automation.yml'
       - 'scripts/bigo-capture-host.sh'
-      - 'scripts/bigo-streamlink-capture.py'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
-    inputs:
-      bigo_host_id:
-        description: "BIGO host ID from the supplied share link"
-        required: false
-        type: string
-      bigo_share_url:
-        description: "BIGO share URL (for example https://www.bigo.tv/sid/...)"
-        required: false
-        type: string
 
 permissions:
   contents: read
   id-token: write
 
+# A single capture cycle at a time prevents five-minute schedules from stacking.
+concurrency:
+  group: bigo-live-capture
+  cancel-in-progress: false
+
 env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
-  BIGO_LIVE_PROBE_HOST_IDS: ${{ secrets.BIGO_LIVE_PROBE_HOST_IDS }}
+  BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
+  R2_WRITE_TOKEN: ${{ secrets.R2_WRITE_TOKEN }}
+  R2_MEDIA_BASE: ${{ secrets.PRODUCTION_MEDIA_URL }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
-  BIGO_COOKIE_HEADER: ${{ secrets.BIGO_COOKIE_HEADER }}
-  # BIGO currently rejects playback-token requests from some egress regions.
-  # Set this to an authorized Asia-region HTTPS/SOCKS proxy; Dropbox/Supabase stay direct.
-  BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
-  BIGO_TARGET_HOST_ID: ${{ github.event.inputs.bigo_host_id }}
-  BIGO_TARGET_SHARE_URL: ${{ github.event.inputs.bigo_share_url }}
+  DRIVE_UPLOAD_URL: https://chatb2k.resofit.fit/api/google/drive-mcp/bigo-upload-session
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
+  CAPTURE_STORAGE_ONLY: ${{ github.event_name == 'push' }}
 
 jobs:
   capture-transform-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
-      - name: Install capture tools (Dropbox archive)
+      - uses: actions/checkout@v4
+
+      - name: Install capture tools
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
-
-      - name: Set up Chrome browser (no Snap dependency)
-        id: setup-chrome
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: stable
+          ffmpeg -version | head -n 1
+          streamlink --version
 
       - name: Capture, normalize and prepare ChatB2K batch
+        id: capture
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${BIGO_SESSION_COOKIE:-}" ]; then
+            echo "::warning::BIGO_SESSION_COOKIE is not configured; BIGO rooms requiring login may fail capture."
+          else
+            echo "::notice::BIGO authenticated-session secret is present; value is not logged."
+          fi
+          if [ -z "${R2_WRITE_TOKEN:-}" ]; then
+            echo "::notice::R2 writer secret is absent; capture and verified archive will continue using available providers."
+          else
+            echo "::notice::R2 writer secret is present; value is not logged."
+          fi
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json
-          # Supabase returns only active, capture-enabled source records.
-          # Capture eligibility is independent from publication eligibility:
-          # raw capture may proceed for registry-approved sources; publishing is
-          # separately restricted by BIGO_VERIFIED_HOST_IDS in the ingestion step.
-          python3 - <<'PY'
-          import json, os, re
-          sources=json.load(open("/tmp/bigo-sources.json"))
+          if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
+            REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
+          elif [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ] && curl -fsS -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
+            # The Edge Function explicitly permits this legacy key for source-registry GETs.
+            # Keep the key out of logs and never use it for publishing ingestion.
+            REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
+            echo "::notice::Supabase BIGO source registry read succeeded via configured legacy read credential."
+          else
+            REGISTRY_HOSTS=""
+            printf '{"provenance_policy_version":0,"hosts":[]}' > /tmp/bigo-sources.json
+            echo "::warning::Supabase BIGO source registry lookup failed; using BIGO_HOST_IDS fallback."
+          fi
+          HOSTS="$(python3 - "${BIGO_HOST_IDS:-}" "${BIGO_VERIFIED_HOST_IDS:-}" "${REGISTRY_HOSTS}" <<'PY'
+          import sys
+          allow=[]
+          for raw in (sys.argv[1] + "\n" + sys.argv[2]).replace(",", "\n").splitlines():
+              host=raw.strip()
+              if host and host not in allow:
+                  allow.append(host)
           registry={}
-          for item in sources.get("hosts",[]):
-              host=str(item.get("bigo_id") or "").strip()
-              if not host or not re.fullmatch(r"[A-Za-z0-9._-]+",host):
-                  continue
-              source=str(item.get("source_url") or "").strip() or ("https://www.bigo.tv/"+host)
-              registry[host]=source
-          def parse_ids(value):
-              return [x.strip() for x in value.replace(",","\n").splitlines() if x.strip()]
-          verified=set(parse_ids(os.environ.get("BIGO_VERIFIED_HOST_IDS","")))
-          probe=parse_ids(os.environ.get("BIGO_LIVE_PROBE_HOST_IDS",""))
-          candidates=dict(registry)
-          target_host=os.environ.get("BIGO_TARGET_HOST_ID","").strip()
-          target_url=os.environ.get("BIGO_TARGET_SHARE_URL","").strip()
-          if target_host or target_url:
-              if not re.fullmatch(r"[A-Za-z0-9._-]+",target_host):
-                  raise SystemExit("Invalid BIGO_TARGET_HOST_ID")
-              if not (target_url.startswith("https://www.bigo.tv/sid/") or target_url.startswith("https://slink.bigovideo.tv/")):
-                  raise SystemExit("BIGO_TARGET_SHARE_URL must be an approved BIGO share URL")
-              candidates[target_host]=target_url
-          for host in probe:
-              if re.fullmatch(r"[A-Za-z0-9._-]+",host) and host in verified and host not in candidates:
-                  candidates[host]="https://www.bigo.tv/"+host
-          if not candidates:
-              raise SystemExit("No active registry sources or verified BIGO probe IDs; no capture attempted.")
-          report={
-              "candidate_count":len(candidates),
-              "registry_candidate_count":len(registry),
-              "verified_probe_candidate_count":sum(1 for h in probe if h in verified),
-              "source":"active capture-enabled registry + verified BIGO_LIVE_PROBE_HOST_IDS",
-              "capture_eligibility":"registry or verified configured probe",
-              "publication_eligibility":"BIGO_VERIFIED_HOST_IDS enforced separately",
-              "candidates":[{"host_id":host,"source_url":url} for host,url in candidates.items()]
-          }
-          json.dump(report,open("/tmp/bigo-firecrawl-live-report.json","w"))
-          with open("/tmp/bigo-hosts.txt","w") as out:
-              for host,url in candidates.items():
-                  out.write(host+"|"+url+"\n")
-          print("BIGO capture candidates: %d (registry=%d, verified probes=%d)" %
-                (len(candidates),len(registry),report["verified_probe_candidate_count"]))
+          for line in sys.argv[3].splitlines():
+              parts=line.split("|",1)
+              if parts and parts[0].strip():
+                  registry[parts[0].strip()]=parts[1].strip() if len(parts)>1 else ""
+          for host in list(registry):
+              if host not in allow:
+                  allow.append(host)
+          for host in allow:
+              print(host + "|" + (registry.get(host) or "https://www.bigo.tv/" + host))
           PY
-          echo "Selected $(wc -l < /tmp/bigo-hosts.txt) active, capture-enabled BIGO source(s)"
-          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-capture-host.sh -o /tmp/bigo-capture-host.sh
-          curl -fsSL https://raw.githubusercontent.com/EliteFitness101/chatb2k-f9d8a04d/${GITHUB_SHA}/scripts/bigo-streamlink-capture.py -o /tmp/bigo-streamlink-capture.py
-          chmod +x /tmp/bigo-capture-host.sh /tmp/bigo-streamlink-capture.py
-          export BIGO_STREAMLINK_WRAPPER=/tmp/bigo-streamlink-capture.py
+          )"
+          if [ -n "${BIGO_HOST_IDS:-}" ]; then
+            echo "::notice::Explicit BIGO_HOST_IDS are included in the capture pool."
+          fi
+          if [ -z "${HOSTS}" ]; then
+            echo "::error::No eligible BIGO hosts available from Supabase source registry or BIGO_HOST_IDS."
+            exit 1
+          fi
+          printf '%s\n' "${HOSTS}" > /tmp/bigo-hosts-all.txt
+          # Capture the full deduplicated eligible host inventory each cycle; do not silently skip hosts by rotating a fixed-size subset.
+          python3 - <<'PY'
+          import os, time
+          all_hosts=[line.strip() for line in open("/tmp/bigo-hosts-all.txt") if line.strip()]
+          # Keep kisexy in every scheduled capture cycle; retain rotation for the remaining pool.
+          priority_ids=[x.strip() for x in os.getenv("BIGO_PRIORITY_HOST_IDS","kisexy").replace(",", "\n").splitlines() if x.strip()]
+          for host_id in priority_ids:
+              if not any(line.split("|",1)[0].strip()==host_id for line in all_hosts):
+                  all_hosts.append(host_id+"|https://www.bigo.tv/"+host_id)
+          priority=[line for host_id in priority_ids for line in all_hosts if line.split("|",1)[0].strip()==host_id]
+          priority_ids_present={line.split("|",1)[0].strip() for line in priority}
+          remaining=[line for line in all_hosts if line.split("|",1)[0].strip() not in priority_ids_present]
+          limit=max(1,min(int(os.getenv("BIGO_HOSTS_PER_CYCLE",str(len(all_hosts)))),len(all_hosts)))
+          if len(priority)>limit:
+              priority=priority[:limit]
+          slots=limit-len(priority)
+          if len(remaining)>slots:
+              start=((int(time.time())//300)*max(1,slots))%len(remaining)
+              rotated=remaining+remaining
+              selected=rotated[start:start+slots]
+          else:
+              selected=remaining
+          hosts=priority+selected
+          open("/tmp/bigo-hosts.txt","w").writelines(line+"\n" for line in hosts)
+          print(f"Selected {len(hosts)} of {len(all_hosts)} host(s) for this cycle; priority hosts: {', '.join(priority_ids)}")
+          PY
+          cp scripts/bigo-capture-host.sh /tmp/bigo-capture-host.sh
+          chmod +x /tmp/bigo-capture-host.sh
           run_capture() {
             local HOST_ID="$1"
             local SOURCE_URL="$2"
+            local SAFE_HOST
+            SAFE_HOST="$(printf '%s' "${HOST_ID}" | tr -c 'A-Za-z0-9._-' '_')"
             if ! bash /tmp/bigo-capture-host.sh "${HOST_ID}" "${SOURCE_URL}"; then
-              echo "::error::Capture failed for host ${HOST_ID}"
-              touch "/tmp/bigo-results/${HOST_ID}.failed"
+              python3 - "${SAFE_HOST}" <<'PYFAIL'
+          import json,sys
+          json.dump({"status":"capture_failed","reason":"capture script exited nonzero; inspect host logs"},open("/tmp/bigo-results/"+sys.argv[1]+".failure.json","w"))
+          PYFAIL
+              echo "::error::BIGO capture script exited nonzero for host ${SAFE_HOST}"
             fi
+            return 0
           }
           ACTIVE=0
           while IFS='|' read -r HOST_ID SOURCE_URL; do
@@ -139,36 +165,36 @@ jobs:
           done < /tmp/bigo-hosts.txt
           wait
           python3 - <<'PY'
-          import json,glob
-          out={"highlights":[],"limit":10}
+          import json,glob,os
+          out={"highlights":[],"limit":10,"capture_failures":[],"offline_hosts":[]}
           for p in glob.glob("/tmp/bigo-results/*.json"):
               try:
                   d=json.load(open(p))
                   if d.get("highlight"):
                       out["highlights"].append(d["highlight"])
+                  elif p.endswith(".failure.json"):
+                      record={"file":os.path.basename(p),"detail":d.get("reason","capture failed")}
+                      if d.get("status")=="offline":
+                          out["offline_hosts"].append(record)
+                      else:
+                          out["capture_failures"].append(record)
               except Exception as e:
-                  print(f"::warning::bad result {p}: {e}")
+                  out["capture_failures"].append({"file":os.path.basename(p),"detail":str(e)})
           json.dump(out,open("/tmp/bigo-batch.json","w"))
-          print(f"Verified BIGO batch: {len(out['highlights'])} highlight(s)")
+          print(f"Capture summary: {len(out['highlights'])} highlight(s), {len(out['offline_hosts'])} offline host(s), {len(out['capture_failures'])} capture failure(s)")
+          if out["capture_failures"]:
+              print("::warning::One or more BIGO host capture attempts failed; inspect the host capture logs for details.")
           PY
-          if compgen -G "/tmp/bigo-results/*.failed" > /dev/null; then
-            echo "::error::One or more host capture attempts failed; empty batch is not a successful capture cycle."
-            if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
+            FAILURES="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["capture_failures"]))')"
+            OFFLINE="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["offline_hosts"]))')"
+            if [ "$FAILURES" -gt 0 ]; then
+              echo "::error::No highlights captured; $FAILURES capture failure(s) and $OFFLINE offline host(s) were recorded."
               exit 1
             fi
-          fi
-          if [ "$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')" -lt 1 ]; then
-            echo "::notice::No live hosts captured this cycle; no capture errors recorded."
+            echo "::notice::No live hosts captured this cycle; $OFFLINE offline host(s), no capture errors."
             exit 0
           fi
-
-      - name: Preserve BIGO registry candidate evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bigo-registry-capture-candidates-${{ github.run_id }}
-          path: /tmp/bigo-firecrawl-live-report.json
-          if-no-files-found: warn
 
       - name: Ingest, enrich and auto-post BIGO batch
         run: |
@@ -176,15 +202,6 @@ jobs:
           COUNT="$(python3 -c 'import json; print(len(json.load(open("/tmp/bigo-batch.json"))["highlights"]))')"
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
-          VERIFIED_HOST_IDS="${BIGO_VERIFIED_HOST_IDS:-}"
-          VERIFIED_PATTERN="$(printf "%s" "${VERIFIED_HOST_IDS}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | any($verified[]; . as $id | $host == $id or ($host | startswith($id))))], limit: .limit} + {storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-verified-publish-batch.json
-          VERIFIED_COUNT="$(jq ".highlights | length" /tmp/bigo-verified-publish-batch.json)"
-          if [ "$VERIFIED_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-verified-publish-batch.json
-          fi
-          jq --argjson verified "$VERIFIED_PATTERN" '{highlights: [.highlights[] | select(((.host_id // .source_asset_id // "") | tostring) as $host | (any($verified[]; . as $id | $host == $id or ($host | startswith($id))) | not))], limit: .limit} + {storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-storage-batch.json
-          STORAGE_COUNT="$(jq ".highlights | length" /tmp/bigo-storage-batch.json)"
-          if [ "$STORAGE_COUNT" -gt 0 ]; then
-            curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-storage-batch.json
-          fi
+          VERIFIED_PATTERN="$(printf "%s" "${BIGO_VERIFIED_HOST_IDS:-}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
+          jq --argjson verified "$VERIFIED_PATTERN" --arg storage_only "${CAPTURE_STORAGE_ONLY:-false}" '{highlights: .highlights, verified_host_ids:$verified, limit: .limit, storage_only: ($storage_only == "true")}' /tmp/bigo-batch.json > /tmp/bigo-pipeline-batch.json
+          curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-pipeline-batch.json
