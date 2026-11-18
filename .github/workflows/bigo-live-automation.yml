@@ -34,6 +34,9 @@ env:
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
   BIGO_COOKIE_HEADER: ${{ secrets.BIGO_COOKIE_HEADER }}
+  # BIGO currently rejects playback-token requests from some egress regions.
+  # Set this to an authorized Asia-region HTTPS/SOCKS proxy; Dropbox/Supabase stay direct.
+  BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
   BIGO_TARGET_HOST_ID: ${{ github.event.inputs.bigo_host_id }}
   BIGO_TARGET_SHARE_URL: ${{ github.event.inputs.bigo_share_url }}
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline

@@ -21,6 +21,11 @@ def main():
     # Always resolve the stable broadcaster profile, never a rotating /sid/ URL.
     url = f"https://www.bigo.tv/{host_id}"
     session = Streamlink()
+    # BIGO playback-token issuance is region-restricted. Use the optional authorized
+    # proxy for BIGO token, HLS and CDN traffic; leave other pipeline services direct.
+    proxy = __import__('os').environ.get('BIGO_EGRESS_PROXY', '').strip()
+    if proxy:
+        session.http.proxies.update({'http': proxy, 'https': proxy})
     session.http.headers.update({"User-Agent": "Mozilla/5.0"})
     cookie = __import__("os").environ.get("BIGO_COOKIE_HEADER", "").strip()
     if cookie:
