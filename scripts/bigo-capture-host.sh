@@ -435,7 +435,7 @@ if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = 
   fi
 fi
 
-# Dropbox is optional secondary archival. Vercel Blob is mandatory for public delivery.
+# Direct R2 S3 upload is primary; Vercel Blob is the verified fallback; Dropbox is secondary archival.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
     DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
@@ -629,7 +629,92 @@ process.stdout.write(JSON.stringify({url: blob.url, size: bytes.length, sha256: 
 JSBLOB
   ) | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("verified") is True; print(d["url"])'
 }
-BLOB_URL="$(blob_upload "$FILE" "bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
+# Direct R2 S3 upload is primary. Verify both the S3 object and public CDN bytes.
+r2_upload() {
+  local SRC="$1" KEY="$2" MIME="$3"
+  local BUCKET="${R2_BUCKET_NAME:-${R2_BUCKET:-}}"
+  local EXPECTED S3_TMP PUBLIC_TMP S3_SHA PUBLIC_SHA PUBLIC_URL
+  [ -n "${R2_ACCESS_KEY_ID:-}" ] || { echo "R2 access key is missing" >&2; return 1; }
+  [ -n "${R2_SECRET_ACCESS_KEY:-}" ] || { echo "R2 secret key is missing" >&2; return 1; }
+  [ -n "${R2_ENDPOINT:-}" ] || { echo "R2 S3 endpoint is missing" >&2; return 1; }
+  [ -n "$BUCKET" ] || { echo "R2 bucket is missing" >&2; return 1; }
+  [ -n "${R2_PUBLIC_BASE_URL:-}" ] || { echo "R2 public CDN base URL is missing" >&2; return 1; }
+  [ -s "$SRC" ] || { echo "R2 upload source is empty: $SRC" >&2; return 1; }
+  command -v aws >/dev/null 2>&1 || { echo "AWS CLI is unavailable" >&2; return 1; }
+  export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+  export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+  export AWS_DEFAULT_REGION=auto
+  EXPECTED="$(sha256sum "$SRC" | awk '{print $1}')"
+  S3_TMP="$(mktemp /tmp/r2-s3-readback.XXXXXX)"
+  PUBLIC_TMP="$(mktemp /tmp/r2-public-readback.XXXXXX)"
+  if ! aws s3api put-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" --body "$SRC" --content-type "$MIME" --cache-control "public, max-age=31536000, immutable" >/dev/null; then
+    rm -f "$S3_TMP" "$PUBLIC_TMP"
+    return 1
+  fi
+  if ! aws s3api get-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" "$S3_TMP" >/dev/null; then
+    aws s3api delete-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1 || true
+    rm -f "$S3_TMP" "$PUBLIC_TMP"
+    return 1
+  fi
+  S3_SHA="$(sha256sum "$S3_TMP" | awk '{print $1}')"
+  if [ "$S3_SHA" != "$EXPECTED" ]; then
+    echo "R2 S3 read-back SHA-256 mismatch" >&2
+    aws s3api delete-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1 || true
+    rm -f "$S3_TMP" "$PUBLIC_TMP"
+    return 1
+  fi
+  PUBLIC_URL="${R2_PUBLIC_BASE_URL%/}/${KEY}"
+  if ! curl --fail --silent --show-error --max-time 120 "$PUBLIC_URL" -o "$PUBLIC_TMP"; then
+    echo "R2 public CDN read-back failed" >&2
+    aws s3api delete-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1 || true
+    rm -f "$S3_TMP" "$PUBLIC_TMP"
+    return 1
+  fi
+  PUBLIC_SHA="$(sha256sum "$PUBLIC_TMP" | awk '{print $1}')"
+  if [ "$PUBLIC_SHA" != "$EXPECTED" ]; then
+    echo "R2 public CDN SHA-256 mismatch" >&2
+    aws s3api delete-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1 || true
+    rm -f "$S3_TMP" "$PUBLIC_TMP"
+    return 1
+  fi
+  rm -f "$S3_TMP" "$PUBLIC_TMP"
+  printf '%s\n' "$PUBLIC_URL"
+}
+
+# Keep Vercel Blob as a fallback only if the direct R2 object or public read-back fails.
+media_upload() {
+  local SRC="$1" KEY="$2" MIME="$3" URL PROVIDER
+  if URL="$(r2_upload "$SRC" "$KEY" "$MIME")"; then
+    PROVIDER="cloudflare_r2"
+  else
+    echo "::warning::Direct R2 upload/read-back failed; using Vercel Blob fallback for this media object." >&2
+    URL="$(blob_upload "$SRC" "$KEY" "$MIME")" || return 1
+    PROVIDER="vercel_blob"
+  fi
+  python3 - "$URL" "$PROVIDER" <<'PYMEDIA'
+import json,sys
+print(json.dumps({"url":sys.argv[1],"provider":sys.argv[2]}))
+PYMEDIA
+}
+
+VIDEO_UPLOAD="$(media_upload "$FILE" "bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
+BLOB_URL="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])' <<< "$VIDEO_UPLOAD")"
+VIDEO_PROVIDER="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])' <<< "$VIDEO_UPLOAD")"
+COVER_UPLOAD="$(media_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
+COVER_URL="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])' <<< "$COVER_UPLOAD")"
+COVER_PROVIDER="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])' <<< "$COVER_UPLOAD")"
+GBP_URL=""
+GBP_PROVIDER=""
+if [ -s "$GBP_FILE" ]; then
+  if audio_qa "$GBP_FILE" "Google Business derivative"; then
+    GBP_UPLOAD="$(media_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
+    GBP_URL="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])' <<< "$GBP_UPLOAD")"
+    GBP_PROVIDER="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])' <<< "$GBP_UPLOAD")"
+  else
+    echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
+    rm -f "$GBP_FILE"
+  fi
+fi
 COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
@@ -678,16 +763,16 @@ else
   echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Blob delivery remains available."
 fi
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "$VIDEO_PROVIDER" "$COVER_PROVIDER" "$GBP_PROVIDER" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
 host,name,title,blob,cover=sys.argv[2:7]
-w,h,d,fps,avg,pix,ts,source_stream_url,room_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status,gbp_url,gbp_duration,target_channels=sys.argv[7:]
+w,h,d,fps,avg,pix,ts,source_stream_url,room_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status,gbp_url,gbp_duration,video_provider,cover_provider,gbp_provider,target_channels=sys.argv[7:]
 def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'vercel_blob','blob_store':'vercel_blob','blob_readback_verified':bool(blob)}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':video_provider,'media_delivery_mode':'direct_s3' if video_provider=='cloudflare_r2' else 'vercel_blob_fallback','media_store':video_provider,'blob_store':video_provider,'blob_readback_verified':bool(blob),'media_readback_verified':bool(blob),'r2_object_readback_verified':video_provider=='cloudflare_r2','r2_public_cdn_readback_verified':video_provider=='cloudflare_r2','cover_delivery_provider':cover_provider,'google_business_delivery_provider':gbp_provider or None}}
 print(json.dumps({'highlight':hitem}))
 PY
 
@@ -707,9 +792,9 @@ fi
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
 python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
-host,ts,root,video,cover,blob_status=sys.argv[1:]
+host,ts,root,video,cover,provider=sys.argv[1:]
 is_blob=video.startswith("https://")
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"blob_verified","video_url":video,"cover_url":cover,"archive_verification":"Vercel Blob public GET and SHA-256 byte-for-byte read-back","media_delivery_provider":"vercel_blob","blob_readback_status":blob_status,"blob_object_readback_verified":is_blob and blob_status=="verified_object_readback","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"media_verified","video_url":video,"cover_url":cover,"archive_verification":"Direct R2 S3 API and public CDN SHA-256 read-back" if provider=="cloudflare_r2" else "Vercel Blob public GET and SHA-256 byte-for-byte read-back","media_delivery_provider":provider,"media_readback_verified":is_blob,"r2_object_readback_verified":provider=="cloudflare_r2","r2_public_cdn_readback_verified":provider=="cloudflare_r2","blob_object_readback_verified":provider=="vercel_blob","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
 PYSTATUS
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json" || echo "::warning::Secondary Dropbox receipt archive failed for $HOST."
