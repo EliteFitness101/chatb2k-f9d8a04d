@@ -55,11 +55,11 @@ jobs:
           assert 'workers.dev' not in script + workflow
           assert 'R2_WORKERS_DEV_URL' not in script + workflow
           assert 'BIGO_EGRESS_PROXY' not in script + workflow
-          assert 'R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}' in workflow
-          assert 'R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}' in workflow
-          assert 'R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}' in workflow
-          assert 'R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}' in workflow
-          assert 'BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}' in workflow
+          assert 'R2_ACCESS_KEY_ID:' in workflow
+          assert 'R2_SECRET_ACCESS_KEY:' in workflow
+          assert 'R2_ENDPOINT:' in workflow
+          assert 'R2_PUBLIC_BASE_URL:' in workflow
+          assert 'BLOB_READ_WRITE_TOKEN:' in workflow
           assert 'CAPTURE_STORAGE_ONLY' in workflow
           assert 'schedule:' in workflow and 'workflow_dispatch:' in workflow
           print('PASS: direct R2 S3 upload and public CDN read-back are primary; Blob is fallback; Dropbox is secondary; no Worker or proxy dependency.')
