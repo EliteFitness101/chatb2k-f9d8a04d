@@ -193,7 +193,7 @@ def main():
                 query = "BIGO LIVE livestream public profiles"
         targets = [targets[0] if targets else ""]
     elif operation != "scrape":
-        targets = [targets[0] if targets else ""]
+        targets = [targets[0]] if targets and targets[0] else []
     if not targets:
         report = {"status": "no_probe_ids", "operation": operation, "results": [], "checked_at": now()}
         with open(OUTPUT, "w", encoding="utf-8") as handle:
