@@ -1,0 +1,63 @@
+name: R2 direct S3 and public CDN verification
+
+on:
+  push:
+    branches: [audit/r2-direct-cdn-probe-20261119]
+    paths:
+      - '.github/workflows/r2-direct-cdn-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r2-direct-cdn-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-direct-r2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify direct R2 S3 API and public CDN read-back
+        shell: bash
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          set +x
+          : "${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID is not configured}"
+          : "${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY is not configured}"
+          : "${R2_ENDPOINT:?R2_ENDPOINT is not configured}"
+          : "${R2_PUBLIC_BASE_URL:?R2_PUBLIC_BASE_URL is not configured}"
+          BUCKET="${R2_BUCKET_NAME:-${R2_BUCKET:-}}"
+          : "${BUCKET:?R2_BUCKET_NAME or R2_BUCKET is not configured}"
+          command -v aws >/dev/null 2>&1 || { echo "::error::AWS CLI is unavailable on the runner"; exit 1; }
+          export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+          export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+          export AWS_DEFAULT_REGION=auto
+          KEY="health-check/chatb2k-r2-direct-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
+          printf 'ResoFit direct R2 CDN verification\nrun=%s\nattempt=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > /tmp/r2-direct-probe.txt
+          EXPECTED="$(sha256sum /tmp/r2-direct-probe.txt | awk '{print $1}')"
+          UPLOADED=0
+          cleanup() {
+            if [ "$UPLOADED" = "1" ]; then
+              aws s3api delete-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
+          aws s3api put-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" --body /tmp/r2-direct-probe.txt --content-type text/plain --cache-control no-store >/dev/null
+          UPLOADED=1
+          aws s3api get-object --endpoint-url "$R2_ENDPOINT" --region auto --bucket "$BUCKET" --key "$KEY" /tmp/r2-s3-readback.txt >/dev/null
+          S3_SHA="$(sha256sum /tmp/r2-s3-readback.txt | awk '{print $1}')"
+          test "$EXPECTED" = "$S3_SHA"
+          PUBLIC_BASE="${R2_PUBLIC_BASE_URL%/}"
+          curl --fail --silent --show-error --max-time 30 "$PUBLIC_BASE/$KEY" -o /tmp/r2-public-readback.txt
+          PUBLIC_SHA="$(sha256sum /tmp/r2-public-readback.txt | awk '{print $1}')"
+          test "$EXPECTED" = "$PUBLIC_SHA"
+          echo "PASS: direct S3-compatible R2 upload, S3 read-back, and public CDN GET all returned matching SHA-256. No Worker or proxy was used."
