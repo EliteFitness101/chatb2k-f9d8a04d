@@ -71,7 +71,7 @@ export const Route = createFileRoute("/api/internal/chatb2k/gemini-orchestrator"
         if (provider === "openai") {
           const openaiKey = process.env.OPENAI_API_KEY?.trim();
           if (!openaiKey || openaiKey.length < 20) return json({ ok: false, error: "OPENAI_API_KEY_NOT_CONFIGURED_IN_VERCEL_RUNTIME" }, 503);
-          const openaiModel = process.env.OPENAI_MODEL?.trim() || "gpt-6-astra";
+          const openaiModel = process.env.OPENAI_MODEL?.trim() || "gpt-6.2-astra";
           try {
             const upstream = await fetch("https://api.openai.com/v1/responses", {
               method: "POST",
