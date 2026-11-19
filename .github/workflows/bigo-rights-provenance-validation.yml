@@ -40,8 +40,6 @@ jobs:
           assert 'PAGE_KIND="canonical room page"' in capture
           assert 'Never capture from it as a fallback' in capture
           assert 'SOURCE_OVERRIDE" == https://slink.bigovideo.tv/*' in capture
-          assert 'BIGO_EGRESS_PROXY' in capture
-          assert 'proxies=PROXIES' in capture
           assert "'original_url':source_url" not in capture
           import py_compile
           py_compile.compile('scripts/reconcile-bigo-provenance-config.py', doraise=True)

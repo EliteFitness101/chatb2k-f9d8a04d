@@ -1,7 +1,7 @@
 
-name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
+name: BIGO Live -> Vercel Blob -> ChatB2K -> Buffer/Drive
 run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
-# Production capture workflow — Dropbox is the canonical media store for this capture path.
+# Production capture workflow — Vercel Blob is primary public media storage; Dropbox is an optional secondary archive.
 
 on:
   # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
@@ -27,8 +27,7 @@ env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
-  BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
-  BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
+  BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
@@ -52,6 +51,7 @@ jobs:
             sudo apt-get install -y -qq ffmpeg
           fi
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
+          npm install --prefix /tmp/bigo-blob-sdk --no-audit --no-fund @vercel/blob
           ffmpeg -version | head -n 1
           streamlink --version
 
@@ -60,21 +60,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${DROPBOX_APP_KEY:-}" ] || [ -z "${DROPBOX_APP_SECRET:-}" ] || [ -z "${DROPBOX_REFRESH_TOKEN:-}" ]; then
-            echo "::error::Dropbox credentials are required; refusing capture without the canonical archive."
+          if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then
+            echo "::error::BLOB_READ_WRITE_TOKEN is missing; refusing capture without the primary blob store."
             exit 1
           fi
-          echo "::notice::Dropbox canonical archive credentials are present; values are not logged."
-          if [ -n "${BIGO_SESSION_COOKIE:-}" ]; then
-            echo "::notice::Optional BIGO authenticated-session secret is present; value is not logged."
-          else
-            echo "::warning::BIGO_SESSION_COOKIE is not configured; rooms requiring login may fail capture."
-          fi
-          if [ -n "${BIGO_EGRESS_PROXY:-}" ]; then
-            echo "::notice::BIGO_EGRESS_PROXY is configured; proxy value is not logged."
-          else
-            echo "::warning::BIGO_EGRESS_PROXY is not configured; BIGO token issuance will use the runner's direct egress."
-          fi
+          echo "::notice::Vercel Blob credential is present; value is not logged."
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
@@ -183,9 +173,5 @@ jobs:
           if [ "$COUNT" -lt 1 ]; then exit 0; fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           VERIFIED_PATTERN="$(printf "%s" "${BIGO_VERIFIED_HOST_IDS:-}" | tr ", " "\n" | sed "/^$/d" | jq -R -s 'split("\n") | map(select(length>0))')"
-          if [ "${CAPTURE_STORAGE_ONLY:-false}" = "true" ]; then
-            jq --argjson verified "$VERIFIED_PATTERN" '{highlights: .highlights, verified_host_ids:$verified, limit: .limit, storage_only:true}' /tmp/bigo-batch.json > /tmp/bigo-pipeline-batch.json
-          else
-            jq --argjson verified "$VERIFIED_PATTERN" '{highlights: .highlights, verified_host_ids:$verified, limit: .limit, storage_only:false}' /tmp/bigo-batch.json > /tmp/bigo-pipeline-batch.json
-          fi
+          jq --argjson verified "$VERIFIED_PATTERN" --arg storage_only "${CAPTURE_STORAGE_ONLY:-false}" '{highlights: .highlights, verified_host_ids:$verified, limit: .limit, storage_only: ($storage_only == "true")}' /tmp/bigo-batch.json > /tmp/bigo-pipeline-batch.json
           curl -fsS -X POST "${PIPELINE_URL}" -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' --data-binary @/tmp/bigo-pipeline-batch.json
