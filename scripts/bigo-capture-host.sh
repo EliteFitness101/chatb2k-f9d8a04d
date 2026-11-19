@@ -230,7 +230,7 @@ except Exception:
     s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
 urls=re.findall(r"""https?://[^\s"'<>]+m3u8[^\s"'<>]*""",s,re.I)
-urls=[u for u in urls if u.startswith("https://") and re.search(r"\\.m3u8(?:\\?|$)",u,re.I)]
+urls=[u for u in urls if u.startswith("https://") and re.search(r"\.m3u8(?:\?|$)",u,re.I)]
 print(urls[0] if urls else "")
 PY
     )"
@@ -266,7 +266,7 @@ try: s=open(sys.argv[1],errors="replace").read()
 except Exception: s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
 urls=re.findall(r"""https?://[^\\"'<>\s]+m3u8[^\\"'<>\s]*""",s,re.I)
-urls=[u for u in urls if u.startswith("https://") and re.search(r"\\.m3u8(?:\\?|$)",u,re.I)]
+urls=[u for u in urls if u.startswith("https://") and re.search(r"\.m3u8(?:\?|$)",u,re.I)]
 print(urls[0] if urls else "")
 PYSIDHLS
 )"
