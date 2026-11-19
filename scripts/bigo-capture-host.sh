@@ -134,6 +134,8 @@ TOKEN_T='https://sec.bigo.sg/v1/webjs/t'
 TOKEN_STATUS='https://sec.bigo.sg/v1/webjs/status'
 KEY=b'undefinedval0x01'
 UA='Mozilla/5.0'
+PROXY=os.environ.get('BIGO_EGRESS_PROXY','').strip()
+PROXIES={'http':PROXY,'https':PROXY} if PROXY else None
 def request_headers(accept='*/*'):
     headers={'User-Agent':UA,'Accept':accept}
     cookie=os.environ.get('BIGO_SESSION_COOKIE','').strip()
@@ -151,7 +153,7 @@ def jsonp(text):
     return json.loads(m.group('json'))
 
 def resolve_token():
-    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12)
+    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12,proxies=PROXIES)
     tr.raise_for_status()
     ts=jsonp(tr.text)['time']
     payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
@@ -160,7 +162,7 @@ def resolve_token():
     except Exception:
         raise RuntimeError('streamlink crypto module unavailable')
     encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
-    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
+    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12,proxies=PROXIES)
     sr.raise_for_status()
     return jsonp(sr.text)['token']
 
@@ -176,7 +178,7 @@ def build(d):
 try:
     token=resolve_token()
     r=requests.post(API,params={'siteId':host,'verify':'','token':token},
-                     headers=request_headers('application/json'),timeout=15)
+                     headers=request_headers('application/json'),timeout=15,proxies=PROXIES)
     r.raise_for_status()
     d=r.json().get('data') or {}
     out=build(d)
@@ -184,14 +186,14 @@ try:
     if out['hls_src']:
         print(json.dumps(out)); raise SystemExit
     # Preserve the older working path as a secondary fallback.
-    r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
+    r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12,proxies=PROXIES)
     r.raise_for_status()
     out=build(r.json().get('data') or {})
     out['discovery_method']='bigo_legacy_api'
     print(json.dumps(out))
 except Exception as e:
     try:
-        r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
+        r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12,proxies=PROXIES)
         r.raise_for_status()
         out=build(r.json().get('data') or {})
         out['discovery_method']='bigo_legacy_api'
@@ -224,6 +226,14 @@ fi
 STREAMLINK_COOKIE_ARGS=()
 CURL_COOKIE_ARGS=()
 FFMPEG_COOKIE_ARGS=()
+STREAMLINK_PROXY_ARGS=()
+CURL_PROXY_ARGS=()
+FFMPEG_PROXY_ARGS=()
+if [ -n "${BIGO_EGRESS_PROXY:-}" ]; then
+  STREAMLINK_PROXY_ARGS=(--http-proxy "${BIGO_EGRESS_PROXY}")
+  CURL_PROXY_ARGS=(--proxy "${BIGO_EGRESS_PROXY}")
+  FFMPEG_PROXY_ARGS=(-http_proxy "${BIGO_EGRESS_PROXY}")
+fi
 if [ -n "${BIGO_SESSION_COOKIE:-}" ]; then
   STREAMLINK_COOKIE_ARGS=(--http-header "Cookie=${BIGO_SESSION_COOKIE}")
   CURL_COOKIE_ARGS=(-H "Cookie: ${BIGO_SESSION_COOKIE}")
@@ -234,7 +244,7 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s streamlink --stdout "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --stdout "${STREAMLINK_PROXY_ARGS[@]}" "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -250,7 +260,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl "${CURL_PROXY_ARGS[@]}" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -274,7 +284,7 @@ fi
 if [ -n "$PAGE_URL" ]; then
   PAGE="/tmp/bigo-${HOST}-page.html"
   rm -f "$PAGE"
-  if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
+  if curl "${CURL_PROXY_ARGS[@]}" -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
     DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
 import re,sys
 p=sys.argv[1]
@@ -313,7 +323,7 @@ PYSID
 )"
   if [ "$SID_MATCH" = "yes" ]; then
     SID_PAGE="/tmp/bigo-${HOST}-sid-page.html"
-    if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
+    if curl "${CURL_PROXY_ARGS[@]}" -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
       DISCOVERED_HLS="$(python3 - "$SID_PAGE" <<'PYSIDHLS'
 import re,sys
 try: s=open(sys.argv[1],errors="replace").read()
@@ -340,7 +350,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 "${FFMPEG_COOKIE_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s ffmpeg "${FFMPEG_PROXY_ARGS[@]}" -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 "${FFMPEG_COOKIE_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
