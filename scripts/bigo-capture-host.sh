@@ -90,6 +90,9 @@ KEY=b'undefinedval0x01'
 UA='Mozilla/5.0'
 def request_headers(accept='*/*'):
     headers={'User-Agent':UA,'Accept':accept}
+    cookie=os.environ.get('BIGO_SESSION_COOKIE','').strip()
+    if cookie:
+        headers['Cookie']=cookie
     return headers
 
 def callback():
@@ -170,12 +173,22 @@ FFMPEG_DURATION_ARGS=()
 if [ -n "${BIGO_CAPTURE_DURATION_SECONDS:-}" ]; then
   FFMPEG_DURATION_ARGS=(-t "${BIGO_CAPTURE_DURATION_SECONDS}")
 fi
+# BIGO began requiring authenticated sessions for some rooms. Read a private session cookie
+# from GitHub Actions secrets; never log it or store it in capture metadata.
+STREAMLINK_COOKIE_ARGS=()
+CURL_COOKIE_ARGS=()
+FFMPEG_COOKIE_ARGS=()
+if [ -n "${BIGO_SESSION_COOKIE:-}" ]; then
+  STREAMLINK_COOKIE_ARGS=(--http-header "Cookie=${BIGO_SESSION_COOKIE}")
+  CURL_COOKIE_ARGS=(-H "Cookie: ${BIGO_SESSION_COOKIE}")
+  FFMPEG_COOKIE_ARGS=(-headers "Cookie: ${BIGO_SESSION_COOKIE}"$'\r\n')
+fi
 # Bounded retries: isolate transient room/network failures to this host.
 for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s streamlink --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --stdout "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -191,7 +204,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -215,7 +228,7 @@ fi
 if [ -n "$PAGE_URL" ]; then
   PAGE="/tmp/bigo-${HOST}-page.html"
   rm -f "$PAGE"
-  if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
+  if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
     DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
 import re,sys
 p=sys.argv[1]
@@ -254,7 +267,7 @@ PYSID
 )"
   if [ "$SID_MATCH" = "yes" ]; then
     SID_PAGE="/tmp/bigo-${HOST}-sid-page.html"
-    if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
+    if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
       DISCOVERED_HLS="$(python3 - "$SID_PAGE" <<'PYSIDHLS'
 import re,sys
 try: s=open(sys.argv[1],errors="replace").read()
@@ -281,7 +294,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 "${FFMPEG_COOKIE_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
@@ -616,12 +629,12 @@ process.stdout.write(JSON.stringify({url: blob.url, size: bytes.length, sha256: 
 JSBLOB
   ) | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("verified") is True; print(d["url"])'
 }
-BLOB_URL="$(blob_upload "$FILE" "buffer/assets/bigo_highlights/${HOST}-${TS}.mp4" "video/mp4")"
-COVER_URL="$(blob_upload "$COVER" "buffer/assets/bigo_highlights/covers/${HOST}-${TS}-cover.jpg" "image/jpeg")"
+BLOB_URL="$(blob_upload "$FILE" "bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
+COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
   if audio_qa "$GBP_FILE" "Google Business derivative"; then
-    GBP_URL="$(blob_upload "$GBP_FILE" "buffer/assets/bigo_highlights/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
+    GBP_URL="$(blob_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
   else
     echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
     rm -f "$GBP_FILE"
