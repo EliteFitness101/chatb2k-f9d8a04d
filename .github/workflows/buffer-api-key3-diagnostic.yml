@@ -1,0 +1,53 @@
+name: Buffer API key3 connection diagnostic
+
+on:
+  push:
+    branches: [audit/buffer-api-key3-20261119]
+    paths:
+      - '.github/workflows/buffer-api-key3-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  buffer-readonly-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query connected Buffer organizations and channels
+        shell: bash
+        env:
+          BUFFER_API_KEY3: ${{ secrets.BUFFER_API_KEY3 }}
+        run: |
+          set -euo pipefail
+          set +x
+          : "${BUFFER_API_KEY3:?BUFFER_API_KEY3 repository secret is not configured}"
+          account_payload='{"query":"query{account{organizations{id name}}}","variables":{}}'
+          curl --fail --silent --show-error --max-time 30 https://api.buffer.com \
+            -H "Authorization: Bearer $BUFFER_API_KEY3" \
+            -H 'Content-Type: application/json' \
+            --data "$account_payload" -o /tmp/buffer-account.json
+          if jq -e '.errors and (.errors|length>0)' /tmp/buffer-account.json >/dev/null; then
+            jq -c '{errors:[.errors[]|{message}]}' /tmp/buffer-account.json
+            exit 1
+          fi
+          jq -e '.data.account.organizations|type=="array"' /tmp/buffer-account.json >/dev/null
+          ORG_COUNT="$(jq '.data.account.organizations|length' /tmp/buffer-account.json)"
+          echo "Buffer organizations returned: $ORG_COUNT"
+          while IFS=$'\t' read -r ORG_ID ORG_NAME; do
+            [ -n "$ORG_ID" ] || continue
+            echo "Organization: $ORG_NAME"
+            payload="$(jq -nc --arg id "$ORG_ID" '{query:"query($organizationId:OrganizationId!){channels(input:{organizationId:$organizationId}){id name displayName service type hasActiveMemberDevice isQueuePaused isDisconnected isLocked}}",variables:{organizationId:$id}}')"
+            out="/tmp/buffer-channels-$ORG_ID.json"
+            curl --fail --silent --show-error --max-time 30 https://api.buffer.com \
+              -H "Authorization: Bearer $BUFFER_API_KEY3" \
+              -H 'Content-Type: application/json' \
+              --data "$payload" -o "$out"
+            if jq -e '.errors and (.errors|length>0)' "$out" >/dev/null; then
+              jq -c '{errors:[.errors[]|{message}]}' "$out"
+              exit 1
+            fi
+            jq -r '.data.channels[]? | "  - \(.displayName // .name) | \(.service) | type=\(.type) | disconnected=\(.isDisconnected) | locked=\(.isLocked) | queue_paused=\(.isQueuePaused) | member_device=\(.hasActiveMemberDevice)"' "$out"
+          done < <(jq -r '.data.account.organizations[] | [.id,.name] | @tsv' /tmp/buffer-account.json)
+          echo "READ-ONLY PASS: organization and channel discovery completed; no posts, queue items, or account settings were changed."
