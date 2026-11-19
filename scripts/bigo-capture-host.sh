@@ -26,7 +26,7 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# Vercel Blob is the primary media delivery store.
+# Direct R2 S3/CDN is primary; Vercel Blob is fallback; Dropbox is optional secondary archival.
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -790,7 +790,7 @@ fi
 
 # Save a per-host verification receipt after the primary Blob objects pass SHA-256 read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
-python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "${VIDEO_PROVIDER}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
 host,ts,root,video,cover,provider=sys.argv[1:]
 is_blob=video.startswith("https://")
