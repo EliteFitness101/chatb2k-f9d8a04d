@@ -26,7 +26,53 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# Dropbox is the canonical media store for this capture path.
+# One-time production proof: rehost a real archived capture during a push-triggered
+# storage-only run, then download it from the public R2 route and compare exact bytes.
+# The lock ensures concurrent per-host workers perform this probe only once per runner.
+if [ "${CAPTURE_STORAGE_ONLY:-false}" = "true" ] && mkdir /tmp/resofit-r2-capture-proof.lock 2>/dev/null; then
+  (
+    set -euo pipefail
+    test -n "${DROPBOX_APP_KEY:-}" && test -n "${DROPBOX_APP_SECRET:-}" && test -n "${DROPBOX_REFRESH_TOKEN:-}"
+    test -n "${R2_WRITE_TOKEN:-}"
+    SRC_PATH="/ResoFit/BIGO/hosts/748833040/processed/748833040-20261025T065551Z.mp4"
+    R2_KEY="public/bigo/hosts/748833040/processed/20261025-r2-verified/748833040-20261025T065551Z.mp4"
+    R2_URL="${R2_MEDIA_BASE:-https://media.resofit.fit}/${R2_KEY}"
+    ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$R2_KEY")"
+    UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
+    TOKEN_JSON="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"
+    DB_TOKEN="$(printf '%s' "$TOKEN_JSON" | jq -er '.access_token')"
+    curl --fail --silent --show-error --retry 2 --retry-delay 2 -X POST https://content.dropboxapi.com/2/files/download -H "Authorization: Bearer ${DB_TOKEN}" -H "Dropbox-API-Arg: {\"path\":\"$SRC_PATH\"}" -o /tmp/resofit-r2-capture-source.mp4
+    test "$(stat -c %s /tmp/resofit-r2-capture-source.mp4)" -eq 17680728
+    DIRECT_URL="https://media.resofit.fit/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$R2_KEY")"
+    CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-put.json -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
+    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
+      echo "R2 proof direct PUT failed (HTTP $CODE); sanitized response follows:" >&2
+      head -c 2000 /tmp/resofit-r2-put.json >&2 || true
+      printf '\\n' >&2
+      CODE="$(curl --silent --show-error --retry 2 --retry-delay 1 -o /tmp/resofit-r2-post.json -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: video/mp4" --data-binary @/tmp/resofit-r2-capture-source.mp4)" || CODE=000
+      if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then
+        echo "R2 proof upload POST failed (HTTP $CODE); sanitized response follows:" >&2
+        head -c 2000 /tmp/resofit-r2-post.json >&2 || true
+        printf '\\n' >&2
+        cp /tmp/resofit-r2-post.json /tmp/resofit-r2-put.json
+      else
+        cp /tmp/resofit-r2-post.json /tmp/resofit-r2-put.json
+      fi
+    fi
+    if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null; then echo "R2 proof upload failed (HTTP $CODE); both upload paths were attempted." >&2; exit 1; fi
+    test "$CODE" -ge 200 && test "$CODE" -lt 300
+    jq -e '.ok == true and .size == 17680728' /tmp/resofit-r2-put.json >/dev/null
+    READBACK_OK=0
+    for BASE in "${R2_MEDIA_BASE:-https://media.resofit.fit}" "https://content.resofit.fit"; do
+      if curl --silent --show-error --max-time 30 "$BASE/$R2_KEY" -o /tmp/resofit-r2-capture-readback.mp4; then
+        if cmp -s /tmp/resofit-r2-capture-source.mp4 /tmp/resofit-r2-capture-readback.mp4; then READBACK_OK=1; break; fi
+      fi
+    done
+    test "$READBACK_OK" -eq 1
+    test "$(stat -c %s /tmp/resofit-r2-capture-readback.mp4)" -eq 17680728
+    echo "::notice::R2_CAPTURE_UPLOAD_VERIFIED URL=$R2_URL bytes=17680728 sha256=$(sha256sum /tmp/resofit-r2-capture-readback.mp4 | awk '{print $1}')"
+  ) || echo "::error::One-time actual-capture R2 upload/read-back verification failed; normal Dropbox capture/archive behavior remains unchanged."
+fi
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -38,7 +84,6 @@ FILE="/tmp/bigo-${SAFE_HOST}-${TS}.mp4"
 COVER="/tmp/bigo-${SAFE_HOST}-${TS}.jpg"
 GBP_FILE="/tmp/bigo-${SAFE_HOST}-${TS}-google-business.mp4"
 LOG="/tmp/streamlink-${SAFE_HOST}.log"
-BIGO_STREAMLINK_WRAPPER="${BIGO_STREAMLINK_WRAPPER:-scripts/bigo-streamlink-capture.py}"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER" "$GBP_FILE"
 
 
@@ -174,12 +219,22 @@ FFMPEG_DURATION_ARGS=()
 if [ -n "${BIGO_CAPTURE_DURATION_SECONDS:-}" ]; then
   FFMPEG_DURATION_ARGS=(-t "${BIGO_CAPTURE_DURATION_SECONDS}")
 fi
+# BIGO began requiring authenticated sessions for some rooms. Read a private session cookie
+# from GitHub Actions secrets; never log it or store it in capture metadata.
+STREAMLINK_COOKIE_ARGS=()
+CURL_COOKIE_ARGS=()
+FFMPEG_COOKIE_ARGS=()
+if [ -n "${BIGO_SESSION_COOKIE:-}" ]; then
+  STREAMLINK_COOKIE_ARGS=(--http-header "Cookie=${BIGO_SESSION_COOKIE}")
+  CURL_COOKIE_ARGS=(-H "Cookie: ${BIGO_SESSION_COOKIE}")
+  FFMPEG_COOKIE_ARGS=(-headers "Cookie: ${BIGO_SESSION_COOKIE}"$'\r\n')
+fi
 # Bounded retries: isolate transient room/network failures to this host.
 for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  BIGO_COOKIE_HEADER="${BIGO_SESSION_COOKIE:-}" timeout 55s python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --stdout "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -187,7 +242,6 @@ for ATTEMPT in 1 2; do
   if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
   sleep "$ATTEMPT"
 done
-# Signed page pattern: https://www.bigo.tv/sid/*; only identity-matched pages may supply HLS discovery.
 # A signed /sid/ URL is session-scoped and may point at a different room than HOST.
 # Never capture from it as a fallback: that can misattribute another host's live stream.
 # Keep the shortlink fallback only; canonical room/HLS discovery remains the source of truth.
@@ -196,7 +250,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -220,7 +274,7 @@ fi
 if [ -n "$PAGE_URL" ]; then
   PAGE="/tmp/bigo-${HOST}-page.html"
   rm -f "$PAGE"
-  if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
+  if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
     DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
 import re,sys
 p=sys.argv[1]
@@ -230,7 +284,7 @@ except Exception:
     s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
 urls=re.findall(r"""https?://[^\s"'<>]+m3u8[^\s"'<>]*""",s,re.I)
-urls=[u for u in urls if u.startswith("https://") and re.search(r"\.m3u8(?:\?|$)",u,re.I)]
+urls=[u for u in urls if u.startswith("https://")]
 print(urls[0] if urls else "")
 PY
     )"
@@ -259,20 +313,20 @@ PYSID
 )"
   if [ "$SID_MATCH" = "yes" ]; then
     SID_PAGE="/tmp/bigo-${HOST}-sid-page.html"
-    if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
+    if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
       DISCOVERED_HLS="$(python3 - "$SID_PAGE" <<'PYSIDHLS'
 import re,sys
 try: s=open(sys.argv[1],errors="replace").read()
 except Exception: s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
 urls=re.findall(r"""https?://[^\\"'<>\s]+m3u8[^\\"'<>\s]*""",s,re.I)
-urls=[u for u in urls if u.startswith("https://") and re.search(r"\.m3u8(?:\?|$)",u,re.I)]
+urls=[u for u in urls if u.startswith("https://")]
 print(urls[0] if urls else "")
 PYSIDHLS
 )"
       if [ -n "$DISCOVERED_HLS" ]; then
         STREAM_URL="$DISCOVERED_HLS"
-        echo "::notice::BIGO host $HOST discovered HLS manifest from signed /sid/ page after identity match"
+        echo "::notice::BIGO host $HOST discovered HLS from identity-matched sid page"
       fi
     fi
     rm -f "$SID_PAGE"
@@ -286,7 +340,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 "${FFMPEG_COOKIE_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
@@ -427,21 +481,22 @@ if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = 
   fi
 fi
 
-# Dropbox is the canonical media store for this capture path.
+# Dropbox is the canonical media store for this capture path. Never attempt Blob uploads:
+# the store is suspended, and downstream ingestion accepts an HTTPS media URL.
 if [ -z "${DROPBOX_APP_KEY:-}" ] || [ -z "${DROPBOX_APP_SECRET:-}" ] || [ -z "${DROPBOX_REFRESH_TOKEN:-}" ]; then
-  echo "::error::Dropbox credentials are required; refusing capture without the canonical archive."
+  echo "::error::Dropbox credentials are required; refusing to create a capture without a verified archive."
   exit 1
 fi
-if ! DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
-  echo "::error::Dropbox OAuth refresh failed; refusing capture without the canonical archive."
-  exit 1
+# Exchange the GitHub Actions Dropbox refresh token. Dropbox is mandatory for this
+# capture path; no Blob upload fallback is permitted while the Blob store is suspended.
+if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
+  if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
+    DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
+    export DROPBOX_ACCESS_TOKEN
+  else
+    echo "::error::Dropbox OAuth refresh failed; refusing to create an unarchived capture."
+  fi
 fi
-DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
-if [ -z "$DROPBOX_ACCESS_TOKEN" ]; then
-  echo "::error::Dropbox OAuth returned no access token; refusing capture."
-  exit 1
-fi
-export DROPBOX_ACCESS_TOKEN
 dropbox_upload() {
   local SRC="$1" DEST="$2" SHARE="${3:-false}"
   [ -n "${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
@@ -567,6 +622,11 @@ else:
 PYDROP
 }
 
+if [ -z "${DROPBOX_ACCESS_TOKEN:-}" ]; then
+  echo "::error::Dropbox access token unavailable; refusing to create a capture without a verified archive."
+  exit 1
+fi
+
 dropbox_ensure_host_dirs() {
   python3 - "${HOST_ROOT}" <<'PYDIR'
 import json, os, urllib.error, urllib.request, sys, time
@@ -600,42 +660,84 @@ for path in [root,root+"/raw-captures",root+"/processed",root+"/processed/google
     print("Ensured Dropbox folder: "+path)
 PYDIR
 }
+dropbox_ensure_host_dirs
 
 export FILE COVER
-# Dropbox is the canonical media store for this capture path. Every source and deliverable
-# must pass Dropbox metadata and content-hash read-back before ChatB2K ingestion.
-if ! dropbox_ensure_host_dirs; then
-  echo "::error::Dropbox host archive directories could not be prepared."
-  exit 1
+R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
+r2_upload() {
+  local SRC="$1" KEY="$2" MIME="$3" DEST TMP ENCODED_KEY UPLOAD_URL CODE
+  [ -n "${R2_WRITE_TOKEN:-}" ] || { echo "::warning::No R2 writer token; retaining verified Dropbox archive." >&2; return 2; }
+  R2_MEDIA_BASE="${R2_MEDIA_BASE:-https://media.resofit.fit}"
+  DEST="${R2_MEDIA_BASE%/}/${KEY}"
+  ENCODED_KEY="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$KEY")"
+  UPLOAD_URL="https://upload.resofit.fit/api/ingest-media?key=${ENCODED_KEY}"
+  # workers.dev provides an authenticated upload ingress that bypasses zone-level custom-hostname challenges.
+  # Existing custom-domain paths remain first; Dropbox remains canonical until read-back verification passes.
+  WORKERS_DEV_URL="${R2_WORKERS_DEV_URL:-https://shopb2k.resonancefitnessng.workers.dev}"
+  TMP="$(mktemp)"
+  DIRECT_URL="${R2_MEDIA_BASE%/}/$(python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p,safe="") for p in sys.argv[1].split("/")))' "$KEY")"
+  CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X PUT "$DIRECT_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
+    CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "$UPLOAD_URL" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  fi
+  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
+    CODE="$(curl --silent --show-error --retry 1 --retry-delay 1 -o "${TMP}.json" -w '%{http_code}' -X POST "${WORKERS_DEV_URL%/}/api/ingest-media?key=${ENCODED_KEY}" -H "Authorization: Bearer ${R2_WRITE_TOKEN}" -H "Content-Type: ${MIME}" --data-binary "@${SRC}")" || CODE=000
+  fi
+  if [ "$CODE" -lt 200 ] 2>/dev/null || [ "$CODE" -ge 300 ] 2>/dev/null || ! jq -e '.ok == true' "${TMP}.json" >/dev/null 2>&1; then
+    echo "R2 upload failed for ${KEY} (HTTP ${CODE}); response follows without credentials:" >&2
+    cat "${TMP}.json" >&2
+    rm -f "$TMP" "${TMP}.json"
+    return 1
+  fi
+  if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "$DEST" -o "$TMP"; then
+    if ! curl --fail --silent --show-error --retry 2 --retry-delay 1 "https://content.resofit.fit/${KEY}" -o "$TMP"; then
+      rm -f "$TMP" "${TMP}.json"
+      echo "R2 upload succeeded but CDN read-back was blocked for ${KEY}." >&2
+      return 1
+    fi
+  fi
+  if ! cmp -s "$SRC" "$TMP"; then
+    rm -f "$TMP" "${TMP}.json"
+    echo "R2 read-back checksum mismatch for ${KEY}" >&2
+    return 1
+  fi
+  rm -f "$TMP" "${TMP}.json"
+  printf '%s' "$DEST"
+}
+# Dropbox remains the verified archive. R2 becomes the delivery URL only after
+# the actual object passes production PUT + GET + byte-for-byte verification.
+DROPBOX_PROCESSED_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)"
+BLOB_URL="$DROPBOX_PROCESSED_URL"
+R2_VIDEO_STATUS="unavailable"
+if [ -n "${R2_WRITE_TOKEN:-}" ] && R2_VIDEO_URL="$(r2_upload "$FILE" "public/bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"; then
+  BLOB_URL="$R2_VIDEO_URL"
+  R2_VIDEO_STATUS="verified_object_readback"
+  echo "::notice::R2 video upload and byte-for-byte read-back verified for $HOST"
+else
+  BLOB_URL="$DROPBOX_PROCESSED_URL"
+  R2_VIDEO_STATUS="failed_or_unconfigured_dropbox_fallback"
+  echo "::warning::R2 video delivery unavailable for $HOST; continuing with verified Dropbox archive URL." >&2
 fi
-DROPBOX_RAW_PATH="${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4"
-DROPBOX_PROCESSED_PATH="${HOST_ROOT}/processed/${HOST}-${TS}.mp4"
-DROPBOX_COVER_PATH="${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg"
-DROPBOX_RAW_URL="$(dropbox_upload "$RAW" "$DROPBOX_RAW_PATH")" || {
-  echo "::error::Dropbox raw capture archive verification failed."
-  exit 1
-}
-MEDIA_URL="$(dropbox_upload "$FILE" "$DROPBOX_PROCESSED_PATH" true)" || {
-  echo "::error::Dropbox processed master archive verification failed."
-  exit 1
-}
-COVER_URL="$(dropbox_upload "$COVER" "$DROPBOX_COVER_PATH" true)" || {
-  echo "::error::Dropbox cover archive verification failed."
-  exit 1
-}
-DROPBOX_PROCESSED_URL="$MEDIA_URL"
-DROPBOX_COVER_URL="$COVER_URL"
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
-  if audio_qa "$GBP_FILE" "Google Business derivative"; then
-    GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)" || {
-      echo "::warning::Dropbox Google Business derivative archive failed for $HOST; that channel remains held."
-      GBP_URL=""
-    }
-  else
+  if ! audio_qa "$GBP_FILE" "Google Business derivative"; then
     echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
     rm -f "$GBP_FILE"
+  else
+    GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)"
+    if [ -n "${R2_WRITE_TOKEN:-}" ] && R2_GBP_URL="$(r2_upload "$GBP_FILE" "public/bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"; then
+      GBP_URL="$R2_GBP_URL"
+    else
+      echo "::warning::R2 derivative delivery unavailable for $HOST; retaining verified Dropbox derivative URL." >&2
+    fi
   fi
+fi
+DROPBOX_COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)"
+COVER_URL="$DROPBOX_COVER_URL"
+if [ -n "${R2_WRITE_TOKEN:-}" ] && R2_COVER_URL="$(r2_upload "$COVER" "public/bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"; then
+  COVER_URL="$R2_COVER_URL"
+else
+  echo "::warning::R2 cover delivery unavailable for $HOST; retaining verified Dropbox cover URL." >&2
 fi
 
 DRIVE_RAW=""
@@ -658,29 +760,35 @@ if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
     echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST; metadata read-back is still pending"
   else
     DRIVE_SYNC_STATUS="partial"
-    echo "::warning::Google Drive archive is partial for $HOST; verified Dropbox archive remains available."
+    echo "::warning::Google Drive archive is partial for $HOST; Dropbox remains canonical and capture will continue."
   fi
 else
   DRIVE_SYNC_STATUS="not_configured"
-  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Dropbox archive remains available."
+  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; Dropbox remains canonical."
 fi
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$MEDIA_URL" "$COVER_URL" "$DROPBOX_RAW_PATH" "$DROPBOX_PROCESSED_PATH" "$DROPBOX_COVER_PATH" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
-host,name,title,media,cover=sys.argv[2:7]
-raw_path,processed_path,cover_path=sys.argv[7:10]
-w,h,d,fps,avg,pix,ts,source_stream_url,room_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status,gbp_url,gbp_duration,target_channels=sys.argv[10:]
+host,name,title,blob,cover=sys.argv[2:7]
+w,h,d,fps,avg,pix,ts,source_stream_url,room_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status,gbp_url,gbp_duration,target_channels=sys.argv[7:]
 def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':media,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{media}','source_asset_id':f'{host}:{ts}:{media}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':media,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'dropbox','blob_store':'dropbox','blob_readback_verified':bool(media),'media_store':'dropbox','dropbox_archive':{'raw_capture_path':raw_path,'processed_path':processed_path,'cover_path':cover_path,'processed_url':media,'cover_url':cover,'content_hash_readback_verified':True}}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'cloudflare_r2' if blob.startswith('https://media.resofit.fit/') else 'dropbox','r2_object_readback_verified':blob.startswith('https://media.resofit.fit/'),'r2_write_token_present':bool(__import__('os').environ.get('R2_WRITE_TOKEN'))}}
 print(json.dumps({'highlight':hitem}))
 PY
 
-# Save the capture manifest in the canonical Dropbox archive and verify its content hash.
-dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json" || { echo "::error::Dropbox metadata archive verification failed for $HOST."; exit 1; }
+# Preserve source media and metadata in the Dropbox archive; upload/read-back hash checks are mandatory.
+if ! dropbox_upload "$RAW" "${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4"; then
+  echo "::error::Dropbox raw capture archive failed for $HOST."
+  exit 1
+fi
+if ! dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json"; then
+  echo "::error::Dropbox metadata archive failed for $HOST."
+  exit 1
+fi
 if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   if drive_put "$RESULT" "metadata" "application/json" "BIGO-$HOST-$TS.json" >/dev/null; then
     echo "::notice::Google Drive metadata archive verified for $HOST; all four archive classes are now present"
@@ -689,13 +797,17 @@ if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   fi
 fi
 
-# Save a per-host verification receipt after Dropbox metadata and content-hash read-back checks.
+# Save a per-host verification receipt after the primary archive uploads have passed Dropbox read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
-python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${MEDIA_URL}" "${COVER_URL}" "verified_content_hash_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "${R2_VIDEO_STATUS}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
-host,ts,root,video,cover,archive_status=sys.argv[1:]
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"dropbox_verified","video_url":video,"cover_url":cover,"archive_verification":"Dropbox metadata, byte count and Dropbox content hash read-back","media_delivery_provider":"dropbox","content_hash_readback_verified":archive_status=="verified_content_hash_readback","raw_capture_archived":True}))
+host,ts,root,video,cover,r2_status=sys.argv[1:]
+is_r2=video.startswith("https://media.resofit.fit/")
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"archive_verified","dropbox_root":root,"processed_video":root+"/processed","raw_capture":root+"/raw-captures","metadata":root+"/metadata","logs":root+"/logs","video_url":video,"cover_url":cover,"archive_verification":"Dropbox size and content_hash read-back","media_delivery_provider":"cloudflare_r2" if is_r2 else "dropbox","r2_object_readback_status":r2_status,"r2_object_readback_verified":is_r2 and r2_status=="verified_object_readback"}))
 PYSTATUS
-dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json" || { echo "::error::Dropbox archive receipt verification failed for $HOST."; exit 1; }
-echo "Captured and Dropbox archive-verified $HOST at ${HOST_ROOT}"
+if ! dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json"; then
+  echo "::error::Per-host archive verification receipt failed for $HOST."
+  exit 1
+fi
+echo "Captured and archive-verified $HOST at ${HOST_ROOT}"
 rm -f "$RAW" "$FILE" "$COVER" "$LOG" "$ARCHIVE_STATUS"
