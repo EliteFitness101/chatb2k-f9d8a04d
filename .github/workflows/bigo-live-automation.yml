@@ -1,7 +1,7 @@
 
 name: BIGO Live -> Vercel Blob -> ChatB2K -> Buffer/Drive
 run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
-# Production capture workflow — Vercel Blob is primary public media storage; Dropbox is an optional secondary archive.
+# Production capture workflow — direct R2 S3/CDN is primary; Vercel Blob is fallback; Dropbox is secondary archive.
 
 on:
   # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
