@@ -1,0 +1,33 @@
+name: R2 Dropbox Bridge Checks
+on:
+  push:
+    branches: [render-r2-media-worker]
+    paths:
+      - "render.yaml"
+      - "requirements-r2-worker.txt"
+      - "scripts/r2-dropbox-bridge.py"
+      - "tests/test_r2_dropbox_bridge.py"
+      - ".github/workflows/r2-dropbox-bridge-check.yml"
+  pull_request:
+    paths:
+      - "render.yaml"
+      - "requirements-r2-worker.txt"
+      - "scripts/r2-dropbox-bridge.py"
+      - "tests/test_r2_dropbox_bridge.py"
+      - ".github/workflows/r2-dropbox-bridge-check.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install worker dependency
+        run: python -m pip install -r requirements-r2-worker.txt
+      - name: Compile worker
+        run: python -m py_compile scripts/r2-dropbox-bridge.py tests/test_r2_dropbox_bridge.py
+      - name: Run offline policy tests
+        run: python -m unittest discover -s tests -p "test_r2_dropbox_bridge.py" -v
