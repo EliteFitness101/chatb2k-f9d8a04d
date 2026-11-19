@@ -41,7 +41,7 @@ jobs:
               'DROPBOX_REFRESH_TOKEN',
               'bigo-live-pipeline',
               'BIGO_VERIFIED_HOST_IDS',
-              'BIGO_STREAMLINK_WRAPPER',
+              'timeout 55s streamlink --stdout',
               'resolve_token',
               'bigo_tokenized_api',
           ]
