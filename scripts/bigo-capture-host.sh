@@ -608,19 +608,22 @@ if ! dropbox_ensure_host_dirs; then
   echo "::error::Dropbox host archive directories could not be prepared."
   exit 1
 fi
-DROPBOX_RAW_URL="$(dropbox_upload "$RAW" "${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4")" || {
+DROPBOX_RAW_PATH="${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4"
+DROPBOX_PROCESSED_PATH="${HOST_ROOT}/processed/${HOST}-${TS}.mp4"
+DROPBOX_COVER_PATH="${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg"
+DROPBOX_RAW_URL="$(dropbox_upload "$RAW" "$DROPBOX_RAW_PATH")" || {
   echo "::error::Dropbox raw capture archive verification failed."
   exit 1
 }
-BLOB_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)" || {
+MEDIA_URL="$(dropbox_upload "$FILE" "$DROPBOX_PROCESSED_PATH" true)" || {
   echo "::error::Dropbox processed master archive verification failed."
   exit 1
 }
-COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)" || {
+COVER_URL="$(dropbox_upload "$COVER" "$DROPBOX_COVER_PATH" true)" || {
   echo "::error::Dropbox cover archive verification failed."
   exit 1
 }
-DROPBOX_PROCESSED_URL="$BLOB_URL"
+DROPBOX_PROCESSED_URL="$MEDIA_URL"
 DROPBOX_COVER_URL="$COVER_URL"
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
@@ -662,16 +665,17 @@ else
   echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Dropbox archive remains available."
 fi
 
-python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
+python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$MEDIA_URL" "$COVER_URL" "$DROPBOX_RAW_PATH" "$DROPBOX_PROCESSED_PATH" "$DROPBOX_COVER_PATH" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
 import json,sys
 info=json.loads(sys.argv[1])
-host,name,title,blob,cover=sys.argv[2:7]
-w,h,d,fps,avg,pix,ts,source_stream_url,room_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status,gbp_url,gbp_duration,target_channels=sys.argv[7:]
+host,name,title,media,cover=sys.argv[2:7]
+raw_path,processed_path,cover_path=sys.argv[7:10]
+w,h,d,fps,avg,pix,ts,source_stream_url,room_url,audio_streams,drive_raw,drive_video,drive_cover,drive_status,gbp_url,gbp_duration,target_channels=sys.argv[10:]
 def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'dropbox','blob_store':'dropbox','blob_readback_verified':bool(blob),'dropbox_archive':{'raw_capture_url':None,'processed_url':blob,'cover_url':cover,'content_hash_readback_verified':True}}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':media,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{media}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':media,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'dropbox','blob_store':'dropbox','blob_readback_verified':bool(media),'media_store':'dropbox','dropbox_archive':{'raw_capture_path':raw_path,'processed_path':processed_path,'cover_path':cover_path,'processed_url':media,'cover_url':cover,'content_hash_readback_verified':True}}}
 print(json.dumps({'highlight':hitem}))
 PY
 
@@ -687,7 +691,7 @@ fi
 
 # Save a per-host verification receipt after Dropbox metadata and content-hash read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
-python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_content_hash_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${MEDIA_URL}" "${COVER_URL}" "verified_content_hash_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
 host,ts,root,video,cover,archive_status=sys.argv[1:]
 print(json.dumps({"host_id":host,"captured_at":ts,"status":"dropbox_verified","video_url":video,"cover_url":cover,"archive_verification":"Dropbox metadata, byte count and Dropbox content hash read-back","media_delivery_provider":"dropbox","content_hash_readback_verified":archive_status=="verified_content_hash_readback","raw_capture_archived":True}))
