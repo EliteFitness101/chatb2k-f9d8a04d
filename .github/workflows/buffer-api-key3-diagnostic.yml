@@ -37,7 +37,7 @@ jobs:
           echo "Buffer organizations returned: $ORG_COUNT"
           while IFS=$'\t' read -r ORG_ID ORG_NAME; do
             [ -n "$ORG_ID" ] || continue
-            echo "Organization: $ORG_NAME"
+            echo "Organization: $ORG_NAME ($ORG_ID)"
             payload="$(jq -nc --arg id "$ORG_ID" '{query:"query($organizationId:OrganizationId!){channels(input:{organizationId:$organizationId}){id name displayName service type hasActiveMemberDevice isQueuePaused isDisconnected isLocked}}",variables:{organizationId:$id}}')"
             out="/tmp/buffer-channels-$ORG_ID.json"
             curl --fail --silent --show-error --max-time 30 https://api.buffer.com \
@@ -48,6 +48,6 @@ jobs:
               jq -c '{errors:[.errors[]|{message}]}' "$out"
               exit 1
             fi
-            jq -r '.data.channels[]? | "  - \(.displayName // .name) | \(.service) | type=\(.type) | disconnected=\(.isDisconnected) | locked=\(.isLocked) | queue_paused=\(.isQueuePaused) | member_device=\(.hasActiveMemberDevice)"' "$out"
+            jq -r '.data.channels[]? | "  - \(.displayName // .name) | id=\(.id) | \(.service) | type=\(.type) | disconnected=\(.isDisconnected) | locked=\(.isLocked) | queue_paused=\(.isQueuePaused) | member_device=\(.hasActiveMemberDevice)"' "$out"
           done < <(jq -r '.data.account.organizations[] | [.id,.name] | @tsv' /tmp/buffer-account.json)
           echo "READ-ONLY PASS: organization and channel discovery completed; no posts, queue items, or account settings were changed."
