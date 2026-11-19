@@ -38,6 +38,7 @@ FILE="/tmp/bigo-${SAFE_HOST}-${TS}.mp4"
 COVER="/tmp/bigo-${SAFE_HOST}-${TS}.jpg"
 GBP_FILE="/tmp/bigo-${SAFE_HOST}-${TS}-google-business.mp4"
 LOG="/tmp/streamlink-${SAFE_HOST}.log"
+BIGO_STREAMLINK_WRAPPER="${BIGO_STREAMLINK_WRAPPER:-scripts/bigo-streamlink-capture.py}"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER" "$GBP_FILE"
 
 
@@ -178,7 +179,7 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s streamlink --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -229,7 +230,7 @@ except Exception:
     s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
 urls=re.findall(r"""https?://[^\s"'<>]+m3u8[^\s"'<>]*""",s,re.I)
-urls=[u for u in urls if u.startswith("https://")]
+urls=[u for u in urls if u.startswith("https://") and re.search(r"\\.m3u8(?:\\?|$)",u,re.I)]
 print(urls[0] if urls else "")
 PY
     )"
@@ -265,7 +266,7 @@ try: s=open(sys.argv[1],errors="replace").read()
 except Exception: s=""
 s=s.replace("\\\\/","/").replace("\\u0026","&")
 urls=re.findall(r"""https?://[^\\"'<>\s]+m3u8[^\\"'<>\s]*""",s,re.I)
-urls=[u for u in urls if u.startswith("https://")]
+urls=[u for u in urls if u.startswith("https://") and re.search(r"\\.m3u8(?:\\?|$)",u,re.I)]
 print(urls[0] if urls else "")
 PYSIDHLS
 )"
