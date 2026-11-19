@@ -26,7 +26,7 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# Vercel Blob is the primary media delivery store.
+# Dropbox is the canonical media store for this capture path.
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -173,22 +173,12 @@ FFMPEG_DURATION_ARGS=()
 if [ -n "${BIGO_CAPTURE_DURATION_SECONDS:-}" ]; then
   FFMPEG_DURATION_ARGS=(-t "${BIGO_CAPTURE_DURATION_SECONDS}")
 fi
-# BIGO began requiring authenticated sessions for some rooms. Read a private session cookie
-# from GitHub Actions secrets; never log it or store it in capture metadata.
-STREAMLINK_COOKIE_ARGS=()
-CURL_COOKIE_ARGS=()
-FFMPEG_COOKIE_ARGS=()
-if [ -n "${BIGO_SESSION_COOKIE:-}" ]; then
-  STREAMLINK_COOKIE_ARGS=(--http-header "Cookie=${BIGO_SESSION_COOKIE}")
-  CURL_COOKIE_ARGS=(-H "Cookie: ${BIGO_SESSION_COOKIE}")
-  FFMPEG_COOKIE_ARGS=(-headers "Cookie: ${BIGO_SESSION_COOKIE}"$'\r\n')
-fi
 # Bounded retries: isolate transient room/network failures to this host.
 for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s streamlink --stdout "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --stdout "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -196,6 +186,7 @@ for ATTEMPT in 1 2; do
   if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
   sleep "$ATTEMPT"
 done
+# Signed page pattern: https://www.bigo.tv/sid/*; only identity-matched pages may supply HLS discovery.
 # A signed /sid/ URL is session-scoped and may point at a different room than HOST.
 # Never capture from it as a fallback: that can misattribute another host's live stream.
 # Keep the shortlink fallback only; canonical room/HLS discovery remains the source of truth.
@@ -204,7 +195,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s curl -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -228,7 +219,7 @@ fi
 if [ -n "$PAGE_URL" ]; then
   PAGE="/tmp/bigo-${HOST}-page.html"
   rm -f "$PAGE"
-  if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
+  if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$PAGE_URL" -o "$PAGE"; then
     DISCOVERED_HLS="$(python3 - "$PAGE" <<'PY'
 import re,sys
 p=sys.argv[1]
@@ -267,7 +258,7 @@ PYSID
 )"
   if [ "$SID_MATCH" = "yes" ]; then
     SID_PAGE="/tmp/bigo-${HOST}-sid-page.html"
-    if curl -A "Mozilla/5.0" "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
+    if curl -A "Mozilla/5.0" -L --fail --silent --show-error --retry 1 --retry-delay 1 "$SOURCE_OVERRIDE" -o "$SID_PAGE"; then
       DISCOVERED_HLS="$(python3 - "$SID_PAGE" <<'PYSIDHLS'
 import re,sys
 try: s=open(sys.argv[1],errors="replace").read()
@@ -280,7 +271,7 @@ PYSIDHLS
 )"
       if [ -n "$DISCOVERED_HLS" ]; then
         STREAM_URL="$DISCOVERED_HLS"
-        echo "::notice::BIGO host $HOST discovered HLS from identity-matched sid page"
+        echo "::notice::BIGO host $HOST discovered HLS manifest from signed /sid/ page after identity match"
       fi
     fi
     rm -f "$SID_PAGE"
@@ -294,7 +285,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 "${FFMPEG_COOKIE_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
@@ -435,15 +426,21 @@ if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = 
   fi
 fi
 
-# Dropbox is optional secondary archival. Vercel Blob is mandatory for public delivery.
-if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
-  if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
-    DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
-    export DROPBOX_ACCESS_TOKEN
-  else
-    echo "::warning::Dropbox OAuth refresh failed; primary Vercel Blob delivery remains available."
-  fi
+# Dropbox is the canonical media store for this capture path.
+if [ -z "${DROPBOX_APP_KEY:-}" ] || [ -z "${DROPBOX_APP_SECRET:-}" ] || [ -z "${DROPBOX_REFRESH_TOKEN:-}" ]; then
+  echo "::error::Dropbox credentials are required; refusing capture without the canonical archive."
+  exit 1
 fi
+if ! DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
+  echo "::error::Dropbox OAuth refresh failed; refusing capture without the canonical archive."
+  exit 1
+fi
+DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
+if [ -z "$DROPBOX_ACCESS_TOKEN" ]; then
+  echo "::error::Dropbox OAuth returned no access token; refusing capture."
+  exit 1
+fi
+export DROPBOX_ACCESS_TOKEN
 dropbox_upload() {
   local SRC="$1" DEST="$2" SHARE="${3:-false}"
   [ -n "${DROPBOX_ACCESS_TOKEN:-}" ] || return 2
@@ -604,50 +601,36 @@ PYDIR
 }
 
 export FILE COVER
-# Upload processed media and cover to Vercel Blob first; public URLs are verified by SHA-256 read-back.
-blob_upload() {
-  local SRC="$1" KEY="$2" MIME="$3"
-  [ -n "${BLOB_READ_WRITE_TOKEN:-}" ] || { echo "Vercel Blob token is missing" >&2; return 2; }
-  [ -s "$SRC" ] || { echo "Blob upload source is empty: $SRC" >&2; return 1; }
-  ( cd /tmp/bigo-blob-sdk && BLOB_READ_WRITE_TOKEN="$BLOB_READ_WRITE_TOKEN" node --input-type=module - "$SRC" "$KEY" "$MIME" <<'JSBLOB'
-import { readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
-import { put } from '@vercel/blob';
-const [src, pathname, contentType] = process.argv.slice(2);
-const token = process.env.BLOB_READ_WRITE_TOKEN;
-if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is missing');
-const bytes = await readFile(src);
-const digest = createHash('sha256').update(bytes).digest('hex');
-const blob = await put(pathname, bytes, { access: 'public', token, contentType, addRandomSuffix: false });
-if (!blob?.url?.startsWith('https://')) throw new Error('Vercel Blob did not return a public HTTPS URL');
-const response = await fetch(blob.url, { cache: 'no-store' });
-if (!response.ok) throw new Error(`Blob read-back failed (HTTP ${response.status})`);
-const readback = Buffer.from(await response.arrayBuffer());
-const readbackDigest = createHash('sha256').update(readback).digest('hex');
-if (readback.length !== bytes.length || readbackDigest !== digest) throw new Error('Blob read-back byte count or SHA-256 mismatch');
-process.stdout.write(JSON.stringify({url: blob.url, size: bytes.length, sha256: digest, verified: true}));
-JSBLOB
-  ) | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("verified") is True; print(d["url"])'
+# Dropbox is the canonical media store for this capture path. Every source and deliverable
+# must pass Dropbox metadata and content-hash read-back before ChatB2K ingestion.
+if ! dropbox_ensure_host_dirs; then
+  echo "::error::Dropbox host archive directories could not be prepared."
+  exit 1
+fi
+DROPBOX_RAW_URL="$(dropbox_upload "$RAW" "${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4")" || {
+  echo "::error::Dropbox raw capture archive verification failed."
+  exit 1
 }
-BLOB_URL="$(blob_upload "$FILE" "bigo/hosts/${SAFE_HOST}/processed/${HOST}-${TS}.mp4" "video/mp4")"
-COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
+BLOB_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)" || {
+  echo "::error::Dropbox processed master archive verification failed."
+  exit 1
+}
+COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)" || {
+  echo "::error::Dropbox cover archive verification failed."
+  exit 1
+}
+DROPBOX_PROCESSED_URL="$BLOB_URL"
+DROPBOX_COVER_URL="$COVER_URL"
 GBP_URL=""
 if [ -s "$GBP_FILE" ]; then
   if audio_qa "$GBP_FILE" "Google Business derivative"; then
-    GBP_URL="$(blob_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
+    GBP_URL="$(dropbox_upload "$GBP_FILE" "${HOST_ROOT}/processed/google-business/${HOST}-${TS}-30s.mp4" true)" || {
+      echo "::warning::Dropbox Google Business derivative archive failed for $HOST; that channel remains held."
+      GBP_URL=""
+    }
   else
     echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
     rm -f "$GBP_FILE"
-  fi
-fi
-DROPBOX_PROCESSED_URL=""
-DROPBOX_COVER_URL=""
-DROPBOX_RAW_URL=""
-if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
-  if dropbox_ensure_host_dirs; then
-    DROPBOX_PROCESSED_URL="$(dropbox_upload "$FILE" "${HOST_ROOT}/processed/${HOST}-${TS}.mp4" true)" || DROPBOX_PROCESSED_URL=""
-    DROPBOX_COVER_URL="$(dropbox_upload "$COVER" "${HOST_ROOT}/metadata/${HOST}-${TS}-cover.jpg" true)" || DROPBOX_COVER_URL=""
-    DROPBOX_RAW_URL="$(dropbox_upload "$RAW" "${HOST_ROOT}/raw-captures/${HOST}-${TS}-raw.mp4")" || DROPBOX_RAW_URL=""
   fi
 fi
 
@@ -671,11 +654,11 @@ if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
     echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST; metadata read-back is still pending"
   else
     DRIVE_SYNC_STATUS="partial"
-    echo "::warning::Google Drive archive is partial for $HOST; verified Blob delivery remains available."
+    echo "::warning::Google Drive archive is partial for $HOST; verified Dropbox archive remains available."
   fi
 else
   DRIVE_SYNC_STATUS="not_configured"
-  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Blob delivery remains available."
+  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Dropbox archive remains available."
 fi
 
 python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
@@ -687,14 +670,12 @@ def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'vercel_blob','blob_store':'vercel_blob','blob_readback_verified':bool(blob)}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':'dropbox','blob_store':'dropbox','blob_readback_verified':bool(blob),'dropbox_archive':{'raw_capture_url':None,'processed_url':blob,'cover_url':cover,'content_hash_readback_verified':True}}}
 print(json.dumps({'highlight':hitem}))
 PY
 
-# Save an optional secondary Dropbox metadata copy after the primary Blob object read-back succeeds.
-if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
-  dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json" || echo "::warning::Secondary Dropbox metadata archive failed for $HOST."
-fi
+# Save the capture manifest in the canonical Dropbox archive and verify its content hash.
+dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json" || { echo "::error::Dropbox metadata archive verification failed for $HOST."; exit 1; }
 if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   if drive_put "$RESULT" "metadata" "application/json" "BIGO-$HOST-$TS.json" >/dev/null; then
     echo "::notice::Google Drive metadata archive verified for $HOST; all four archive classes are now present"
@@ -703,16 +684,13 @@ if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   fi
 fi
 
-# Save a per-host verification receipt after the primary Blob objects pass SHA-256 read-back checks.
+# Save a per-host verification receipt after Dropbox metadata and content-hash read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
-python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_object_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
+python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "verified_content_hash_readback" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
-host,ts,root,video,cover,blob_status=sys.argv[1:]
-is_blob=video.startswith("https://")
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"blob_verified","video_url":video,"cover_url":cover,"archive_verification":"Vercel Blob public GET and SHA-256 byte-for-byte read-back","media_delivery_provider":"vercel_blob","blob_readback_status":blob_status,"blob_object_readback_verified":is_blob and blob_status=="verified_object_readback","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
+host,ts,root,video,cover,archive_status=sys.argv[1:]
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"dropbox_verified","video_url":video,"cover_url":cover,"archive_verification":"Dropbox metadata, byte count and Dropbox content hash read-back","media_delivery_provider":"dropbox","content_hash_readback_verified":archive_status=="verified_content_hash_readback","raw_capture_archived":True}))
 PYSTATUS
-if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
-  dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json" || echo "::warning::Secondary Dropbox receipt archive failed for $HOST."
-fi
-echo "Captured and archive-verified $HOST at ${HOST_ROOT}"
+dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json" || { echo "::error::Dropbox archive receipt verification failed for $HOST."; exit 1; }
+echo "Captured and Dropbox archive-verified $HOST at ${HOST_ROOT}"
 rm -f "$RAW" "$FILE" "$COVER" "$LOG" "$ARCHIVE_STATUS"
