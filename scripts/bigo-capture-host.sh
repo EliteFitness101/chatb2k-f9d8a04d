@@ -193,7 +193,7 @@ try:
     print(json.dumps(out))
 except Exception as e:
     try:
-        r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
+        r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12,proxies=PROXIES)
         r.raise_for_status()
         out=build(r.json().get('data') or {})
         out['discovery_method']='bigo_legacy_api'
