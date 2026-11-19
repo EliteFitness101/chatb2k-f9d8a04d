@@ -1,11 +1,10 @@
-name: BIGO storage baseline validation
+name: BIGO direct R2 storage validation
 
 on:
   push:
     branches: [main]
     paths:
       - 'scripts/bigo-capture-host.sh'
-      - 'scripts/bigo-streamlink-capture.py'
       - '.github/workflows/bigo-live-automation.yml'
       - '.github/workflows/dropbox-primary-check.yml'
   pull_request:
@@ -19,46 +18,49 @@ permissions:
   contents: read
 
 jobs:
-  storage-baseline-static:
+  direct-r2-static:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - name: Validate capture shell syntax
         run: bash -n scripts/bigo-capture-host.sh
-      - name: Assert verified Blob delivery and optional Dropbox archive
+      - name: Assert direct R2 primary, Blob fallback and Dropbox archive
         run: |
           python3 - <<'PY'
           from pathlib import Path
           script = Path('scripts/bigo-capture-host.sh').read_text()
           workflow = Path('.github/workflows/bigo-live-automation.yml').read_text()
           required = [
-              'Vercel Blob is the primary media delivery store',
+              'r2_upload()',
+              'aws s3api put-object',
+              'aws s3api get-object',
+              'R2_ACCESS_KEY_ID',
+              'R2_SECRET_ACCESS_KEY',
+              'R2_ENDPOINT',
+              'R2_PUBLIC_BASE_URL',
+              'R2_BUCKET_NAME',
+              'R2 public CDN SHA-256 mismatch',
+              'media_delivery_provider',
+              'r2_object_readback_verified',
+              'blob_upload()',
               'BLOB_READ_WRITE_TOKEN',
-              "from '@vercel/blob'",
-              'Blob read-back byte count or SHA-256 mismatch',
-              'Dropbox is optional secondary archival',
+              'dropbox_upload()',
               'DROPBOX_REFRESH_TOKEN',
-              'bigo-live-pipeline',
               'BIGO_VERIFIED_HOST_IDS',
-              'timeout 55s streamlink --stdout',
-              'resolve_token',
-              'bigo_tokenized_api',
+              'bigo-live-pipeline',
           ]
           missing = [item for item in required if item not in script + workflow]
-          assert not missing, f'Missing production capture controls: {missing}'
-          assert 'BIGO_EGRESS_PROXY' not in script + workflow
-          assert 'R2_WORKERS_DEV_URL' not in script + workflow
+          assert not missing, f'Missing direct R2 controls: {missing}'
           assert 'workers.dev' not in script + workflow
-          assert 'BLOB_READ_WRITE_TOKEN' in workflow
-          assert 'DROPBOX_APP_KEY' in workflow
-          assert 'DROPBOX_APP_SECRET' in workflow
-          assert 'DROPBOX_REFRESH_TOKEN' in workflow
+          assert 'R2_WORKERS_DEV_URL' not in script + workflow
+          assert 'BIGO_EGRESS_PROXY' not in script + workflow
+          assert 'R2_ACCESS_KEY_ID:' in workflow
+          assert 'R2_SECRET_ACCESS_KEY:' in workflow
+          assert 'R2_ENDPOINT:' in workflow
+          assert 'R2_PUBLIC_BASE_URL:' in workflow
+          assert 'BLOB_READ_WRITE_TOKEN:' in workflow
           assert 'CAPTURE_STORAGE_ONLY' in workflow
           assert 'schedule:' in workflow and 'workflow_dispatch:' in workflow
-          assert 'BIGO_VERIFIED_HOST_IDS' in workflow
-          assert 'BIGO_HOST_IDS' in workflow
-          assert 'BIGO_SESSION_COOKIE:' not in workflow
-          assert 'BIGO_EGRESS_PROXY:' not in workflow
-          print('PASS: Blob is primary with verified public read-back; Dropbox remains optional secondary archive; no proxy or Worker secret dependency.')
+          print('PASS: direct R2 S3 upload and public CDN read-back are primary; Blob is fallback; Dropbox is secondary; no Worker or proxy dependency.')
           PY
