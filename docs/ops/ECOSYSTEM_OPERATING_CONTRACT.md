@@ -88,6 +88,16 @@ Use accessible pill CTAs and responsive luxury cards; honor reduced-motion prefe
 - Prior evidence: Run `44603993023` at commit `1f3f120e6ae7181162b8844d23844905a432d839` captured one host, verified Dropbox archive read-backs, and stored one highlight with `storage_only=true`; it also recorded 79 host failures. R2-labelled run `44159109204` at commit `19634e749e5437d7ae262ac81a2111067dfeb3c6` completed with 0 highlights and did not exercise R2 upload/read-back. Neither proves healthy full-inventory capture or R2 delivery.
 - Result: The live inventory was 84 hosts and remained uncapped. No media upload, R2 read-back, or ingestion occurred in run `44675157469`; R2 remains unverified in production.
 - Recovery action: The patch is now in `main` at `34a4d250dd62289ef873b0ad06ae5d72668b3235`, with R2 primary, Blob fallback, rights gates, and storage-only push behavior preserved. The read-only token diagnostic dispatch and Actions secret inventory were blocked by GitHub API `403`; do not infer the proxy secret is configured.
+- Firecrawl read-only audit:
+  - Timestamp: `2026-11-20T04:49:10.557Z`; owner: GitHub Actions workflow execution (operator identity not established).
+  - Repository: `EliteFitness101/chatb2k-f9d8a04d`; branch/commit: `main` / `e9ad49b6620473be9da4f2a8fa417c6d374efc81`.
+  - Deployment: none; scheduled diagnostic run `44648818737`.
+  - Domain/route: `https://api.firecrawl.dev/v2/scrape`.
+  - Dependencies: Firecrawl account/API key and configured `BIGO_LIVE_PROBE_HOST_IDS`; this is not the production capture inventory.
+  - Evidence level/status: **E — CURRENT FAILURE**. Run `44648818737` returned HTTP 402 `payment_required` with 0 results. Older run `44587980708` tested 50 configured probe IDs and discovered 0.
+  - Result: The uploaded report was sanitized. The runner does not write to the registry, capture queue, media store, or publishers.
+  - Next action: resolve the Firecrawl 402 with its provider before relying on this path for discovery; separately resolve BIGO token/egress before another capture attempt.
+  - Recovery plan: keep the Firecrawl runner observation-only and do not route production capture through it until it returns usable discovery results; preserve the uncapped Supabase source registry and current production workflow.
 - Next action: resolve the BIGO token/egress failure through the existing authorized provider path, then verify a safe storage-only run through actual capture, R2 S3/CDN read-back, and ingestion independently. Do not add a mandatory new secret without checking existing configuration.
 - Recovery plan: if provider token issuance remains invalid, keep scheduled capture behavior and the full inventory intact while resolving the upstream dependency; do not switch to Dropbox-canonical storage, bypass rights checks, disable the pipeline, or claim production restored. If the code change itself regresses after token recovery, revert only the shim invocation/optional wiring while preserving R2 configuration and publishing controls.
 
