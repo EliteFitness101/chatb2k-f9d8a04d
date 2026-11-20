@@ -2,7 +2,7 @@
   "schema_version": 1,
   "config_role": "operational_host_inventory_and_capture_provenance",
   "status": "persisted_in_repository",
-  "updated_at": "2026-11-18T00:00:00.000Z",
+  "updated_at": "2026-11-20T04:19:24.308Z",
   "source_of_truth": {
     "active_host_inventory": "Supabase public.bigo_sources returned live by the BIGO live pipeline source-registry endpoint on every capture cycle; no fixed host count.",
     "additional_capture_ids": [
@@ -12,16 +12,17 @@
     "merge_policy": "Deduplicate the live active-registry host IDs with optional BIGO_HOST_IDS and BIGO_VERIFIED_HOST_IDS environment/Actions-secret additions; preserve registry source URLs and use the canonical room URL only as a fallback.",
     "allowlist_semantics": "BIGO_VERIFIED_HOST_IDS is included in the capture inventory; it does not replace active source-registry checks or per-host rights evidence."
   },
-  "capture_method_observed": {
+  "capture_method_configured": {
     "workflow": ".github/workflows/bigo-live-automation.yml",
     "capture_script": "scripts/bigo-capture-host.sh",
-    "method": "Resolve each host from the live source registry; attempt tokenized BIGO room metadata and Streamlink capture; normalize and QA the media; upload processed video and cover to Vercel Blob; perform public GET and SHA-256 byte-for-byte read-back; optionally archive raw media and metadata to Dropbox and optionally sync Drive.",
+    "method": "Resolve the complete host inventory from the live source registry; capture through the token-aware Streamlink BIGO resolver and HLS reader; normalize and QA media; upload processed video and cover to R2 first with S3 and public-CDN SHA-256 read-back; use Vercel Blob only if R2 upload/read-back fails; optionally archive to Dropbox and sync Drive. This is configured behavior, not proof of a successful production run.",
     "public_capture_authentication": {
       "user_session_cookie_required": false,
-      "method": "Public BIGO metadata and stream discovery with tokenized and legacy API, Streamlink, canonical-page HLS, identity-matched /sid/ and direct FFmpeg HLS fallbacks."
+      "method": "Public BIGO metadata and stream discovery with token-aware Streamlink, canonical-page HLS, identity-matched /sid/ and direct FFmpeg HLS fallbacks."
     },
+    "egress_proxy": "Optional BIGO_EGRESS_PROXY GitHub Actions secret; used only for BIGO playback-token, HLS and CDN requests.",
     "credential_storage": "Keep Dropbox OAuth credentials and any optional BIGO session cookie in GitHub Actions encrypted secrets; never store their values in Dropbox manifests or this config.",
-    "storage": "Vercel Blob is the primary public delivery store; Dropbox is optional secondary archival; Google Drive is optional secondary sync."
+    "storage": "Cloudflare R2 is configured as primary public delivery; Vercel Blob is a per-object fallback; Dropbox is optional secondary archival; Google Drive is optional secondary sync. R2 production read-back remains unverified."
   },
   "provenance_fields": [
     "host_id",
@@ -30,6 +31,10 @@
     "workflow_run_id",
     "source_asset_fingerprint",
     "blob_url",
+    "media_delivery_provider",
+    "media_readback_verified",
+    "r2_object_readback_verified",
+    "r2_public_cdn_readback_verified",
     "blob_object_readback_verified",
     "blob_sha256",
     "optional_dropbox_path",
@@ -41,8 +46,9 @@
     "publish_target"
   ],
   "capture_status_policy": {
+    "media_verified": "The selected provider's upload and public HTTPS read-back matched the local SHA-256 and byte count; R2 also requires S3 object read-back.",
     "blob_verified": "Vercel Blob upload completed and public GET read-back matched the local SHA-256 and byte count",
-    "captured_not_published": "Media is Blob-verified and ingested, but downstream publication is not confirmed or is held by policy",
+    "captured_not_published": "Media is provider-verified and ingested, but downstream publication is not confirmed or is held by policy",
     "published_verified": "Downstream platform returns a publication identifier or URL and the post is read back/verified",
     "failed_or_offline": "Record per-host outcome and continue processing other hosts"
   },

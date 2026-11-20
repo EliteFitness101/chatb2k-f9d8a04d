@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - 'scripts/bigo-capture-host.sh'
+      - 'scripts/bigo-streamlink-capture.py'
       - '.github/workflows/bigo-capture-syntax-check.yml'
 
 permissions:
@@ -22,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Bash syntax
         run: bash -n scripts/bigo-capture-host.sh
-      - name: Validate token-free Streamlink shim Python
+      - name: Validate BIGO Streamlink shim Python
         run: python3 -m py_compile scripts/bigo-streamlink-capture.py
       - name: Validate embedded BIGO API resolver Python
         run: |

@@ -77,6 +77,19 @@ Use accessible pill CTAs and responsive luxury cards; honor reduced-motion prefe
 - The current UI/upload PR is `EliteFitness101/shopb2k#97`, branch `ops/upload-host-and-ecosystem-contract`. A Vercel preview for an earlier branch commit reached READY; later commits were queued at the latest check. The preview is not production. Main build-gate run `40165825412` passed, and ecosystem audit workflow run `40165825409` passed; neither verifies the pending Cloudflare route or R2/BIGO readback.
 - These are active blockers, not fixed items. Re-run each check after patch/deploy and update this ledger with new evidence.
 
+## BIGO capture recovery record — 2026-11-20
+
+- Timestamp: `2026-11-20T04:19:24.308Z`; owner: GitHub Actions workflow execution (operator identity not established).
+- Repository: `EliteFitness101/chatb2k-f9d8a04d`; branch/commit: `main` / `e091b5a28efb7a821e9ce58e372b488a7fa9752d`.
+- Deployment: no application deployment; production scheduled workflow run `44649685119`.
+- Domain/route: `https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline` (source registry and batch ingest).
+- Dependencies: live `public.bigo_sources` registry, BIGO token/HLS endpoints and Streamlink, GitHub Actions media credentials, and downstream Supabase ingestion.
+- Evidence level/status: **E — CURRENT FAILURE**. Run `44649685119` failed in capture before ingestion: 0 highlights and 84 per-host capture failures; logs report missing BIGO playback-token fields. The preceding non-empty success, run `44603993023` at commit `1f3f120e6ae7181162b8844d23844905a432d839`, captured one host, verified Dropbox archive read-backs, and stored one highlight with `storage_only=true`; it also recorded 79 host failures. The earlier R2-labelled run `44159109204` at commit `19634e749e5437d7ae262ac81a2111067dfeb3c6` completed with 0 highlights and therefore did not exercise R2 upload/read-back. These are partial/empty success records, not evidence that the full inventory or R2 delivery is healthy.
+- Result: The live inventory was 84 hosts and remained uncapped. R2 upload/read-back has no successful production evidence in these runs; do not describe R2 as production-verified.
+- Recovery patch: present in the local worktree at evidence level **C — DEVELOPMENT**; it restores the prior token-aware shim invocation and optional existing session/egress secret wiring while retaining R2-primary storage and the full registry inventory. It is not yet merged or production-verified.
+- Next action: merge the recovery patch, then verify a safe storage-only production run through capture, R2 S3/CDN read-back, and ingestion independently.
+- Recovery plan: if capture remains broken, revert only the shim invocation and optional secret wiring; preserve the dynamic host inventory, rights gates, R2 configuration, and downstream publishing controls. Do not roll back to Dropbox-canonical storage or infer success from a workflow start.
+
 ## Required verification after merge
 
 1. Confirm Cloudflare API token scope and access to Worker service `shopb2k`; do not rotate or replace credentials without checking the existing secret and account context.
