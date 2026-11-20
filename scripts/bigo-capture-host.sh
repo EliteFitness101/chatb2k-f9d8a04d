@@ -42,8 +42,8 @@ BIGO_STREAMLINK_WRAPPER="${BIGO_STREAMLINK_WRAPPER:-scripts/bigo-streamlink-capt
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER" "$GBP_FILE"
 
 
-# Secondary Google Drive archive. Dropbox remains canonical; Drive errors are reported
-# without suppressing an otherwise verified Dropbox capture or changing publish policy.
+# Secondary Google Drive archive. Drive errors are reported without suppressing an
+# otherwise verified primary media delivery or changing publish policy.
 drive_put() {
   local SRC="$1" CLASS="$2" MIME="$3" NAME="$4"
   local SESSION UPLOAD_URL UPLOAD_RESULT FILE_ID SIZE MD5 VERIFY
@@ -603,7 +603,7 @@ PYDIR
 }
 
 export FILE COVER
-# Upload processed media and cover to Vercel Blob first; public URLs are verified by SHA-256 read-back.
+# Upload media to direct R2 first; use Vercel Blob only when R2 upload or public read-back fails.
 blob_upload() {
   local SRC="$1" KEY="$2" MIME="$3"
   [ -n "${BLOB_READ_WRITE_TOKEN:-}" ] || { echo "Vercel Blob token is missing" >&2; return 2; }
@@ -714,16 +714,7 @@ if [ -s "$GBP_FILE" ]; then
     rm -f "$GBP_FILE"
   fi
 fi
-COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
-GBP_URL=""
-if [ -s "$GBP_FILE" ]; then
-  if audio_qa "$GBP_FILE" "Google Business derivative"; then
-    GBP_URL="$(blob_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
-  else
-    echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
-    rm -f "$GBP_FILE"
-  fi
-fi
+# Keep the URLs and provider receipts returned by media_upload (R2 first, Blob fallback).
 DROPBOX_PROCESSED_URL=""
 DROPBOX_COVER_URL=""
 DROPBOX_RAW_URL=""
@@ -755,11 +746,11 @@ if [ -n "${DRIVE_UPLOAD_URL:-}" ] && [ -n "${CHATB2K_LIVE_INGEST_KEY:-}" ]; then
     echo "::notice::Google Drive raw, processed video and cover read-back checks passed for $HOST; metadata read-back is still pending"
   else
     DRIVE_SYNC_STATUS="partial"
-    echo "::warning::Google Drive archive is partial for $HOST; verified Blob delivery remains available."
+    echo "::warning::Google Drive archive is partial for $HOST; verified primary media delivery remains available."
   fi
 else
   DRIVE_SYNC_STATUS="not_configured"
-  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified Blob delivery remains available."
+  echo "::warning::Google Drive upload endpoint or shared ingest credential is missing; verified primary media delivery remains available."
 fi
 
 python3 - "$INFO" "$HOST" "$NAME" "$TITLE" "$BLOB_URL" "$COVER_URL" "$WIDTH" "$HEIGHT" "$DURATION" "$FPS" "$AVG_FPS" "$PIX_FMT" "$TS" "$SOURCE_URL" "$BIGO_ROOM_URL" "$AUDIO_STREAMS" "$DRIVE_RAW" "$DRIVE_VIDEO" "$DRIVE_COVER" "$DRIVE_SYNC_STATUS" "$GBP_URL" "$GBP_DURATION" "$VIDEO_PROVIDER" "$COVER_PROVIDER" "$GBP_PROVIDER" "${BIGO_TARGET_CHANNELS:-tiktok}" <<'PY' > "$RESULT"
@@ -775,7 +766,7 @@ hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'
 print(json.dumps({'highlight':hitem}))
 PY
 
-# Save an optional secondary Dropbox metadata copy after the primary Blob object read-back succeeds.
+# Save an optional secondary Dropbox metadata copy after primary media read-back succeeds.
 if [ -n "${DROPBOX_ACCESS_TOKEN:-}" ]; then
   dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json" || echo "::warning::Secondary Dropbox metadata archive failed for $HOST."
 fi
@@ -787,7 +778,7 @@ if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   fi
 fi
 
-# Save a per-host verification receipt after the primary Blob objects pass SHA-256 read-back checks.
+# Save a per-host verification receipt after primary media objects pass SHA-256 read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
 python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "${VIDEO_PROVIDER}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys

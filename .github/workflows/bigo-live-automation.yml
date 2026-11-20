@@ -4,12 +4,9 @@ run-name: BIGO R2 capture/archive verification — ${{ github.event_name }} — 
 # Production capture workflow — direct R2 S3/CDN is primary; Vercel Blob is fallback; Dropbox is secondary archive.
 
 on:
-  # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/bigo-live-automation.yml'
-      - 'scripts/bigo-capture-host.sh'
+  # Keep production capture on its existing schedule or an explicit manual dispatch.
+  # PR validation is handled by dropbox-primary-check.yml; merging code must not trigger
+  # an additional unscheduled live-host capture.
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -27,7 +24,6 @@ env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
-  BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -59,7 +55,11 @@ jobs:
             sudo apt-get install -y -qq ffmpeg
           fi
           python3 -m pip install --disable-pip-version-check -q 'streamlink>=8.6.1,<9' requests
-          npm install --prefix /tmp/bigo-blob-sdk --no-audit --no-fund @vercel/blob
+          if [ -n "${BLOB_READ_WRITE_TOKEN:-}" ]; then
+            npm install --prefix /tmp/bigo-blob-sdk --no-audit --no-fund @vercel/blob
+          else
+            echo "::notice::Blob fallback token absent; R2 remains usable and Blob fallback is unavailable."
+          fi
           ffmpeg -version | head -n 1
           streamlink --version
 
@@ -68,11 +68,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then
-            echo "::error::BLOB_READ_WRITE_TOKEN fallback is missing; refusing capture without the verified fallback store."
-            exit 1
+          if [ -n "${BLOB_READ_WRITE_TOKEN:-}" ]; then
+            echo "::notice::Vercel Blob fallback credential is present; value is not logged."
+          else
+            echo "::warning::Blob fallback credential is absent; capture will proceed with R2 only."
           fi
-          echo "::notice::Vercel Blob fallback credential is present; value is not logged."
           if [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ] || [ -z "${R2_ENDPOINT:-}" ] || [ -z "${R2_PUBLIC_BASE_URL:-}" ] || { [ -z "${R2_BUCKET_NAME:-}" ] && [ -z "${R2_BUCKET:-}" ]; }; then
             echo "::error::Direct R2 credentials are incomplete; refusing capture without the primary media store."
             exit 1
