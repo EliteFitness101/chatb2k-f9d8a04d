@@ -2,7 +2,7 @@
   "schema_version": 1,
   "config_role": "operational_host_inventory_and_capture_provenance",
   "status": "persisted_in_repository",
-  "updated_at": "2026-11-20T04:19:24.308Z",
+  "updated_at": "2026-11-20T04:36:59Z",
   "source_of_truth": {
     "active_host_inventory": "Supabase public.bigo_sources returned live by the BIGO live pipeline source-registry endpoint on every capture cycle; no fixed host count.",
     "additional_capture_ids": [

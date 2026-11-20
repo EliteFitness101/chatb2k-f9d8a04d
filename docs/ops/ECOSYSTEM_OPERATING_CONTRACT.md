@@ -79,16 +79,17 @@ Use accessible pill CTAs and responsive luxury cards; honor reduced-motion prefe
 
 ## BIGO capture recovery record — 2026-11-20
 
-- Timestamp: `2026-11-20T04:19:24.308Z`; owner: GitHub Actions workflow execution (operator identity not established).
-- Repository: `EliteFitness101/chatb2k-f9d8a04d`; branch/commit: `main` / `e091b5a28efb7a821e9ce58e372b488a7fa9752d`.
-- Deployment: no application deployment; production scheduled workflow run `44649685119`.
+- Timestamp: `2026-11-20T04:36:59Z`; owner: GitHub Actions workflow execution (operator identity not established).
+- Repository: `EliteFitness101/chatb2k-f9d8a04d`; branch/commit: `main` / `34a4d250dd62289ef873b0ad06ae5d72668b3235`.
+- Deployment: no application deployment; production push-triggered workflow run `44675157469` (`storage_only=true`).
 - Domain/route: `https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline` (source registry and batch ingest).
 - Dependencies: live `public.bigo_sources` registry, BIGO token/HLS endpoints and Streamlink, GitHub Actions media credentials, and downstream Supabase ingestion.
-- Evidence level/status: **E — CURRENT FAILURE**. Run `44649685119` failed in capture before ingestion: 0 highlights and 84 per-host capture failures; logs report missing BIGO playback-token fields. The preceding non-empty success, run `44603993023` at commit `1f3f120e6ae7181162b8844d23844905a432d839`, captured one host, verified Dropbox archive read-backs, and stored one highlight with `storage_only=true`; it also recorded 79 host failures. The earlier R2-labelled run `44159109204` at commit `19634e749e5437d7ae262ac81a2111067dfeb3c6` completed with 0 highlights and therefore did not exercise R2 upload/read-back. These are partial/empty success records, not evidence that the full inventory or R2 delivery is healthy.
-- Result: The live inventory was 84 hosts and remained uncapped. R2 upload/read-back has no successful production evidence in these runs; do not describe R2 as production-verified.
-- Recovery patch: present in the local worktree at evidence level **C — DEVELOPMENT**; it restores the prior token-aware shim invocation and optional existing session/egress secret wiring while retaining R2-primary storage and the full registry inventory. It is not yet merged or production-verified.
-- Next action: merge the recovery patch, then verify a safe storage-only production run through capture, R2 S3/CDN read-back, and ingestion independently.
-- Recovery plan: if capture remains broken, revert only the shim invocation and optional secret wiring; preserve the dynamic host inventory, rights gates, R2 configuration, and downstream publishing controls. Do not roll back to Dropbox-canonical storage or infer success from a workflow start.
+- Evidence level/status: **E — CURRENT FAILURE**. Run `44675157469` failed in capture before ingestion: 0 highlights and 84 per-host capture failures; Streamlink and the metadata resolver received BIGO responses without a playback-token field. The `BIGO_SESSION_COOKIE` and `BIGO_EGRESS_PROXY` environment values were empty in this run. The recovery commit restored the previously used token-aware shim, but did not restore live capture.
+- Prior evidence: Run `44603993023` at commit `1f3f120e6ae7181162b8844d23844905a432d839` captured one host, verified Dropbox archive read-backs, and stored one highlight with `storage_only=true`; it also recorded 79 host failures. R2-labelled run `44159109204` at commit `19634e749e5437d7ae262ac81a2111067dfeb3c6` completed with 0 highlights and did not exercise R2 upload/read-back. Neither proves healthy full-inventory capture or R2 delivery.
+- Result: The live inventory was 84 hosts and remained uncapped. No media upload, R2 read-back, or ingestion occurred in run `44675157469`; R2 remains unverified in production.
+- Recovery action: The patch is now in `main` at `34a4d250dd62289ef873b0ad06ae5d72668b3235`, with R2 primary, Blob fallback, rights gates, and storage-only push behavior preserved. The read-only token diagnostic dispatch and Actions secret inventory were blocked by GitHub API `403`; do not infer the proxy secret is configured.
+- Next action: resolve the BIGO token/egress failure through the existing authorized provider path, then verify a safe storage-only run through actual capture, R2 S3/CDN read-back, and ingestion independently. Do not add a mandatory new secret without checking existing configuration.
+- Recovery plan: if provider token issuance remains invalid, keep scheduled capture behavior and the full inventory intact while resolving the upstream dependency; do not switch to Dropbox-canonical storage, bypass rights checks, disable the pipeline, or claim production restored. If the code change itself regresses after token recovery, revert only the shim invocation/optional wiring while preserving R2 configuration and publishing controls.
 
 ## Required verification after merge
 
