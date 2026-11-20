@@ -603,7 +603,7 @@ PYDIR
 }
 
 export FILE COVER
-# Upload processed media and cover to Vercel Blob first; public URLs are verified by SHA-256 read-back.
+# Upload media to direct R2 first; use Vercel Blob only when R2 upload or public read-back fails.
 blob_upload() {
   local SRC="$1" KEY="$2" MIME="$3"
   [ -n "${BLOB_READ_WRITE_TOKEN:-}" ] || { echo "Vercel Blob token is missing" >&2; return 2; }
@@ -714,16 +714,7 @@ if [ -s "$GBP_FILE" ]; then
     rm -f "$GBP_FILE"
   fi
 fi
-COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
-GBP_URL=""
-if [ -s "$GBP_FILE" ]; then
-  if audio_qa "$GBP_FILE" "Google Business derivative"; then
-    GBP_URL="$(blob_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
-  else
-    echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
-    rm -f "$GBP_FILE"
-  fi
-fi
+# Keep the URLs and provider receipts returned by media_upload (R2 first, Blob fallback).
 DROPBOX_PROCESSED_URL=""
 DROPBOX_COVER_URL=""
 DROPBOX_RAW_URL=""
