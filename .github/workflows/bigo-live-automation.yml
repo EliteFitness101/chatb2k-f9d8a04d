@@ -4,12 +4,9 @@ run-name: BIGO R2 capture/archive verification — ${{ github.event_name }} — 
 # Production capture workflow — direct R2 S3/CDN is primary; Vercel Blob is fallback; Dropbox is secondary archive.
 
 on:
-  # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/bigo-live-automation.yml'
-      - 'scripts/bigo-capture-host.sh'
+  # Keep production capture on its existing schedule or an explicit manual dispatch.
+  # PR validation is handled by dropbox-primary-check.yml; merging code must not trigger
+  # an additional unscheduled live-host capture.
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
