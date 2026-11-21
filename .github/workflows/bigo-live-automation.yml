@@ -1,7 +1,7 @@
 
-name: BIGO Live -> Direct R2 CDN -> ChatB2K -> Buffer/Drive
-run-name: BIGO R2 capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
-# Production capture workflow — direct R2 S3/CDN is primary; Vercel Blob is fallback; Dropbox is secondary archive.
+name: BIGO Live -> Vercel Blob -> ChatB2K -> Buffer/Drive
+run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
+# Production capture workflow — Vercel Blob is primary; Dropbox is secondary archive.
 
 on:
   # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
@@ -27,15 +27,8 @@ env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
-  BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-  R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-  R2_BUCKET: ${{ secrets.R2_BUCKET }}
-  R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
@@ -69,16 +62,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then
-            echo "::error::BLOB_READ_WRITE_TOKEN fallback is missing; refusing capture without the verified fallback store."
+            echo "::error::BLOB_READ_WRITE_TOKEN is missing; refusing capture without the configured primary media store."
             exit 1
           fi
-          echo "::notice::Vercel Blob fallback credential is present; value is not logged."
-          if [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ] || [ -z "${R2_ENDPOINT:-}" ] || [ -z "${R2_PUBLIC_BASE_URL:-}" ] || { [ -z "${R2_BUCKET_NAME:-}" ] && [ -z "${R2_BUCKET:-}" ]; }; then
-            echo "::error::Direct R2 credentials are incomplete; refusing capture without the primary media store."
-            exit 1
-          fi
-          command -v aws >/dev/null 2>&1 || { echo "::error::AWS CLI is unavailable; direct R2 upload cannot be verified."; exit 1; }
-          echo "::notice::Direct R2 credentials and AWS CLI are present; values are not logged."
+          echo "::notice::Vercel Blob primary-store credential is present; value is not logged."
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
