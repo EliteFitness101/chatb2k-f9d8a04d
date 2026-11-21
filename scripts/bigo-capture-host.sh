@@ -613,7 +613,7 @@ export FILE COVER
 dropbox_ensure_host_dirs || { echo "::error::Dropbox host archive folders could not be prepared."; exit 1; }
 media_upload() {
   local SRC="$1" KEY="$2" MIME="$3" URL
-  URL="$(dropbox_upload "$SRC" "${HOST_ROOT}/${KEY#bigo/}" true)" || return 1
+  URL="$(dropbox_upload "$SRC" "${HOST_ROOT}/${KEY#bigo/hosts/${SAFE_HOST}/}" true)" || return 1
   python3 - "$URL" <<'PYMEDIA'
 import json,sys
 print(json.dumps({"url":sys.argv[1],"provider":"dropbox"}))
