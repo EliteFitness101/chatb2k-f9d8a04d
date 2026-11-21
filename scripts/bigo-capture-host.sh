@@ -26,7 +26,7 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# Vercel Blob is primary; Dropbox is optional secondary archival.
+# Dropbox is the canonical primary media archive; Google Drive remains secondary.
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -188,7 +188,7 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s streamlink --webbrowser yes --stdout "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --stdout "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -688,7 +688,7 @@ hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'
 print(json.dumps({'highlight':hitem}))
 PY
 
-# Save an optional secondary Dropbox metadata copy after the primary Blob object read-back succeeds.
+# Save capture provenance metadata in the canonical Dropbox archive after primary media read-back succeeds.
 if ! dropbox_upload "$RESULT" "${HOST_ROOT}/metadata/${HOST}-${TS}.json"; then
   echo "::error::Dropbox provenance metadata archive failed for $HOST."
   exit 1
@@ -701,13 +701,13 @@ if [ "${DRIVE_SYNC_STATUS}" = "media_verified_metadata_pending" ]; then
   fi
 fi
 
-# Save a per-host verification receipt after the primary Blob objects pass SHA-256 read-back checks.
+# Save a per-host verification receipt after Dropbox metadata and content-hash read-back checks.
 ARCHIVE_STATUS="/tmp/bigo-${SAFE_HOST}-archive-status.json"
 python3 - "${HOST}" "${TS}" "${HOST_ROOT}" "${BLOB_URL}" "${COVER_URL}" "${VIDEO_PROVIDER}" <<'PYSTATUS' > "${ARCHIVE_STATUS}"
 import json,sys
 host,ts,root,video,cover,provider=sys.argv[1:]
-is_blob=video.startswith("https://")
-print(json.dumps({"host_id":host,"captured_at":ts,"status":"media_verified","video_url":video,"cover_url":cover,"archive_verification":"Direct R2 S3 API and public CDN SHA-256 read-back" if provider=="cloudflare_r2" else "Vercel Blob public GET and SHA-256 byte-for-byte read-back","media_delivery_provider":provider,"media_readback_verified":is_blob,"r2_object_readback_verified":provider=="cloudflare_r2","r2_public_cdn_readback_verified":provider=="cloudflare_r2","blob_object_readback_verified":False,"dropbox_object_readback_verified":provider=="dropbox","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
+media_verified=provider in {"dropbox", "cloudflare_r2"}
+print(json.dumps({"host_id":host,"captured_at":ts,"status":"media_verified","video_url":video,"cover_url":cover,"archive_verification":"Direct R2 S3 API and public CDN SHA-256 read-back" if provider=="cloudflare_r2" else "Dropbox API metadata and content-hash read-back","media_delivery_provider":provider,"media_readback_verified":media_verified,"r2_object_readback_verified":provider=="cloudflare_r2","r2_public_cdn_readback_verified":provider=="cloudflare_r2","blob_object_readback_verified":False,"dropbox_object_readback_verified":provider=="dropbox","secondary_dropbox_archive_configured":bool(__import__("os").environ.get("DROPBOX_ACCESS_TOKEN"))}))
 PYSTATUS
 if ! dropbox_upload "${ARCHIVE_STATUS}" "${HOST_ROOT}/logs/${HOST}-${TS}-archive-status.json"; then
   echo "::error::Dropbox archive verification receipt could not be persisted for $HOST."
