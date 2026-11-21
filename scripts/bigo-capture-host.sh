@@ -38,7 +38,6 @@ FILE="/tmp/bigo-${SAFE_HOST}-${TS}.mp4"
 COVER="/tmp/bigo-${SAFE_HOST}-${TS}.jpg"
 GBP_FILE="/tmp/bigo-${SAFE_HOST}-${TS}-google-business.mp4"
 LOG="/tmp/streamlink-${SAFE_HOST}.log"
-BIGO_STREAMLINK_WRAPPER="${BIGO_STREAMLINK_WRAPPER:-scripts/bigo-streamlink-capture.py}"
 rm -f "$RESULT" "$RAW" "$FILE" "$COVER" "$GBP_FILE"
 
 
@@ -177,8 +176,10 @@ fi
 # BIGO began requiring authenticated sessions for some rooms. Read a private session cookie
 # from GitHub Actions secrets; never log it or store it in capture metadata.
 CURL_COOKIE_ARGS=()
+STREAMLINK_COOKIE_ARGS=()
 FFMPEG_COOKIE_ARGS=()
 if [ -n "${BIGO_SESSION_COOKIE:-}" ]; then
+  STREAMLINK_COOKIE_ARGS=(--http-header "Cookie=${BIGO_SESSION_COOKIE}")
   CURL_COOKIE_ARGS=(-H "Cookie: ${BIGO_SESSION_COOKIE}")
   FFMPEG_COOKIE_ARGS=(-headers "Cookie: ${BIGO_SESSION_COOKIE}"$'\r\n')
 fi
@@ -187,7 +188,7 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  BIGO_COOKIE_HEADER="${BIGO_SESSION_COOKIE:-}" timeout 55s python3 "${BIGO_STREAMLINK_WRAPPER}" "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s streamlink --stdout "${STREAMLINK_COOKIE_ARGS[@]}" "$SOURCE_URL" best 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
