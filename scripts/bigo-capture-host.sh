@@ -26,7 +26,7 @@ PYHOST
 )"
 SAFE_HOST="$(printf '%s' "$HOST" | tr -c 'A-Za-z0-9._-' '_')"
 
-# Direct R2 S3/CDN is primary; Vercel Blob is fallback; Dropbox is optional secondary archival.
+# Vercel Blob is primary; Dropbox is optional secondary archival.
 HOST_ROOT="/ResoFit/BIGO/hosts/${SAFE_HOST}"
 # Recover a source URL that the workflow fallback accidentally double-prefixed.
 # Preserve the BIGO page URL; a bare room ID is not a valid Streamlink URL.
@@ -435,7 +435,7 @@ if [ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 30)' "$DURATION")" = 
   fi
 fi
 
-# Direct R2 S3 upload is primary; Vercel Blob is the verified fallback; Dropbox is secondary archival.
+# Vercel Blob is primary; Dropbox is secondary archival. R2 remains a separately unverified optional path.
 if [ -n "${DROPBOX_APP_KEY:-}" ] && [ -n "${DROPBOX_APP_SECRET:-}" ] && [ -n "${DROPBOX_REFRESH_TOKEN:-}" ]; then
   if DROPBOX_TOKEN_RESPONSE="$(curl --fail --silent --show-error --retry 2 --retry-delay 2 -u "${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}" -d grant_type=refresh_token --data-urlencode "refresh_token=${DROPBOX_REFRESH_TOKEN}" https://api.dropbox.com/oauth2/token)"; then
     DROPBOX_ACCESS_TOKEN="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))" <<< "$DROPBOX_TOKEN_RESPONSE")"
@@ -681,19 +681,15 @@ r2_upload() {
   printf '%s\n' "$PUBLIC_URL"
 }
 
-# Keep Vercel Blob as a fallback only if the direct R2 object or public read-back fails.
+# Restore the last-known-good public delivery contract: Vercel Blob primary,
+# with verified SHA-256 read-back. Dropbox remains the independent secondary archive.
+# Do not silently promote the currently unverified R2 route to production primary.
 media_upload() {
-  local SRC="$1" KEY="$2" MIME="$3" URL PROVIDER
-  if URL="$(r2_upload "$SRC" "$KEY" "$MIME")"; then
-    PROVIDER="cloudflare_r2"
-  else
-    echo "::warning::Direct R2 upload/read-back failed; using Vercel Blob fallback for this media object." >&2
-    URL="$(blob_upload "$SRC" "$KEY" "$MIME")" || return 1
-    PROVIDER="vercel_blob"
-  fi
-  python3 - "$URL" "$PROVIDER" <<'PYMEDIA'
+  local SRC="$1" KEY="$2" MIME="$3" URL
+  URL="$(blob_upload "$SRC" "$KEY" "$MIME")" || return 1
+  python3 - "$URL" <<'PYMEDIA'
 import json,sys
-print(json.dumps({"url":sys.argv[1],"provider":sys.argv[2]}))
+print(json.dumps({"url":sys.argv[1],"provider":"vercel_blob"}))
 PYMEDIA
 }
 
@@ -715,16 +711,7 @@ if [ -s "$GBP_FILE" ]; then
     rm -f "$GBP_FILE"
   fi
 fi
-COVER_URL="$(blob_upload "$COVER" "bigo/hosts/${SAFE_HOST}/metadata/${HOST}-${TS}-cover.jpg" "image/jpeg")"
-GBP_URL=""
-if [ -s "$GBP_FILE" ]; then
-  if audio_qa "$GBP_FILE" "Google Business derivative"; then
-    GBP_URL="$(blob_upload "$GBP_FILE" "bigo/hosts/${SAFE_HOST}/processed/google-business/${HOST}-${TS}-30s.mp4" "video/mp4")"
-  else
-    echo "::warning::Google Business derivative failed audio QA for $HOST; suppressing derivative upload."
-    rm -f "$GBP_FILE"
-  fi
-fi
+# Cover and Google Business URLs above come from their single provider-selected upload.
 DROPBOX_PROCESSED_URL=""
 DROPBOX_COVER_URL=""
 DROPBOX_RAW_URL=""
@@ -772,7 +759,7 @@ def drive_ref(value):
     parts=value.split(chr(9),1)
     return {'file_id':parts[0], 'url':parts[1] if len(parts)>1 else ''} if parts[0] else None
 audio_present=int(audio_streams)>0
-hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':video_provider,'media_delivery_mode':'direct_s3' if video_provider=='cloudflare_r2' else 'vercel_blob_fallback','media_store':video_provider,'blob_store':video_provider,'blob_readback_verified':bool(blob),'media_readback_verified':bool(blob),'r2_object_readback_verified':video_provider=='cloudflare_r2','r2_public_cdn_readback_verified':video_provider=='cloudflare_r2','cover_delivery_provider':cover_provider,'google_business_delivery_provider':gbp_provider or None}}
+hitem={'host_id':host,'host_name':name,'original_url':room_url,'blob_url':blob,'title':title,'caption':f'{title} — live highlight from {name}.','target_channels':[x.strip() for x in target_channels.split(',') if x.strip()],'fingerprint':f'{host}:{ts}:{blob}','source_asset_id':f'{host}:{ts}:{blob}','metadata':{'source':'bigo_live_auto_capture','room_id':info.get('room_id'),'width':int(w),'height':int(h),'duration_seconds':float(d),'aspect_ratio':float(w)/float(h),'audio_present':audio_present,'fps':float(fps),'avg_fps':float(avg),'frame_rate_verified':True,'codec':'h264','pixel_format':pix,'cfr':True,'captured_at':ts,'source_stream_url':source_stream_url,'source_page_url':room_url,'blob_url':blob,'cover_url':cover,'google_drive_archive':{'status':drive_status,'raw':drive_ref(drive_raw),'processed':drive_ref(drive_video),'cover':drive_ref(drive_cover)},'google_business_video_url':gbp_url or None,'google_business_duration_seconds':float(gbp_duration) if gbp_url else None,'media_delivery_provider':video_provider,'media_delivery_mode':'direct_s3' if video_provider=='cloudflare_r2' else 'vercel_blob_primary','media_store':video_provider,'blob_store':video_provider,'blob_readback_verified':bool(blob),'media_readback_verified':bool(blob),'r2_object_readback_verified':video_provider=='cloudflare_r2','r2_public_cdn_readback_verified':video_provider=='cloudflare_r2','cover_delivery_provider':cover_provider,'google_business_delivery_provider':gbp_provider or None}}
 print(json.dumps({'highlight':hitem}))
 PY
 
