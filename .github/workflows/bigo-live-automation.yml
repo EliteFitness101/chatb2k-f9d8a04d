@@ -13,6 +13,11 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      host_id:
+        description: "Optional single BIGO host ID for an isolated recovery test"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,6 +32,7 @@ env:
   BIGO_HOST_IDS: ${{ secrets.BIGO_HOST_IDS }}
   BIGO_VERIFIED_HOST_IDS: ${{ secrets.BIGO_VERIFIED_HOST_IDS }}
   BIGO_SESSION_COOKIE: ${{ secrets.BIGO_SESSION_COOKIE }}
+  BIGO_EGRESS_PROXY: ${{ secrets.BIGO_EGRESS_PROXY }}
   CHATB2K_LIVE_INGEST_KEY: ${{ secrets.CHATB2K_LIVE_INGEST_KEY }}
   DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
   DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
@@ -38,6 +44,9 @@ env:
 
 jobs:
   capture-transform-publish:
+    # Workflow-file/code pushes must not trigger another full-inventory production capture.
+    # Scheduled production cycles and explicitly dispatched tests remain enabled.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -95,6 +104,15 @@ jobs:
               print(host + "|" + (source or "https://www.bigo.tv/" + host))
           PY
           )"
+          REQUESTED_HOST="${{ inputs.host_id }}"
+          if [ -n "${REQUESTED_HOST}" ]; then
+            HOSTS="$(printf '%s\n' "${HOSTS}" | awk -F'|' -v wanted="$REQUESTED_HOST" '$1 == wanted')"
+            if [ -z "${HOSTS}" ]; then
+              echo "::error::Requested host is not present in the authoritative/additive BIGO source inventory."
+              exit 1
+            fi
+            echo "::notice::Isolated single-host capture requested."
+          fi
           if [ -z "${HOSTS}" ]; then
             echo "::error::No BIGO hosts are configured in the source registry or additive environment inputs."
             exit 1
