@@ -45,7 +45,8 @@ function NoCappnCommandCenter() {
   const [draft, setDraft] = useState("");
 
   const highlights = (data?.ok ? data.highlights.recent : []) as Highlight[];
-  const selected = useMemo(() => highlights.find((h) => h.id === highlightId), [highlights, highlightId]);
+  const campaignHighlights = (data?.ok ? data.highlights.campaign_eligible : []) as Highlight[];
+  const selected = useMemo(() => campaignHighlights.find((h) => h.id === highlightId), [campaignHighlights, highlightId]);
   const eligible = data?.ok ? data.assets.eligible : 0;
 
   function generateDraft() {
@@ -124,7 +125,7 @@ function NoCappnCommandCenter() {
         <StatCard label="Registered BIGO sources" value={data.sources.total} hint={`${data.sources.active} active`} />
         <StatCard label="Capture-enabled" value={data.sources.capture_enabled} hint="Source registry state" />
         <StatCard label="Recent highlights" value={data.highlights.recent_count} hint={`${data.highlights.failed} failed in recent sample`} tone={data.highlights.failed ? "warn" : "default"} />
-        <StatCard label="QA + rights eligible" value={eligible} hint={`${data.assets.total} recent/total asset records`} tone={eligible ? "good" : "default"} />
+        <StatCard label="QA + rights eligible" value={eligible} hint={`of ${data.assets.total} total asset records · latest 30 checked`} tone={eligible ? "good" : "default"} />
       </section>
 
       <Panel title="End-to-end production architecture">
@@ -199,10 +200,10 @@ function NoCappnCommandCenter() {
             </select>
           </label>
           <label className="block">
-            <span className={labelClass}>Source highlight</span>
+            <span className={labelClass}>Rights + QA-cleared source highlight</span>
             <select value={highlightId} onChange={(e) => setHighlightId(e.target.value)} className="mt-2 w-full rounded-sm border border-[var(--glass-border)] bg-[var(--ink)] px-3 py-3 text-sm">
-              <option value="">Select a recent highlight</option>
-              {highlights.map((h) => <option key={h.id} value={h.id}>{h.title || h.host_name || h.id}</option>)}
+              <option value="">Select a cleared highlight</option>
+              {campaignHighlights.map((h) => <option key={h.id} value={h.id}>{h.title || h.host_name || h.id}</option>)}
             </select>
           </label>
           <label className="block">
@@ -214,7 +215,7 @@ function NoCappnCommandCenter() {
           <button type="button" onClick={generateDraft} disabled={!selected} className="inline-flex items-center gap-2 rounded-sm bg-gold-gradient px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--ink)] disabled:opacity-40">
             <Sparkles className="h-4 w-4" /> Generate creative draft
           </button>
-          <span className="text-[10px] text-muted-foreground">Local preview only · no queue write, schedule or publish action</span>
+          <span className="text-[10px] text-muted-foreground">Only rights + QA-cleared assets · local preview only</span>
         </div>
         {draft ? (
           <div className="mt-5 rounded-sm border border-[var(--glass-border)] bg-[var(--ink)] p-4">
