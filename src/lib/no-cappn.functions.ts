@@ -53,6 +53,9 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
       a.canonical_url.startsWith("https://")
     );
 
+    const eligibleAssetIds = new Set(eligibleAssets.map((a) => String(a.id)));
+    const campaignEligibleHighlights = highlightRows.filter((h) => eligibleAssetIds.has(String(h.content_asset_id ?? "")));
+
     const queueCounts = queueRows.reduce((acc: Record<string, number>, row) => {
       const status = String(row.status ?? "unknown");
       acc[status] = (acc[status] ?? 0) + 1;
@@ -72,6 +75,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
         recent_count: highlightRows.length,
         processed: highlightRows.filter((h) => Boolean(h.content_asset_id)).length,
         failed: highlightRows.filter((h) => h.status === "failed").length,
+        campaign_eligible: campaignEligibleHighlights,
       },
       assets: {
         total: assets.count ?? assetRows.length,
