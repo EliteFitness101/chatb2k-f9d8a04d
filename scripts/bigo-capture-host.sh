@@ -88,6 +88,10 @@ TOKEN_T='https://sec.bigo.sg/v1/webjs/t'
 TOKEN_STATUS='https://sec.bigo.sg/v1/webjs/status'
 KEY=b'undefinedval0x01'
 UA='Mozilla/5.0'
+HTTP=requests.Session()
+proxy=os.environ.get('BIGO_EGRESS_PROXY','').strip()
+if proxy:
+    HTTP.proxies.update({'http':proxy,'https':proxy})
 def request_headers(accept='*/*'):
     headers={'User-Agent':UA,'Accept':accept}
     cookie=os.environ.get('BIGO_SESSION_COOKIE','').strip()
@@ -105,7 +109,7 @@ def jsonp(text):
     return json.loads(m.group('json'))
 
 def resolve_token():
-    tr=requests.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12)
+    tr=HTTP.get(TOKEN_T,params={'callback':callback()},headers=request_headers(),timeout=12)
     tr.raise_for_status()
     ts=jsonp(tr.text)['time']
     payload={'dr':secrets.token_hex(16),'business':'bigolive-video','scene':'','at_time':ts,'ver':'2.0'}
@@ -114,7 +118,7 @@ def resolve_token():
     except Exception:
         raise RuntimeError('streamlink crypto module unavailable')
     encrypted=encrypt_openssl(json.dumps(payload,separators=(',',':')).encode(),KEY)
-    sr=requests.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
+    sr=HTTP.get(TOKEN_STATUS,params={'callback':callback(),'data':base64.b64encode(encrypted).decode()},headers=request_headers(),timeout=12)
     sr.raise_for_status()
     return jsonp(sr.text)['token']
 
@@ -129,7 +133,7 @@ def build(d):
 
 try:
     token=resolve_token()
-    r=requests.post(API,params={'siteId':host,'verify':'','token':token},
+    r=HTTP.post(API,params={'siteId':host,'verify':'','token':token},
                      headers=request_headers('application/json'),timeout=15)
     r.raise_for_status()
     d=r.json().get('data') or {}
@@ -138,7 +142,7 @@ try:
     if out['hls_src']:
         print(json.dumps(out)); raise SystemExit
     # Preserve the older working path as a secondary fallback.
-    r=requests.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
+    r=HTTP.post(API,data={'siteId':host},headers=request_headers('application/json'),timeout=12)
     r.raise_for_status()
     out=build(r.json().get('data') or {})
     out['discovery_method']='bigo_legacy_api'
