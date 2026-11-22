@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, CheckCircle2, CircleAlert, Clipboard, Film, RadioTower, ShieldCheck, Sparkles, Users, Workflow } from "lucide-react";
+import { CheckCircle2, CircleAlert, Clipboard, Film, RadioTower, ShieldCheck, Sparkles, Users, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { AdminGate, AdminLoading, Panel, StatCard, StatusPill } from "@/components/admin/AdminUI";
 import { getNoCappnOverview } from "@/lib/no-cappn.functions";
@@ -220,7 +220,7 @@ function NoCappnCommandCenter() {
           <div className="mt-5 rounded-sm border border-[var(--glass-border)] bg-[var(--ink)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className={labelClass}>Generated copy · {platform.replace(/_/g, " ")}</p>
-              <button type="button" onClick={copyDraft} className="inline-flex items-center gap-2 text-xs text-gold hover:underline"><Clipboard className="h-3.5 w-3.5" /> Copy copy</button>
+              <button type="button" onClick={copyDraft} className="inline-flex items-center gap-2 text-xs text-gold hover:underline"><Clipboard className="h-3.5 w-3.5" /> Copy text</button>
             </div>
             <pre className="whitespace-pre-wrap font-sans text-sm leading-6 mt-3">{draft}</pre>
           </div>
