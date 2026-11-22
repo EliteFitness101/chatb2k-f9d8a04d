@@ -45,6 +45,7 @@ export const ADMIN_DOMAINS: AdminDomain[] = [
   { key: "operations", label: "Operations", to: "/admin/operations", permission: "orders.read" },
   { key: "customers", label: "Customer Intelligence", to: "/admin/customers", permission: "customers.read" },
   { key: "chatb2k", label: "ChatB2K Intelligence", to: "/admin/chatb2k", permission: "analytics.read" },
+  { key: "no-cappn", label: "No Cappn Media", to: "/admin/no-cappn", permission: "content.manage" },
   { key: "compliance", label: "Compliance & Audit", to: "/admin/compliance", permission: "audit.read" },
 ];
 
