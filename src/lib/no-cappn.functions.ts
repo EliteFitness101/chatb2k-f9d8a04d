@@ -42,7 +42,8 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
       sources.error ? { source: "BIGO source registry", message: sources.error.message } : null,
       highlights.error ? { source: "Live highlights", message: highlights.error.message } : null,
       assets.error ? { source: "Content asset registry", message: assets.error.message } : null,
-      queue.error ? { source: "Recruitment content queue", message: queue.error.message } : null,\n      agencies.error ? { source: "Agency registry", message: agencies.error.message } : null,
+      queue.error ? { source: "Recruitment content queue", message: queue.error.message } : null,
+      agencies.error ? { source: "Agency registry", message: agencies.error.message } : null,
     ].filter(Boolean) as { source: string; message: string }[];
 
     const sourceRows = (sources.data ?? []) as Row[];
@@ -72,7 +73,8 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
       sources: {
         total: sourceRows.length,
         active: sourceRows.filter((s) => s.active === true).length,
-        capture_enabled: sourceRows.filter((s) => s.active === true && s.capture_enabled === true).length,\n        source_rows: sourceRows,
+        capture_enabled: sourceRows.filter((s) => s.active === true && s.capture_enabled === true).length,
+        source_rows: sourceRows,
       },
       highlights: {
         recent: highlightRows,
