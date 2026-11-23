@@ -88,12 +88,15 @@ import json,sys
 print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
 PYINFO
 )"
-INFO="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 \
+if ! INFO="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 \
   -X POST "${PIPELINE_URL:?PIPELINE_URL is required for BIGO room discovery}" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${OIDC_TOKEN:?Trusted GitHub OIDC token is required for BIGO room discovery}" \
   -H "x-region: ap-south-1" \
-  --data-binary "${INFO_REQUEST}")"
+  --data-binary "${INFO_REQUEST}")"; then
+  echo "::warning::Authenticated BIGO room resolution failed; continuing to canonical public-room HLS discovery."
+  INFO='{"ok":false,"error":"BIGO_ROOM_RESOLVER_UNAVAILABLE","name":"BIGO Host","title":"BIGO Live Highlight","hls_src":""}'
+fi
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
 STREAM_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("hls_src",""))' "$INFO")"
