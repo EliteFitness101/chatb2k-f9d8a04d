@@ -14,6 +14,7 @@ import {
   type Recommendation,
 } from "@/lib/commerce/recommendation";
 import { cryptoEligible, FALLBACK_ROUTE } from "@/lib/commerce/regions";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/chatb2k")({
   head: () => ({
@@ -71,6 +72,13 @@ function ChatB2KPage() {
   const [step, setStep] = useState(0);
   const [result, setResult] = useState<Recommendation | null>(null);
   const [saving, setSaving] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<"web" | "checking" | "verified" | "unavailable">("web");
+  const [telegramAuth, setTelegramAuth] = useState<{
+    initData: string;
+    user: { id: string; first_name: string; last_name?: string; username?: string };
+    client: { destination_id: string; display_name: string; bot_username: string };
+    authenticated_at: string;
+  } | null>(null);
   const submit = useServerFn(submitAssessment);
 
   useEffect(() => {
@@ -96,6 +104,36 @@ function ChatB2KPage() {
     }
   }, [answers, result]);
 
+  useEffect(() => {
+    const webApp = (window as Window & {
+      Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } };
+    }).Telegram?.WebApp;
+    if (!webApp) return;
+    webApp.ready?.();
+    webApp.expand?.();
+    const initData = webApp.initData ?? "";
+    if (!initData) {
+      setTelegramStatus("unavailable");
+      return;
+    }
+    setTelegramStatus("checking");
+    void supabase.functions.invoke("telegram-miniapp", {
+      body: { action: "bootstrap", initData },
+    }).then(({ data, error }) => {
+      if (error || !data?.authenticated || !data?.user?.id || !data?.client?.bot_username) {
+        setTelegramStatus("unavailable");
+        return;
+      }
+      setTelegramAuth({
+        initData,
+        user: data.user,
+        client: data.client,
+        authenticated_at: data.authenticated_at,
+      });
+      setTelegramStatus("verified");
+    }).catch(() => setTelegramStatus("unavailable"));
+  }, []);
+
   const total = ASSESSMENT_QUESTIONS.length;
   const current = ASSESSMENT_QUESTIONS[step];
   const complete = ASSESSMENT_QUESTIONS.every((q) => Boolean(answers[q.key]));
@@ -112,6 +150,7 @@ function ChatB2KPage() {
           rsid,
           anon_id: rsid || null,
           session_id: getSessionId() || null,
+          telegram_init_data: telegramAuth?.initData ?? null,
           answers: input,
         },
       });
@@ -147,6 +186,21 @@ function ChatB2KPage() {
           title="ChatB2K."
           sub="One continuous journey: assessment → health profile → recommendation → checkout → fulfilment."
         />
+        {telegramStatus === "checking" && (
+          <div className="mt-4 rounded-sm border border-[var(--glass-border)] px-4 py-3 text-xs text-muted-foreground">
+            Verifying your secure Telegram session…
+          </div>
+        )}
+        {telegramStatus === "verified" && telegramAuth && (
+          <div className="mt-4 rounded-sm border border-[var(--gold)]/40 bg-[var(--gold)]/5 px-4 py-3 text-xs text-gold">
+            Verified Telegram session · @{telegramAuth.client.bot_username} · {telegramAuth.user.first_name}
+          </div>
+        )}
+        {telegramStatus === "unavailable" && (
+          <div className="mt-4 rounded-sm border border-[var(--glass-border)] px-4 py-3 text-xs text-muted-foreground">
+            Telegram identity could not be verified. Reopen this Mini App from your connected ChatB2K bot; web assessment remains available without Telegram identity.
+          </div>
+        )}
         <JourneyTimeline activeIndex={stageIndex} />
         {stage === "landing" && (
           <div className="mt-8 glass rounded-md p-8">

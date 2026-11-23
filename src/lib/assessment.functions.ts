@@ -7,6 +7,7 @@ const InputSchema = z.object({
   email: z.string().email().max(255).nullable().optional(),
   session_id: z.string().max(128).nullable().optional(),
   anon_id: z.string().max(128).nullable().optional(),
+  telegram_init_data: z.string().max(8192).nullable().optional(),
   answers: z.object({
     primary_goal: z.enum(["cut", "recomp", "bulk", "longevity"]),
     experience: z.enum(["beginner", "intermediate", "advanced"]),
@@ -27,6 +28,36 @@ export const submitAssessment = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => InputSchema.parse(d))
   .handler(async ({ data }) => {
     const answers = data.answers as AssessmentInput;
+    let telegramIdentity: { subjectHash: string; botUsername: string; authenticatedAt: string } | null = null;
+    if (data.telegram_init_data) {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !serviceKey) throw new Error("Telegram identity verification is not configured.");
+      const response = await fetch(supabaseUrl + "/functions/v1/telegram-miniapp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          apikey: serviceKey,
+          authorization: "Bearer " + serviceKey,
+        },
+        body: JSON.stringify({ action: "bootstrap", initData: data.telegram_init_data }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const verified = await response.json().catch(() => null);
+      if (!response.ok || verified?.authenticated !== true ||
+          typeof verified?.user?.id !== "string" ||
+          typeof verified?.client?.bot_username !== "string") {
+        throw new Error("Telegram identity verification failed; reopen ChatB2K from Telegram and retry.");
+      }
+      const subject = verified.client.bot_username.toLowerCase() + ":" + verified.user.id;
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(subject));
+      const subjectHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      telegramIdentity = {
+        subjectHash,
+        botUsername: verified.client.bot_username,
+        authenticatedAt: verified.authenticated_at ?? new Date().toISOString(),
+      };
+    }
     const result = recommend(answers);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -38,6 +69,9 @@ export const submitAssessment = createServerFn({ method: "POST" })
       captured_at: new Date().toISOString(),
       email: data.email ?? null,
       rsid: data.rsid ?? null,
+      telegram_identity_hash: telegramIdentity?.subjectHash ?? null,
+      telegram_bot_username: telegramIdentity?.botUsername ?? null,
+      telegram_authenticated_at: telegramIdentity?.authenticatedAt ?? null,
     };
 
     // Canonical customer-intelligence store. Anonymous assessments are kept
@@ -64,6 +98,9 @@ export const submitAssessment = createServerFn({ method: "POST" })
       session_id: data.session_id ?? null,
       anon_id: data.anon_id ?? null,
       funnel_origin: "chatb2k",
+      telegram_identity_hash: telegramIdentity?.subjectHash ?? null,
+      telegram_bot_username: telegramIdentity?.botUsername ?? null,
+      telegram_authenticated_at: telegramIdentity?.authenticatedAt ?? null,
     };
 
     await publishEvent("AssessmentCompleted", "assessment", preference?.id ?? null, {
