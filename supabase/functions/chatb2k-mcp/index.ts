@@ -17,7 +17,7 @@ const cors = {
   "Mcp-Protocol-Version": PROTOCOL_VERSION,
 };
 
-type Actor = { id: string; email: string; roles: string[] };
+type Actor = { id: string; email: string; roles: string[]; isCEO: boolean };
 const tools = [
   { name: "ecosystem_status", description: "Read the current ChatB2K ecosystem status snapshot. Reports registered state separately from verified runtime state.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "ecosystem_inventory", description: "Read registered ecosystem sources, provider routes, agent registry and live deployed-function inventory where provider access is configured.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
@@ -67,10 +67,9 @@ async function authenticate(req: Request): Promise<Actor | null> {
   const { data: roleRows, error } = await db.from("user_roles").select("role").eq("user_id", id);
   if (error) return null;
   const roles = (roleRows ?? []).map((r: { role: string }) => String(r.role ?? "").toLowerCase());
-  const isPrivileged = email === "ceo@resofit.fit" ||
-    email === "resonancefitnesswork@gmail.com" ||
-    roles.some((r: string) => ["admin", "super_admin"].includes(r));
-  return isPrivileged ? { id, email, roles } : null;
+  const isCEO = ["ceo@resofit.fit", "resonancefitnesswork@gmail.com"].includes(email);
+  const isPrivileged = isCEO || roles.some((r: string) => ["admin", "super_admin"].includes(r));
+  return isPrivileged ? { id, email, roles, isCEO } : null;
 }
 async function auditTool(actor: Actor, toolName: string, requestId: string, outcome: string, httpStatus: number) {
   try {
@@ -135,11 +134,17 @@ async function runTool(name: string, args: Record<string, unknown>, actor: Actor
     });
     return { ok: true, persisted: true, proposal: report, run, audit_recorded: !auditError, note: "Proposal only; no code generation, deployment or execution occurred." };
   }
-  if (name === "agent_tool_list") {
-    return await gateway({ action: "list_tools", agent_id: args.agent_id });
-  }
-  if (name === "agent_tool_invoke") {
-    return await gateway({ action: "invoke", agent_id: args.agent_id, tool: args.tool, input: args.input ?? {} });
+  if (name === "agent_tool_list" || name === "agent_tool_invoke") {
+    // Never let a caller select a privileged agent identity. The gateway runs with
+    // service-role authority, so this authenticated MCP boundary binds root access
+    // to the verified CEO identity and the one canonical CEO root node.
+    if (!actor.isCEO || args.agent_id !== "chatb2k101") {
+      throw new Error("CEO_ROOT_IDENTITY_REQUIRED");
+    }
+    if (name === "agent_tool_list") {
+      return await gateway({ action: "list_tools", agent_id: "chatb2k101" });
+    }
+    return await gateway({ action: "invoke", agent_id: "chatb2k101", tool: args.tool, input: args.input ?? {} });
   }
   throw new Error("TOOL_NOT_FOUND");
 }
