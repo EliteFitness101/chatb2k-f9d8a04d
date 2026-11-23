@@ -43,45 +43,44 @@ env:
 
 jobs:
   regional-token-preflight:
-    name: Verify BIGO token from Singapore region
+    name: Verify BIGO token from Mumbai region
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Wait for the regional resolver deployment and verify token issuance
+      - name: Verify regional routing and BIGO token issuance
         shell: bash
         run: |
           set -euo pipefail
-          HOST_ID="$(python3 - "${BIGO_HOST_IDS:-}" <<'PYHOST'
-          import re,sys
-          values=[x.strip() for x in re.split(r"[,\s]+",sys.argv[1]) if x.strip()]
-          if not values:
-              raise SystemExit("No BIGO host is configured for the regional token preflight")
-          print(values[0])
-          PYHOST
-          )"
-          BODY="$(python3 - "${HOST_ID}" "${BIGO_COOKIE_HEADER:-}" <<'PYBODY'
-          import json,sys
-          print(json.dumps({"action":"bigo-room-info","hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
-          PYBODY
-          )"
-          STATUS=404
-          for attempt in $(seq 1 12); do
-            STATUS="$(curl --silent --show-error -o /tmp/bigo-regional-preflight.json -w '%{http_code}' \
-              -X POST "${DRIVE_UPLOAD_URL:?Missing established BIGO upload endpoint}" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY:?Missing established ChatB2K ingest credential}" \
-              --data-binary "${BODY}")"
-            [ "${STATUS}" != "404" ] && break
-            sleep 15
-          done
-          if [ "${STATUS}" != "200" ]; then
-            jq -c '{ok,error,detail,upstream_code,upstream_info,region}' /tmp/bigo-regional-preflight.json 2>/dev/null || true
-            echo "::error::Regional BIGO resolver returned HTTP ${STATUS}."
+          curl --fail --silent --show-error -D /tmp/bigo-registry.headers \
+            -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY:?Missing established ChatB2K ingest credential}" \
+            -H "x-region: ap-south-1" \
+            "${PIPELINE_URL:?Missing established BIGO pipeline endpoint}" \
+            -o /tmp/bigo-sources.json
+          HOST_ID="$(jq -r '.hosts[0].bigo_id // empty' /tmp/bigo-sources.json)"
+          if [ -z "${HOST_ID}" ]; then
+            echo "::error::The authoritative BIGO source registry has no active capture-enabled hosts."
             exit 1
           fi
-          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and (.region | startswith("bom1"))' /tmp/bigo-regional-preflight.json >/dev/null
-          jq -c '{ok,token_issued,room_info_ok,alive,region}' /tmp/bigo-regional-preflight.json
+          BODY="$(python3 - "${HOST_ID}" "${BIGO_COOKIE_HEADER:-}" <<'PYBODY'
+          import json,sys
+          print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
+          PYBODY
+          )"
+          curl --fail --silent --show-error -D /tmp/bigo-preflight.headers \
+            -X POST "${PIPELINE_URL:?Missing established BIGO pipeline endpoint}" \
+            -H "Content-Type: application/json" \
+            -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY:?Missing established ChatB2K ingest credential}" \
+            -H "x-region: ap-south-1" \
+            --data-binary "${BODY}" \
+            -o /tmp/bigo-preflight.json
+          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and .region == "ap-south-1"' /tmp/bigo-preflight.json >/dev/null
+          EDGE_REGION="$(awk 'BEGIN{IGNORECASE=1} /^x-sb-edge-region:/ {gsub("\\r","",$2); print $2}' /tmp/bigo-preflight.headers | tail -n1)"
+          if [ "${EDGE_REGION}" != "ap-south-1" ]; then
+            echo "::error::Supabase did not honor the requested Mumbai edge region (reported: ${EDGE_REGION:-missing})."
+            exit 1
+          fi
+          jq -c '{ok,token_issued,room_info_ok,alive,region}' /tmp/bigo-preflight.json
 
   capture-transform-publish:
     # Workflow-file/code pushes must not trigger another full-inventory production capture.
