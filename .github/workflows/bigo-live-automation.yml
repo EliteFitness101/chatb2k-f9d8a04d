@@ -2,6 +2,7 @@
 name: BIGO Live -> Dropbox -> ChatB2K -> Buffer/Drive
 run-name: BIGO capture/archive verification — ${{ github.event_name }} — run ${{ github.run_number }}
 # Production capture workflow — October-verified Dropbox-primary media archive; Google Drive secondary.
+# 2026-11-23: operationally revalidated via source-registry-triggered recovery run; no secrets or host allowlists changed.
 
 on:
   # Code-change verification runs capture/archive only; scheduled runs retain the normal pipeline.
