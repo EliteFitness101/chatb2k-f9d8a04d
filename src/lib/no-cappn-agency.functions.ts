@@ -185,9 +185,9 @@ export const setNoCappnHostAuthorization = createServerFn({ method: "POST" })
     const admin = supabaseAdmin as any;
     const [{ data: agency }, { data: source }] = await Promise.all([
       admin.from("no_cappn_agencies").select("id").eq("id", data.agencyId).maybeSingle(),
-      admin.from("bigo_sources").select("id").eq("id", data.sourceId).maybeSingle(),
+      admin.from("bigo_sources").select("id,active,capture_enabled").eq("id", data.sourceId).maybeSingle(),
     ]);
-    if (!agency || !source) return { ok: false as const, error: "Agency or BIGO source not found." };
+    if (!agency || !source) return { ok: false as const, error: "Agency or BIGO source not found." };\n    if (data.decision === "verified" && (!source.active || !source.capture_enabled)) return { ok: false as const, error: "Only active, capture-enabled BIGO sources can be verified for automated campaigns." };\n    if (data.decision === "verified" && !data.evidenceUrl) return { ok: false as const, error: "An HTTPS host-ownership evidence URL is required before verification." };
     const verified = data.decision === "verified";
     const { data: mapping, error } = await admin.from("no_cappn_agency_hosts").upsert({
       agency_id: data.agencyId,
