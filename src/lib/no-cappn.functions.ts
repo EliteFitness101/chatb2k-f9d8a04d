@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireNoCappnAuth as requireSupabaseAuth } from "@/lib/no-cappn-auth-middleware";
 import { hasPermission } from "@/lib/admin-guard.server";
 
 type Row = Record<string, any>;
