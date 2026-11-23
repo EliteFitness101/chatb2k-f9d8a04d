@@ -144,7 +144,6 @@ with check (
     select 1 from public.no_cappn_agency_memberships m
     where m.agency_id = public.no_cappn_campaigns.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
   )
-  and status in ('draft','pending_review','paused','archived')
   and exists (
     select 1 from public.no_cappn_agency_hosts h
     where h.id = host_mapping_id and h.agency_id = public.no_cappn_campaigns.agency_id and h.status = 'verified'
@@ -156,16 +155,17 @@ create policy no_cappn_campaigns_member_update on public.no_cappn_campaigns
 for update to authenticated
 using (exists (
   select 1 from public.no_cappn_agency_memberships m
-  where m.agency_id = public.no_cappn_campaign_assets.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
+  where m.agency_id = public.no_cappn_campaigns.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
 ))
 with check (
   exists (
     select 1 from public.no_cappn_agency_memberships m
-    where m.agency_id = agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
+    where m.agency_id = public.no_cappn_campaigns.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
   )
+  and status in ('draft','pending_review','paused','archived')
   and exists (
     select 1 from public.no_cappn_agency_hosts h
-    where h.id = host_mapping_id and h.agency_id = agency_id and h.status = 'verified'
+    where h.id = public.no_cappn_campaigns.host_mapping_id and h.agency_id = public.no_cappn_campaigns.agency_id and h.status = 'verified'
   )
 );
 
@@ -174,7 +174,7 @@ create policy no_cappn_campaign_assets_member_read on public.no_cappn_campaign_a
 for select to authenticated
 using (exists (
   select 1 from public.no_cappn_agency_memberships m
-  where m.agency_id = agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
+  where m.agency_id = public.no_cappn_campaign_assets.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
 ));
 
 drop policy if exists no_cappn_campaign_assets_operator_review on public.no_cappn_campaign_assets;
