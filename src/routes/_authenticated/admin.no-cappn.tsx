@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { AdminGate, AdminLoading, Panel, StatCard, StatusPill } from "@/components/admin/AdminUI";
 import { getNoCappnOverview } from "@/lib/no-cappn.functions";
 import { getNoCappnAgencyReviewQueue, reviewNoCappnCampaignAsset, setNoCappnHostAuthorization } from "@/lib/no-cappn-agency.functions";
+import { NoCappnCampaignReviewPanel } from "@/components/no-cappn/NoCappnCampaignReviewPanel";
 
 export const Route = createFileRoute("/_authenticated/admin/no-cappn")({
   head: () => ({
@@ -234,6 +235,7 @@ function NoCappnCommandCenter() {
       </section>
 
       <AgencyOpsPanel agencies={data.agencies ?? []} sources={data.sources.source_rows ?? []} />
+      <NoCappnCampaignReviewPanel />
 
       <Panel title="End-to-end production architecture">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
