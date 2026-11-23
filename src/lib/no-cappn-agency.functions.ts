@@ -166,3 +166,113 @@ export const attachNoCappnHighlight = createServerFn({ method: "POST" })
     if (error) return { ok: false as const, error: error.message };
     return { ok: true as const, asset: inserted };
   });
+
+
+/** Internal operator: create or update an agency-to-host authorization mapping. */
+export const setNoCappnHostAuthorization = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    agencyId: z.string().uuid(),
+    sourceId: z.string().uuid(),
+    evidenceUrl: z.string().url().refine((v) => v.startsWith("https://"), "HTTPS evidence URL required").optional(),
+    decision: z.enum(["pending", "verified", "rejected"]),
+    note: z.string().max(1000).optional(),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { hasPermission } = await import("@/lib/admin-guard.server");
+    if (!(await hasPermission(context.supabase, context.userId, "content.manage"))) return denied;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    const [{ data: agency }, { data: source }] = await Promise.all([
+      admin.from("no_cappn_agencies").select("id").eq("id", data.agencyId).maybeSingle(),
+      admin.from("bigo_sources").select("id").eq("id", data.sourceId).maybeSingle(),
+    ]);
+    if (!agency || !source) return { ok: false as const, error: "Agency or BIGO source not found." };
+    const verified = data.decision === "verified";
+    const { data: mapping, error } = await admin.from("no_cappn_agency_hosts").upsert({
+      agency_id: data.agencyId,
+      source_id: data.sourceId,
+      status: data.decision,
+      evidence_url: data.evidenceUrl ?? null,
+      verification_note: data.note ?? null,
+      verified_by: verified ? context.userId : null,
+      verified_at: verified ? new Date().toISOString() : null,
+      created_by: context.userId,
+    }, { onConflict: "agency_id,source_id" }).select("id,status").single();
+    if (error) return { ok: false as const, error: error.message };
+    return { ok: true as const, mapping };
+  });
+
+/** Internal operator: view campaign assets awaiting a rights/creative decision. */
+export const getNoCappnAgencyReviewQueue = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { hasPermission } = await import("@/lib/admin-guard.server");
+    if (!(await hasPermission(context.supabase, context.userId, "content.manage"))) return denied;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    const { data: rows, error } = await admin.from("no_cappn_campaign_assets")
+      .select("id,agency_id,campaign_id,highlight_id,asset_id,approval_status,created_at")
+      .eq("approval_status", "pending_review")
+      .order("created_at", { ascending: true }).limit(100);
+    if (error) return { ok: false as const, error: error.message };
+    const agencyIds = [...new Set((rows ?? []).map((r: any) => r.agency_id))];
+    const campaignIds = [...new Set((rows ?? []).map((r: any) => r.campaign_id))];
+    const highlightIds = [...new Set((rows ?? []).map((r: any) => r.highlight_id))];
+    const assetIds = [...new Set((rows ?? []).map((r: any) => r.asset_id))];
+    const [agencies, campaigns, highlights, assets] = await Promise.all([
+      agencyIds.length ? admin.from("no_cappn_agencies").select("id,name").in("id", agencyIds) : { data: [] },
+      campaignIds.length ? admin.from("no_cappn_campaigns").select("id,name,primary_platform").in("id", campaignIds) : { data: [] },
+      highlightIds.length ? admin.from("resofit_live_highlights").select("id,title,host_name,host_id").in("id", highlightIds) : { data: [] },
+      assetIds.length ? admin.from("content_asset_registry").select("id,canonical_url,rights_status,commercial_status,qa_status").in("id", assetIds) : { data: [] },
+    ]);
+    const byId = (items: any[]) => new Map((items ?? []).map((item: any) => [item.id, item]));
+    const agencyById = byId(agencies.data ?? []);
+    const campaignById = byId(campaigns.data ?? []);
+    const highlightById = byId(highlights.data ?? []);
+    const assetById = byId(assets.data ?? []);
+    return {
+      ok: true as const,
+      rows: (rows ?? []).map((r: any) => ({
+        ...r,
+        agency_name: agencyById.get(r.agency_id)?.name ?? "Agency",
+        campaign_name: campaignById.get(r.campaign_id)?.name ?? "Campaign",
+        platform: campaignById.get(r.campaign_id)?.primary_platform ?? "unknown",
+        highlight_title: highlightById.get(r.highlight_id)?.title ?? "Untitled highlight",
+        host_name: highlightById.get(r.highlight_id)?.host_name ?? "BIGO host",
+        asset: assetById.get(r.asset_id) ?? null,
+      })),
+    };
+  });
+
+export const reviewNoCappnCampaignAsset = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    campaignAssetId: z.string().uuid(),
+    decision: z.enum(["approved", "rejected"]),
+    note: z.string().max(1000).optional(),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { hasPermission } = await import("@/lib/admin-guard.server");
+    if (!(await hasPermission(context.supabase, context.userId, "content.manage"))) return denied;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    const { data: link } = await admin.from("no_cappn_campaign_assets")
+      .select("id,asset_id").eq("id", data.campaignAssetId).maybeSingle();
+    if (!link) return { ok: false as const, error: "Campaign asset not found." };
+    const { data: asset } = await admin.from("content_asset_registry")
+      .select("rights_status,commercial_status,qa_status,canonical_url").eq("id", link.asset_id).maybeSingle();
+    if (data.decision === "approved" && (!asset || asset.rights_status !== "verified" ||
+      asset.commercial_status !== "authorized" || asset.qa_status !== "approved" ||
+      !String(asset.canonical_url ?? "").startsWith("https://"))) {
+      return { ok: false as const, error: "Approval denied: the source asset no longer passes rights, commercial and QA checks." };
+    }
+    const { error } = await admin.from("no_cappn_campaign_assets").update({
+      approval_status: data.decision,
+      review_note: data.note ?? null,
+      reviewed_by: context.userId,
+      reviewed_at: new Date().toISOString(),
+    }).eq("id", link.id);
+    if (error) return { ok: false as const, error: error.message };
+    return { ok: true as const };
+  });
