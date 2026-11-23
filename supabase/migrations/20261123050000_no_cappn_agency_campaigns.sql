@@ -87,11 +87,11 @@ alter table public.no_cappn_agency_hosts enable row level security;
 alter table public.no_cappn_campaigns enable row level security;
 alter table public.no_cappn_campaign_assets enable row level security;
 
-grant select, insert on public.no_cappn_agencies to authenticated;
+grant select, insert, update on public.no_cappn_agencies to authenticated;
 grant select, insert on public.no_cappn_agency_memberships to authenticated;
-grant select on public.no_cappn_agency_hosts to authenticated;
+grant select, insert, update on public.no_cappn_agency_hosts to authenticated;
 grant select, insert, update on public.no_cappn_campaigns to authenticated;
-grant select on public.no_cappn_campaign_assets to authenticated;
+grant select, update on public.no_cappn_campaign_assets to authenticated;
 
 drop policy if exists no_cappn_agencies_member_read on public.no_cappn_agencies;
 create policy no_cappn_agencies_member_read on public.no_cappn_agencies
