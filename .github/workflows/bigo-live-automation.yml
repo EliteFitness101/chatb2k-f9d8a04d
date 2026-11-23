@@ -52,6 +52,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${BIGO_COOKIE_HEADER:-}" ]; then
+            echo "::error::The existing BIGO_COOKIE_HEADER secret/variable is empty. Restore its current session value under the same name; no new variable is needed."
+            exit 1
+          fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl --fail --silent --show-error \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
@@ -96,6 +100,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate established BIGO session configuration
+        shell: bash
+        run: |
+          if [ -z "${BIGO_COOKIE_HEADER:-}" ]; then
+            echo "::error::Production capture stopped: the existing BIGO_COOKIE_HEADER secret/variable is empty."
+            exit 1
+          fi
 
       - name: Install capture tools
         run: |
