@@ -62,15 +62,15 @@ jobs:
           )"
           BODY="$(python3 - "${HOST_ID}" "${BIGO_COOKIE_HEADER:-}" <<'PYBODY'
           import json,sys
-          print(json.dumps({"hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
+          print(json.dumps({"action":"bigo-room-info","hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
           PYBODY
           )"
           STATUS=404
           for attempt in $(seq 1 12); do
             STATUS="$(curl --silent --show-error -o /tmp/bigo-regional-preflight.json -w '%{http_code}' \
-              -X POST "https://chatb2k.resofit.fit/api/bigo-room-info" \
+              -X POST "${DRIVE_UPLOAD_URL:?Missing established BIGO upload endpoint}" \
               -H "Content-Type: application/json" \
-              -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY:?Missing established ChatB2K ingest credential}" \
+              -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY:?Missing established ChatB2K ingest credential}" \
               --data-binary "${BODY}")"
             [ "${STATUS}" != "404" ] && break
             sleep 15
@@ -80,7 +80,7 @@ jobs:
             echo "::error::Regional BIGO resolver returned HTTP ${STATUS}."
             exit 1
           fi
-          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and (.region | startswith("sin1"))' /tmp/bigo-regional-preflight.json >/dev/null
+          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and (.region | startswith("bom1"))' /tmp/bigo-regional-preflight.json >/dev/null
           jq -c '{ok,token_issued,room_info_ok,alive,region}' /tmp/bigo-regional-preflight.json
 
   capture-transform-publish:

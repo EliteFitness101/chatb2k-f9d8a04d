@@ -85,13 +85,13 @@ SOURCE_URL="${BIGO_ROOM_URL}"
 # token exchange and room-info call together in the dedicated regional function.
 INFO_REQUEST="$(python3 - "${HOST}" "${BIGO_COOKIE_HEADER:-}" <<'PYINFO'
 import json,sys
-print(json.dumps({"hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
+print(json.dumps({"action":"bigo-room-info","hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
 PYINFO
 )"
 INFO="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 \
-  -X POST "https://chatb2k.resofit.fit/api/bigo-room-info" \
+  -X POST "${DRIVE_UPLOAD_URL:?DRIVE_UPLOAD_URL is required for BIGO room discovery}" \
   -H "Content-Type: application/json" \
-  -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY:?CHATB2K_LIVE_INGEST_KEY is required for BIGO room discovery}" \
+  -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY:?CHATB2K_LIVE_INGEST_KEY is required for BIGO room discovery}" \
   --data-binary "${INFO_REQUEST}")"
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"

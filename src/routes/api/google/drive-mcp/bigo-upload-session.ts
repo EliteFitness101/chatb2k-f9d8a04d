@@ -1,3 +1,4 @@
+import { createCipheriv, createHash, randomBytes, randomInt } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
@@ -5,6 +6,88 @@ const allowedMime = new Set(["video/mp4", "image/jpeg", "application/json"]);
 const allowedClasses = new Set(["raw-captures", "processed", "google-business", "metadata", "logs"]);
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+
+const BIGO_TOKEN_KEY = "undefinedval0x01";
+const BIGO_TOKEN_TIME_URL = "https://sec.bigo.sg/v1/webjs/t";
+const BIGO_TOKEN_STATUS_URL = "https://sec.bigo.sg/v1/webjs/status";
+const BIGO_ROOM_INFO_URL = "https://ta.bigo.tv/official_website/studio/getInternalStudioInfo";
+function parseBigoJsonp(text: string): Record<string, any> {
+  const match = String(text).match(/^jsonp\w+\(([\s\S]+?)\);?\s*$/);
+  if (!match) throw new Error("BIGO token endpoint returned invalid JSONP");
+  return JSON.parse(match[1]);
+}
+function encryptBigoPayload(payload: Record<string, unknown>): string {
+  const salt = randomBytes(8);
+  let digest = Buffer.alloc(0);
+  let previous = Buffer.alloc(0);
+  while (digest.length < 48) {
+    previous = createHash("md5").update(Buffer.concat([previous, Buffer.from(BIGO_TOKEN_KEY, "utf8"), salt])).digest();
+    digest = Buffer.concat([digest, previous]);
+  }
+  const cipher = createCipheriv("aes-256-cbc", digest.subarray(0, 32), digest.subarray(32, 48));
+  const encrypted = Buffer.concat([cipher.update(Buffer.from(JSON.stringify(payload), "utf8")), cipher.final()]);
+  return Buffer.concat([Buffer.from("Salted__", "ascii"), salt, encrypted]).toString("base64");
+}
+function bigoCallback(): string {
+  return "jsonpcallback_" + Date.now() + "_" + randomInt(0, 1000001);
+}
+async function fetchBigoJsonp(url: URL, cookie: string): Promise<Record<string, any>> {
+  const response = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0", "Accept": "*/*", ...(cookie ? { "Cookie": cookie } : {}) },
+    cache: "no-store", signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error("BIGO token endpoint HTTP " + response.status);
+  return parseBigoJsonp(await response.text());
+}
+async function resolveBigoRoom(hostId: string, cookie: string): Promise<{ status: number; body: Record<string, unknown> }> {
+  const region = process.env.VERCEL_REGION || "unknown";
+  const timeUrl = new URL(BIGO_TOKEN_TIME_URL);
+  timeUrl.searchParams.set("callback", bigoCallback());
+  const timeData = await fetchBigoJsonp(timeUrl, cookie);
+  if (!timeData.time) return { status: 502, body: {
+    ok: false, error: "BIGO_TOKEN_TIME_UNAVAILABLE", upstream_code: timeData.code ?? null,
+    upstream_info: String(timeData.info || "").slice(0, 80), region,
+  } };
+  const payload = { dr: randomBytes(16).toString("hex"), business: "bigolive-video", scene: "", at_time: timeData.time, ver: "2.0" };
+  const statusUrl = new URL(BIGO_TOKEN_STATUS_URL);
+  statusUrl.searchParams.set("callback", bigoCallback());
+  statusUrl.searchParams.set("data", encryptBigoPayload(payload));
+  const tokenData = await fetchBigoJsonp(statusUrl, cookie);
+  const token = String(tokenData.token || "");
+  if (!token) return { status: 502, body: {
+    ok: false, error: "BIGO_TOKEN_NOT_ISSUED", upstream_code: tokenData.code ?? null,
+    upstream_info: String(tokenData.info || "").slice(0, 80), region,
+  } };
+  const roomUrl = new URL(BIGO_ROOM_INFO_URL);
+  roomUrl.searchParams.set("siteId", hostId);
+  roomUrl.searchParams.set("verify", "");
+  roomUrl.searchParams.set("token", token);
+  const roomResponse = await fetch(roomUrl, {
+    method: "POST",
+    headers: {
+      "User-Agent": "Mozilla/5.0", "Accept": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Origin": "https://www.bigo.tv", "Referer": "https://www.bigo.tv/",
+      ...(cookie ? { "Cookie": cookie } : {}),
+    },
+    body: "", cache: "no-store", signal: AbortSignal.timeout(15000),
+  });
+  if (!roomResponse.ok) throw new Error("BIGO room-info endpoint HTTP " + roomResponse.status);
+  const roomPayload = await roomResponse.json();
+  if (roomPayload.code !== 0) return { status: 502, body: {
+    ok: false, error: "BIGO_ROOM_INFO_REJECTED", upstream_code: roomPayload.code ?? null,
+    upstream_info: String(roomPayload.msg || "").slice(0, 80), token_issued: true, region,
+  } };
+  const data = roomPayload.data || {};
+  const hls = String(data.hls_src || data.hlsSrc || data.hls || "");
+  if (hls && !/^https:\/\//i.test(hls)) throw new Error("BIGO returned a non-HTTPS HLS URL");
+  return { status: 200, body: {
+    ok: true, token_issued: true, room_info_ok: true, alive: Boolean(hls),
+    name: data.nick_name || hostId,
+    title: data.roomTopic || data.gameTitle || data.title || "BIGO Live Highlight",
+    room_id: data.roomId || hostId, hls_src: hls, region,
+  } };
+}
 
 async function driveAccessToken() {
   const clientId = process.env.GOOGLE_CLIENT_ID ?? process.env.GOOGLE_DRIVE_CLIENT_ID;
@@ -71,6 +154,23 @@ export const Route = createFileRoute("/api/google/drive-mcp/bigo-upload-session"
         }
         const input = await request.json().catch(() => null);
         if (!input || typeof input !== "object") return json({ error: "Invalid request body" }, 400);
+        if (input.action === "bigo-room-info") {
+          const hostId = typeof input.hostId === "string" ? input.hostId.trim() : "";
+          const cookie = typeof input.cookieHeader === "string" ? input.cookieHeader.trim() : "";
+          if (!/^[A-Za-z0-9_.-]{1,128}$/.test(hostId) || cookie.length > 8192 || /[\r\n]/.test(cookie)) {
+            return json({ ok: false, error: "INVALID_BIGO_ROOM_REQUEST" }, 400);
+          }
+          try {
+            const result = await resolveBigoRoom(hostId, cookie);
+            return json(result.body, result.status);
+          } catch (error) {
+            return json({
+              ok: false, error: "BIGO_REGIONAL_RESOLUTION_FAILED",
+              detail: String(error instanceof Error ? error.message : "BIGO resolution failed").slice(0, 160),
+              region: process.env.VERCEL_REGION || "unknown",
+            }, 502);
+          }
+        }
         try {
           const token = await driveAccessToken();
           if (input.action === "verify") {
