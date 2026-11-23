@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, Clipboard, Film, RadioTower, ShieldCheck, Sparkles, Users, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { AdminGate, AdminLoading, Panel, StatCard, StatusPill } from "@/components/admin/AdminUI";
-import { getNoCappnOverview } from "@/lib/no-cappn.functions";
+import { getNoCappnOverview } from "@/lib/no-cappn.functions";\nimport { getNoCappnAgencyReviewQueue, reviewNoCappnCampaignAsset, setNoCappnHostAuthorization } from "@/lib/no-cappn-agency.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/no-cappn")({
   head: () => ({
@@ -29,6 +29,105 @@ type Highlight = {
 
 const labelClass = "text-[10px] tracking-[0.28em] uppercase text-muted-foreground";
 const panelClass = "rounded-sm border border-[var(--glass-border)] bg-[var(--ink-soft)]/35 backdrop-blur-xl";
+
+
+function AgencyOpsPanel({ agencies, sources }: { agencies: any[]; sources: any[] }) {
+  const getReviewQueue = useServerFn(getNoCappnAgencyReviewQueue);
+  const reviewAsset = useServerFn(reviewNoCappnCampaignAsset);
+  const setHostAuthorization = useServerFn(setNoCappnHostAuthorization);
+  const { data, refetch } = useQuery({
+    queryKey: ["no-cappn-agency-review-queue"],
+    queryFn: () => getReviewQueue(),
+    refetchInterval: 30_000,
+  });
+  const [agencyId, setAgencyId] = useState("");
+  const [sourceId, setSourceId] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [verificationNote, setVerificationNote] = useState("");
+  const [busyId, setBusyId] = useState("");
+  const eligibleSources = sources.filter((source) => source.active === true && source.capture_enabled === true);
+  const rows = data?.ok ? data.rows : [];
+
+  async function verifyHost() {
+    if (!agencyId || !sourceId || !evidenceUrl.startsWith("https://")) {
+      toast.error("Choose an agency, an active capture-enabled host and HTTPS ownership evidence.");
+      return;
+    }
+    setBusyId("host");
+    try {
+      const result = await setHostAuthorization({ data: {
+        agencyId, sourceId, evidenceUrl, decision: "verified", note: verificationNote,
+      } });
+      if (!result.ok) throw new Error(result.error);
+      toast.success("Host ownership verified and agency activated.");
+      setEvidenceUrl("");
+      setVerificationNote("");
+      await refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Host verification failed.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function decideAsset(campaignAssetId: string, decision: "approved" | "rejected") {
+    setBusyId(campaignAssetId);
+    try {
+      const result = await reviewAsset({ data: { campaignAssetId, decision } });
+      if (!result.ok) throw new Error(result.error);
+      toast.success(decision === "approved" ? "Highlight approved for campaign use." : "Highlight rejected.");
+      await refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Review action failed.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  return (
+    <Panel title="Agency onboarding and creative clearance">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-sm border border-[var(--glass-border)] bg-[var(--ink)]/40 p-4">
+          <p className={labelClass}>Host ownership verification</p>
+          <p className="mt-2 text-xs text-muted-foreground">Only active, capture-enabled BIGO sources are selectable. Verification requires evidence and is performed by a ResoFit operator.</p>
+          <div className="mt-3 space-y-2">
+            <select value={agencyId} onChange={(e) => setAgencyId(e.target.value)} className="w-full rounded-md border border-[var(--glass-border)] bg-background px-3 py-2 text-sm">
+              <option value="">Select agency</option>
+              {agencies.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.status}</option>)}
+            </select>
+            <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} className="w-full rounded-md border border-[var(--glass-border)] bg-background px-3 py-2 text-sm">
+              <option value="">Select active BIGO host source</option>
+              {eligibleSources.map((source) => <option key={source.id} value={source.id}>{source.display_name || source.bigo_id} · {source.bigo_id}</option>)}
+            </select>
+            <input value={evidenceUrl} onChange={(e) => setEvidenceUrl(e.target.value)} type="url" placeholder="HTTPS host authorization evidence URL" className="w-full rounded-md border border-[var(--glass-border)] bg-background px-3 py-2 text-sm" />
+            <input value={verificationNote} onChange={(e) => setVerificationNote(e.target.value)} placeholder="Verification note (optional)" className="w-full rounded-md border border-[var(--glass-border)] bg-background px-3 py-2 text-sm" />
+            <button type="button" onClick={verifyHost} disabled={busyId === "host" || !agencies.length || !eligibleSources.length} className="rounded-full bg-gold px-4 py-2 text-xs font-semibold text-black disabled:opacity-50">{busyId === "host" ? "Verifying…" : "Verify host and activate agency"}</button>
+          </div>
+        </div>
+        <div className="rounded-sm border border-[var(--glass-border)] bg-[var(--ink)]/40 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className={labelClass}>Pending campaign assets</p>
+            <StatusPill value={String(rows.length) + " pending"} />
+          </div>
+          <div className="mt-3 space-y-3">
+            {rows.map((row: any) => (
+              <div key={row.id} className="border-b border-[var(--glass-border)] pb-3 last:border-0">
+                <p className="text-sm font-medium">{row.highlight_title} · {row.host_name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{row.agency_name} / {row.campaign_name} · {row.platform}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">Rights: {row.asset?.rights_status ?? "unknown"} · Commercial: {row.asset?.commercial_status ?? "unknown"} · QA: {row.asset?.qa_status ?? "unknown"}</p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => decideAsset(row.id, "approved")} disabled={busyId === row.id} className="rounded-full bg-gold px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-50">Approve</button>
+                  <button type="button" onClick={() => decideAsset(row.id, "rejected")} disabled={busyId === row.id} className="rounded-full border border-[var(--glass-border)] px-3 py-1.5 text-xs disabled:opacity-50">Reject</button>
+                </div>
+              </div>
+            ))}
+            {!rows.length && <p className="text-xs text-muted-foreground">{data?.ok === false ? data.error : "No campaign assets are awaiting review."}</p>}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
 
 function NoCappnCommandCenter() {
   const fetchOverview = useServerFn(getNoCappnOverview);
@@ -128,7 +227,7 @@ function NoCappnCommandCenter() {
         <StatCard label="QA + rights eligible" value={eligible} hint={`of ${data.assets.total} total asset records · latest 30 checked`} tone={eligible ? "good" : "default"} />
       </section>
 
-      <Panel title="End-to-end production architecture">
+      <AgencyOpsPanel agencies={data.agencies ?? []} sources={data.sources.source_rows ?? []} />\n\n      <Panel title="End-to-end production architecture">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {stages.map((stage, index) => {
             const Icon = stage.icon;
