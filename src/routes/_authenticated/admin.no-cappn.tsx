@@ -5,7 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, Clipboard, Film, RadioTower, ShieldCheck, Sparkles, Users, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { AdminGate, AdminLoading, Panel, StatCard, StatusPill } from "@/components/admin/AdminUI";
-import { getNoCappnOverview } from "@/lib/no-cappn.functions";\nimport { getNoCappnAgencyReviewQueue, reviewNoCappnCampaignAsset, setNoCappnHostAuthorization } from "@/lib/no-cappn-agency.functions";
+import { getNoCappnOverview } from "@/lib/no-cappn.functions";
+import { getNoCappnAgencyReviewQueue, reviewNoCappnCampaignAsset, setNoCappnHostAuthorization } from "@/lib/no-cappn-agency.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/no-cappn")({
   head: () => ({
@@ -227,7 +228,9 @@ function NoCappnCommandCenter() {
         <StatCard label="QA + rights eligible" value={eligible} hint={`of ${data.assets.total} total asset records · latest 30 checked`} tone={eligible ? "good" : "default"} />
       </section>
 
-      <AgencyOpsPanel agencies={data.agencies ?? []} sources={data.sources.source_rows ?? []} />\n\n      <Panel title="End-to-end production architecture">
+      <AgencyOpsPanel agencies={data.agencies ?? []} sources={data.sources.source_rows ?? []} />
+
+      <Panel title="End-to-end production architecture">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {stages.map((stage, index) => {
             const Icon = stage.icon;
