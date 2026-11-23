@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           HOST_ID="$(python3 - "${BIGO_HOST_IDS:-}" <<'PYHOST'
           import re,sys
-          values=[x.strip() for x in re.split(r"[,\\s]+",sys.argv[1]) if x.strip()]
+          values=[x.strip() for x in re.split(r"[,\s]+",sys.argv[1]) if x.strip()]
           if not values:
               raise SystemExit("No BIGO host is configured for the regional token preflight")
           print(values[0])
