@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ type Campaign={id:string;name:string;status:string}; type Asset={campaign_id:str
 export function AgencyLifecyclePanel({agency,role,campaigns,assets}:{agency:{id:string};role:string;campaigns:Campaign[];assets:Asset[]}){
  const qc=useQueryClient(),invite=useServerFn(createNoCappnAgencyInvite),acceptInvite=useServerFn(acceptNoCappnAgencyInvite),submitCampaign=useServerFn(submitNoCappnCampaign);
  const [email,setEmail]=useState(""),[inviteRole,setInviteRole]=useState<"admin"|"member">("member"),[url,setUrl]=useState("");
- const [token,setToken]=useState(()=>typeof window!=="undefined"?new URLSearchParams(window.location.search).get("invite")??"":""),[busy,setBusy]=useState(false);
+ const [token,setToken]=useState(()=>typeof window!=="undefined"?new URLSearchParams(window.location.hash.slice(1)).get("invite")??"":""),[busy,setBusy]=useState(false);
  async function issue(e:React.FormEvent){e.preventDefault();setBusy(true);try{const r=await invite({data:{agencyId:agency.id,email,role:inviteRole}});if(!r.ok)throw new Error(r.error);setUrl(r.inviteUrl);setEmail("");toast.success("Single-use invitation created. Share it with the invited email account.");}catch(x){toast.error(x instanceof Error?x.message:"Invite failed.");}finally{setBusy(false);}}
  async function accept(e:React.FormEvent){e.preventDefault();setBusy(true);try{const r=await acceptInvite({data:{token:token.trim()}});if(!r.ok)throw new Error(r.error);setToken("");toast.success("Agency invitation accepted.");await qc.invalidateQueries({queryKey:["no-cappn-agency-workspace"]});}catch(x){toast.error(x instanceof Error?x.message:"Invitation acceptance failed.");}finally{setBusy(false);}}
  async function submit(id:string){setBusy(true);try{const r=await submitCampaign({data:{campaignId:id}});if(!r.ok)throw new Error(r.error);toast.success("Campaign submitted for operator approval.");await qc.invalidateQueries({queryKey:["no-cappn-agency-workspace"]});}catch(x){toast.error(x instanceof Error?x.message:"Campaign submission failed.");}finally{setBusy(false);}}
