@@ -124,9 +124,9 @@ export const attachNoCappnHighlight = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
     const { data: campaign } = await admin.from("no_cappn_campaigns")
-      .select("id,agency_id,host_mapping_id")
+      .select("id,agency_id,host_mapping_id,status")
       .eq("id", data.campaignId).maybeSingle();
-    if (!campaign) return denied;
+    if (!campaign || campaign.status !== "draft") return denied;
 
     const { data: membership } = await admin.from("no_cappn_agency_memberships")
       .select("agency_id").eq("agency_id", campaign.agency_id)
@@ -187,7 +187,9 @@ export const setNoCappnHostAuthorization = createServerFn({ method: "POST" })
       admin.from("no_cappn_agencies").select("id").eq("id", data.agencyId).maybeSingle(),
       admin.from("bigo_sources").select("id,active,capture_enabled").eq("id", data.sourceId).maybeSingle(),
     ]);
-    if (!agency || !source) return { ok: false as const, error: "Agency or BIGO source not found." };\n    if (data.decision === "verified" && (!source.active || !source.capture_enabled)) return { ok: false as const, error: "Only active, capture-enabled BIGO sources can be verified for automated campaigns." };\n    if (data.decision === "verified" && !data.evidenceUrl) return { ok: false as const, error: "An HTTPS host-ownership evidence URL is required before verification." };
+    if (!agency || !source) return { ok: false as const, error: "Agency or BIGO source not found." };
+    if (data.decision === "verified" && (!source.active || !source.capture_enabled)) return { ok: false as const, error: "Only active, capture-enabled BIGO sources can be verified for automated campaigns." };
+    if (data.decision === "verified" && !data.evidenceUrl) return { ok: false as const, error: "An HTTPS host-ownership evidence URL is required before verification." };
     const verified = data.decision === "verified";
     const { data: mapping, error } = await admin.from("no_cappn_agency_hosts").upsert({
       agency_id: data.agencyId,
@@ -200,6 +202,7 @@ export const setNoCappnHostAuthorization = createServerFn({ method: "POST" })
       created_by: context.userId,
     }, { onConflict: "agency_id,source_id" }).select("id,status").single();
     if (error) return { ok: false as const, error: error.message };
+    if (verified) await admin.from("no_cappn_agencies").update({ status: "active" }).eq("id", data.agencyId);
     return { ok: true as const, mapping };
   });
 
