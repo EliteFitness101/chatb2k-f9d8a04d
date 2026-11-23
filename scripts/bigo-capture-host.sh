@@ -89,12 +89,9 @@ TOKEN_STATUS='https://sec.bigo.sg/v1/webjs/status'
 KEY=b'undefinedval0x01'
 UA='Mozilla/5.0'
 HTTP=requests.Session()
-proxy=os.environ.get('BIGO_EGRESS_PROXY','').strip()
-if proxy:
-    HTTP.proxies.update({'http':proxy,'https':proxy})
 def request_headers(accept='*/*'):
     headers={'User-Agent':UA,'Accept':accept}
-    cookie=os.environ.get('BIGO_SESSION_COOKIE','').strip()
+    cookie=os.environ.get('BIGO_COOKIE_HEADER','').strip()
     if cookie:
         headers['Cookie']=cookie
     return headers
@@ -182,17 +179,17 @@ fi
 CURL_COOKIE_ARGS=()
 STREAMLINK_COOKIE_ARGS=()
 FFMPEG_COOKIE_ARGS=()
-if [ -n "${BIGO_SESSION_COOKIE:-}" ]; then
-  STREAMLINK_COOKIE_ARGS=(--http-header "Cookie=${BIGO_SESSION_COOKIE}")
-  CURL_COOKIE_ARGS=(-H "Cookie: ${BIGO_SESSION_COOKIE}")
-  FFMPEG_COOKIE_ARGS=(-headers "Cookie: ${BIGO_SESSION_COOKIE}"$'\r\n')
+if [ -n "${BIGO_COOKIE_HEADER:-}" ]; then
+  STREAMLINK_COOKIE_ARGS=(--http-header "Cookie=${BIGO_COOKIE_HEADER}")
+  CURL_COOKIE_ARGS=(-H "Cookie: ${BIGO_COOKIE_HEADER}")
+  FFMPEG_COOKIE_ARGS=(-headers "Cookie: ${BIGO_COOKIE_HEADER}"$'\r\n')
 fi
 # Bounded retries: isolate transient room/network failures to this host.
 for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  BIGO_COOKIE_HEADER="${BIGO_SESSION_COOKIE:-}" timeout 55s python3 scripts/bigo-streamlink-capture.py "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout 55s python3 scripts/bigo-streamlink-capture.py "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
