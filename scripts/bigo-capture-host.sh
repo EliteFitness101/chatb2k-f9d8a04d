@@ -104,12 +104,16 @@ if [ -n "$STREAM_URL" ]; then
   echo "::notice::BIGO host $HOST using freshly discovered HLS source"
 fi
 CAPTURE_OK=0
-# Capture duration is runtime-configurable. When unset, FFmpeg captures until the live source
-# closes/Streamlink's bounded probe ends; no fixed clip duration is imposed by source code.
-FFMPEG_DURATION_ARGS=()
-if [ -n "${BIGO_CAPTURE_DURATION_SECONDS:-}" ]; then
-  FFMPEG_DURATION_ARGS=(-t "${BIGO_CAPTURE_DURATION_SECONDS}")
+# Capture up to the pipeline's verified 180-second master limit. The default is
+# three minutes per host; the enclosing 60-minute workflow can process the full
+# 85-host inventory in bounded batches at the established eight-worker setting.
+CAPTURE_DURATION_SECONDS="${BIGO_CAPTURE_DURATION_SECONDS:-180}"
+if ! [[ "${CAPTURE_DURATION_SECONDS}" =~ ^[1-9][0-9]*$ ]] || [ "${CAPTURE_DURATION_SECONDS}" -gt 180 ]; then
+  echo "::error::BIGO capture duration must be an integer from 1 to 180 seconds."
+  exit 1
 fi
+FFMPEG_DURATION_ARGS=(-t "${CAPTURE_DURATION_SECONDS}")
+CAPTURE_TIMEOUT_SECONDS=$((CAPTURE_DURATION_SECONDS + 30))
 # BIGO began requiring authenticated sessions for some rooms. Read a private session cookie
 # from GitHub Actions secrets; never log it or store it in capture metadata.
 CURL_COOKIE_ARGS=()
@@ -125,7 +129,7 @@ for ATTEMPT in 1 2; do
   rm -f "$RAW"
   echo "::notice::BIGO host $HOST capture attempt $ATTEMPT/2 (Streamlink)"
   set +e
-  timeout 55s python3 scripts/bigo-streamlink-capture.py "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+  timeout "${CAPTURE_TIMEOUT_SECONDS}s" python3 scripts/bigo-streamlink-capture.py "$HOST" "$STREAM_URL" 2>"$LOG" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
   PIPE_RC=("${PIPESTATUS[@]}")
   CAPTURE_RC="${PIPE_RC[0]:-1}"
   FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -141,7 +145,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$SOURCE_OVERRIDE" ] && [[ "$SOURCE_OVERRIDE"
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s curl "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout "${CAPTURE_TIMEOUT_SECONDS}s" curl "${CURL_COOKIE_ARGS[@]}" -L --fail --silent --show-error --retry 2 --retry-delay 1 "$SOURCE_OVERRIDE" | ffmpeg -hide_banner -loglevel error -i pipe:0 "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     PIPE_RC=("${PIPESTATUS[@]}")
     CURL_RC="${PIPE_RC[0]:-1}"
     FFMPEG_RC="${PIPE_RC[1]:-1}"
@@ -231,7 +235,7 @@ if [ "$CAPTURE_OK" -ne 1 ] && [ -n "$STREAM_URL" ]; then
   for ATTEMPT in 1 2; do
     rm -f "$RAW"
     set +e
-    timeout 45s ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 "${FFMPEG_COOKIE_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
+    timeout "${CAPTURE_TIMEOUT_SECONDS}s" ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0" -rw_timeout 15000000 "${FFMPEG_COOKIE_ARGS[@]}" -i "$STREAM_URL" "${FFMPEG_DURATION_ARGS[@]}" -map 0:v:0 -map 0:a:0? -af aresample=async=1:first_pts=0 -c:v libx264 -preset veryfast -crf 23 -r 30 -fps_mode cfr -pix_fmt yuv420p -c:a aac -ar 48000 -movflags +faststart "$RAW"
     FFMPEG_RC="$?"
     set -e
     if [ "$FFMPEG_RC" -eq 0 ] && [ -s "$RAW" ]; then CAPTURE_OK=1; break; fi
