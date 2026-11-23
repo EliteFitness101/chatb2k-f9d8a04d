@@ -101,6 +101,12 @@ using (exists (
   where m.agency_id = id and m.user_id = (select auth.uid()) and m.status = 'active'
 ));
 
+drop policy if exists no_cappn_agencies_operator_update on public.no_cappn_agencies;
+create policy no_cappn_agencies_operator_update on public.no_cappn_agencies
+for update to authenticated
+using (public.has_role((select auth.uid()), 'admin'::public.app_role))
+with check (public.has_role((select auth.uid()), 'admin'::public.app_role));
+
 drop policy if exists no_cappn_memberships_self_read on public.no_cappn_agency_memberships;
 create policy no_cappn_memberships_self_read on public.no_cappn_agency_memberships
 for select to authenticated
@@ -111,7 +117,7 @@ create policy no_cappn_hosts_member_read on public.no_cappn_agency_hosts
 for select to authenticated
 using (exists (
   select 1 from public.no_cappn_agency_memberships m
-  where m.agency_id = agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
+  where m.agency_id = public.no_cappn_agency_hosts.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
 ));
 
 drop policy if exists no_cappn_hosts_operator_manage on public.no_cappn_agency_hosts;
@@ -125,7 +131,7 @@ create policy no_cappn_campaigns_member_read on public.no_cappn_campaigns
 for select to authenticated
 using (exists (
   select 1 from public.no_cappn_agency_memberships m
-  where m.agency_id = agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
+  where m.agency_id = public.no_cappn_campaigns.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
 ));
 
 drop policy if exists no_cappn_campaigns_member_create on public.no_cappn_campaigns;
@@ -136,11 +142,12 @@ with check (
   and status = 'draft'
   and exists (
     select 1 from public.no_cappn_agency_memberships m
-    where m.agency_id = agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
+    where m.agency_id = public.no_cappn_campaigns.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
   )
+  and status in ('draft','pending_review','paused','archived')
   and exists (
     select 1 from public.no_cappn_agency_hosts h
-    where h.id = host_mapping_id and h.agency_id = agency_id and h.status = 'verified'
+    where h.id = host_mapping_id and h.agency_id = public.no_cappn_campaigns.agency_id and h.status = 'verified'
   )
 );
 
@@ -149,7 +156,7 @@ create policy no_cappn_campaigns_member_update on public.no_cappn_campaigns
 for update to authenticated
 using (exists (
   select 1 from public.no_cappn_agency_memberships m
-  where m.agency_id = agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
+  where m.agency_id = public.no_cappn_campaign_assets.agency_id and m.user_id = (select auth.uid()) and m.status = 'active'
 ))
 with check (
   exists (
