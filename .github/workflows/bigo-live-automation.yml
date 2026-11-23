@@ -76,7 +76,7 @@ jobs:
             -H "x-region: ap-southeast-1" \
             --data-binary "${BODY}" \
             -o /tmp/bigo-preflight.json)"
-          if [ -z "${STATUS}" ]; then
+          if [ "${STATUS}" != "200" ]; then
             jq -c '{ok,error,upstream_code,upstream_info,region}' /tmp/bigo-preflight.json 2>/dev/null || true
             echo "::error::BIGO token resolver returned HTTP ${STATUS}."
             exit 1
