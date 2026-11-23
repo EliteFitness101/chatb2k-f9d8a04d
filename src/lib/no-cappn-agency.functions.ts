@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireNoCappnAuth as requireSupabaseAuth } from "@/lib/no-cappn-auth-middleware";
 
 const denied = { ok: false as const, error: "Agency access is not authorized." };
 
