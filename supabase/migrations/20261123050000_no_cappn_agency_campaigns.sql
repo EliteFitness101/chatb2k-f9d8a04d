@@ -87,8 +87,8 @@ alter table public.no_cappn_agency_hosts enable row level security;
 alter table public.no_cappn_campaigns enable row level security;
 alter table public.no_cappn_campaign_assets enable row level security;
 
-grant select on public.no_cappn_agencies to authenticated;
-grant select on public.no_cappn_agency_memberships to authenticated;
+grant select, insert on public.no_cappn_agencies to authenticated;
+grant select, insert on public.no_cappn_agency_memberships to authenticated;
 grant select on public.no_cappn_agency_hosts to authenticated;
 grant select, insert, update on public.no_cappn_campaigns to authenticated;
 grant select on public.no_cappn_campaign_assets to authenticated;
@@ -96,9 +96,9 @@ grant select on public.no_cappn_campaign_assets to authenticated;
 drop policy if exists no_cappn_agencies_member_read on public.no_cappn_agencies;
 create policy no_cappn_agencies_member_read on public.no_cappn_agencies
 for select to authenticated
-using (exists (
+using (created_by = (select auth.uid()) or exists (
   select 1 from public.no_cappn_agency_memberships m
-  where m.agency_id = id and m.user_id = (select auth.uid()) and m.status = 'active'
+  where m.agency_id = public.no_cappn_agencies.id and m.user_id = (select auth.uid()) and m.status = 'active'
 ));
 
 drop policy if exists no_cappn_agencies_operator_update on public.no_cappn_agencies;
@@ -107,10 +107,28 @@ for update to authenticated
 using (public.has_role((select auth.uid()), 'admin'::public.app_role))
 with check (public.has_role((select auth.uid()), 'admin'::public.app_role));
 
+drop policy if exists no_cappn_agencies_creator_insert on public.no_cappn_agencies;
+create policy no_cappn_agencies_creator_insert on public.no_cappn_agencies
+for insert to authenticated
+with check (created_by = (select auth.uid()) and status = 'pending');
+
 drop policy if exists no_cappn_memberships_self_read on public.no_cappn_agency_memberships;
 create policy no_cappn_memberships_self_read on public.no_cappn_agency_memberships
 for select to authenticated
 using (user_id = (select auth.uid()));
+
+drop policy if exists no_cappn_memberships_owner_bootstrap on public.no_cappn_agency_memberships;
+create policy no_cappn_memberships_owner_bootstrap on public.no_cappn_agency_memberships
+for insert to authenticated
+with check (
+  user_id = (select auth.uid())
+  and role = 'owner'
+  and status = 'active'
+  and exists (
+    select 1 from public.no_cappn_agencies a
+    where a.id = agency_id and a.created_by = (select auth.uid())
+  )
+);
 
 drop policy if exists no_cappn_hosts_member_read on public.no_cappn_agency_hosts;
 create policy no_cappn_hosts_member_read on public.no_cappn_agency_hosts
@@ -183,11 +201,11 @@ for update to authenticated
 using (public.has_role((select auth.uid()), 'admin'::public.app_role))
 with check (public.has_role((select auth.uid()), 'admin'::public.app_role));
 
--- Atomic agency creation. Kept in the non-exposed private schema and callable only by authenticated users.
-create or replace function private.create_no_cappn_agency(p_name text, p_slug text)
+-- Atomic agency creation under the caller's RLS identity.
+create or replace function public.create_no_cappn_agency(p_name text, p_slug text)
 returns uuid
 language plpgsql
-security definer
+security invoker
 set search_path = ''
 as $$
 declare
@@ -275,7 +293,6 @@ begin
 end;
 $$;
 
-revoke all on function private.create_no_cappn_agency(text, text) from public, anon;
 revoke all on function private.attach_no_cappn_highlight(uuid, uuid) from public, anon;
-grant execute on function private.create_no_cappn_agency(text, text) to authenticated;
 grant execute on function private.attach_no_cappn_highlight(uuid, uuid) to authenticated;
+grant execute on function public.create_no_cappn_agency(text, text) to authenticated;
