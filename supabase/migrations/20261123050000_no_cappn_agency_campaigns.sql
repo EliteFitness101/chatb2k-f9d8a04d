@@ -75,6 +75,8 @@ create index if not exists no_cappn_memberships_user_agency_idx
   on public.no_cappn_agency_memberships (user_id, agency_id) where status = 'active';
 create index if not exists no_cappn_hosts_agency_status_idx
   on public.no_cappn_agency_hosts (agency_id, status);
+create unique index if not exists no_cappn_hosts_source_unique
+  on public.no_cappn_agency_hosts (source_id);
 create index if not exists no_cappn_campaigns_agency_created_idx
   on public.no_cappn_campaigns (agency_id, created_at desc);
 create index if not exists no_cappn_campaign_assets_agency_campaign_idx
