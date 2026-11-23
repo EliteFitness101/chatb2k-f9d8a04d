@@ -24,7 +24,7 @@ export const createNoCappnAgencyInvite = createServerFn({ method: "POST" }).midd
     agency_id:data.agencyId,invited_email:email,role:data.role,token_hash:tokenHash,expires_at:expiresAt,invited_by:context.userId,status:"pending"
   });
   if(error) return {ok:false as const,error:error.message};
-  return {ok:true as const,inviteUrl:`https://chatb2k.resofit.fit/agency/no-cappn?invite=${token}`,expiresAt};
+  return {ok:true as const,inviteUrl:`https://chatb2k.resofit.fit/agency/no-cappn#invite=${token}`,expiresAt};
 });
 
 export const acceptNoCappnAgencyInvite = createServerFn({ method: "POST" }).middleware([requireNoCappnAuth])
