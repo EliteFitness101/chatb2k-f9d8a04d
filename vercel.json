@@ -7,8 +7,5 @@
       "path": "/api/cron/paystack-settlement-reconcile",
       "schedule": "0 6 * * *"
     }
-  ],
-  "regions": [
-    "sin1"
   ]
 }

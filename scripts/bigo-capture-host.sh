@@ -80,18 +80,19 @@ SOURCE_URL="${BIGO_ROOM_URL}"
 # Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
 # This is the critical fallback for hosts that are visibly live but now return an empty
 # hls_src to the older unauthenticated getInternalStudioInfo request.
-# Resolve BIGO room metadata through the authenticated Singapore-region Supabase Edge Function.
+# Resolve BIGO room metadata through the authenticated Mumbai-region Supabase Edge Function.
 # The token service rejects requests from non-Asian runner IP ranges; keep the
 # token exchange and room-info call together in the existing authenticated BIGO pipeline function.
 INFO_REQUEST="$(python3 - "${HOST}" "${BIGO_COOKIE_HEADER:-}" <<'PYINFO'
 import json,sys
-print(json.dumps({"action":"bigo-room-info","hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
+print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
 PYINFO
 )"
 INFO="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 \
-  -X POST "${DRIVE_UPLOAD_URL:?DRIVE_UPLOAD_URL is required for BIGO room discovery}" \
+  -X POST "${PIPELINE_URL:?PIPELINE_URL is required for BIGO room discovery}" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY:?CHATB2K_LIVE_INGEST_KEY is required for BIGO room discovery}" \
+  -H "Authorization: Bearer ${OIDC_TOKEN:?Trusted GitHub OIDC token is required for BIGO room discovery}" \
+  -H "x-region: ap-south-1" \
   --data-binary "${INFO_REQUEST}")"
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
