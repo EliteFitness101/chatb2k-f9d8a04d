@@ -258,14 +258,28 @@ export const reviewNoCappnCampaignAsset = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
     const { data: link } = await admin.from("no_cappn_campaign_assets")
-      .select("id,asset_id").eq("id", data.campaignAssetId).maybeSingle();
-    if (!link) return { ok: false as const, error: "Campaign asset not found." };
-    const { data: asset } = await admin.from("content_asset_registry")
-      .select("rights_status,commercial_status,qa_status,canonical_url").eq("id", link.asset_id).maybeSingle();
-    if (data.decision === "approved" && (!asset || asset.rights_status !== "verified" ||
-      asset.commercial_status !== "authorized" || asset.qa_status !== "approved" ||
-      !String(asset.canonical_url ?? "").startsWith("https://"))) {
-      return { ok: false as const, error: "Approval denied: the source asset no longer passes rights, commercial and QA checks." };
+      .select("id,agency_id,campaign_id,highlight_id,asset_id,approval_status")
+      .eq("id", data.campaignAssetId).maybeSingle();
+    if (!link || link.approval_status !== "pending_review") return { ok: false as const, error: "Pending campaign asset not found." };
+    const [{ data: campaign }, { data: highlight }, { data: asset }] = await Promise.all([
+      admin.from("no_cappn_campaigns").select("id,agency_id,host_mapping_id").eq("id", link.campaign_id).maybeSingle(),
+      admin.from("resofit_live_highlights").select("id,host_id,content_asset_id").eq("id", link.highlight_id).maybeSingle(),
+      admin.from("content_asset_registry").select("id,rights_status,commercial_status,qa_status,canonical_url").eq("id", link.asset_id).maybeSingle(),
+    ]);
+    const { data: host } = campaign
+      ? await admin.from("no_cappn_agency_hosts").select("id,agency_id,source_id,status")
+          .eq("id", campaign.host_mapping_id).eq("agency_id", link.agency_id).eq("status", "verified").maybeSingle()
+      : { data: null };
+    const { data: source } = host
+      ? await admin.from("bigo_sources").select("bigo_id").eq("id", host.source_id).maybeSingle()
+      : { data: null };
+    if (data.decision === "approved" && (
+      !campaign || campaign.agency_id !== link.agency_id || !host || !source ||
+      !highlight || highlight.host_id !== source.bigo_id || highlight.content_asset_id !== link.asset_id ||
+      !asset || asset.rights_status !== "verified" || asset.commercial_status !== "authorized" ||
+      asset.qa_status !== "approved" || !String(asset.canonical_url ?? "").startsWith("https://")
+    )) {
+      return { ok: false as const, error: "Approval denied: verified host ownership, highlight provenance, rights, commercial authorization and QA must all still pass." };
     }
     const { error } = await admin.from("no_cappn_campaign_assets").update({
       approval_status: data.decision,
