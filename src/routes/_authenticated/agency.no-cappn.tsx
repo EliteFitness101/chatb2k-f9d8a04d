@@ -10,6 +10,7 @@ import {
   getNoCappnAgencyWorkspace,
   saveNoCappnCampaignCreative,
 } from "@/lib/no-cappn-agency.functions";
+import { AgencyLifecyclePanel } from "@/components/no-cappn/AgencyLifecyclePanel";
 
 export const Route = createFileRoute("/_authenticated/agency/no-cappn")({
   head: () => ({
@@ -187,6 +188,8 @@ function NoCappnAgencyWorkspace() {
               {agencies.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.status}</option>)}
             </select>
           </section>
+
+          <AgencyLifecyclePanel agency={agencies.find((a) => a.id === activeAgencyId)!} role={workspace.memberships.find((m) => m.agency_id === activeAgencyId)?.role ?? "member"} campaigns={campaigns} assets={workspace.assets} />
 
           <section className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg border border-[var(--glass-border)] p-4"><p className="text-xs text-muted-foreground">Verified hosts</p><p className="mt-2 text-2xl font-semibold">{hosts.length}</p></div>
