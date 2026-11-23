@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, Clipboard, Film, RadioTower, ShieldCheck, Sparkles, Users, Workflow } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 import { AdminGate, AdminLoading, Panel, StatCard, StatusPill } from "@/components/admin/AdminUI";
 import { getNoCappnOverview } from "@/lib/no-cappn.functions";
 import { getNoCappnAgencyReviewQueue, reviewNoCappnCampaignAsset, setNoCappnHostAuthorization } from "@/lib/no-cappn-agency.functions";
@@ -131,6 +132,7 @@ function AgencyOpsPanel({ agencies, sources }: { agencies: any[]; sources: any[]
 }
 
 function NoCappnCommandCenter() {
+  const { signOut } = useAuth();
   const fetchOverview = useServerFn(getNoCappnOverview);
   const { data, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ["no-cappn-command-center"],
@@ -202,9 +204,12 @@ function NoCappnCommandCenter() {
             Connect authorized livestream highlights to host-recruitment campaigns, creative review and social distribution.
           </p>
         </div>
-        <div className="text-right">
-          <StatusPill value="Internal operator preview" />
-          <p className="text-[10px] text-muted-foreground mt-2">Refreshes every 60 seconds</p>
+        <div className="flex items-center gap-3 text-right">
+          <div>
+            <StatusPill value="Internal operator preview" />
+            <p className="text-[10px] text-muted-foreground mt-2">Refreshes every 60 seconds</p>
+          </div>
+          <button type="button" onClick={() => void signOut()} className="rounded-full border border-[var(--glass-border)] px-4 py-2 text-xs text-gold hover:bg-white/5">Sign out</button>
         </div>
       </header>
 
