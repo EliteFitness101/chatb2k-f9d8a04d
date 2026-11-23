@@ -30,9 +30,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           source = Path("scripts/bigo-capture-host.sh").read_text()
-          marker = "<<'PYINFO'\\n"
+          marker = "<<'PYINFO'\n"
           start = source.index(marker) + len(marker)
-          end = source.index("\\nPYINFO", start)
+          end = source.index("\nPYINFO", start)
           compile(source[start:end], "bigo-regional-request", "exec")
           print("Embedded BIGO regional request syntax: OK")
           PY
