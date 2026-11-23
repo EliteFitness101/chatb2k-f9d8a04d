@@ -2,10 +2,6 @@
 -- Canonical project: resonance-fitness (vbqjvmnhdtdhmeeudqnn).
 -- Staged in GitHub preview branch only; do not apply to production without approval.
 
-create schema if not exists private;
-revoke all on schema private from public, anon;
-grant usage on schema private to authenticated;
-
 create table if not exists public.no_cappn_agencies (
   id uuid primary key default gen_random_uuid(),
   name text not null check (length(trim(name)) between 2 and 120),
@@ -233,66 +229,4 @@ begin
 end;
 $$;
 
--- Attach only a highlight from the exact BIGO host mapped to this campaign.
--- The source-to-agency mapping must already be verified by a ResoFit operator.
-create or replace function private.attach_no_cappn_highlight(p_campaign_id uuid, p_highlight_id uuid)
-returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_agency_id uuid;
-  v_source_id uuid;
-  v_bigo_id text;
-  v_asset_id uuid;
-  v_result_id uuid;
-begin
-  if v_user_id is null then
-    raise exception 'Authentication required' using errcode = '28000';
-  end if;
-
-  select c.agency_id, ah.source_id, bs.bigo_id
-    into v_agency_id, v_source_id, v_bigo_id
-  from public.no_cappn_campaigns c
-  join public.no_cappn_agency_hosts ah
-    on ah.id = c.host_mapping_id and ah.agency_id = c.agency_id and ah.status = 'verified'
-  join public.bigo_sources bs on bs.id = ah.source_id
-  join public.no_cappn_agency_memberships m
-    on m.agency_id = c.agency_id and m.user_id = v_user_id and m.status = 'active'
-  where c.id = p_campaign_id;
-
-  if v_agency_id is null then
-    raise exception 'Campaign, verified host authorization, or agency membership not found' using errcode = '42501';
-  end if;
-
-  select h.content_asset_id into v_asset_id
-  from public.resofit_live_highlights h
-  join public.content_asset_registry a on a.id = h.content_asset_id
-  where h.id = p_highlight_id
-    and h.host_id = v_bigo_id
-    and a.rights_status = 'verified'
-    and a.commercial_status = 'authorized'
-    and a.qa_status = 'approved'
-    and a.canonical_url like 'https://%';
-
-  if v_asset_id is null then
-    raise exception 'Highlight does not belong to the verified host or its asset has not passed rights, commercial, and QA checks' using errcode = '42501';
-  end if;
-
-  insert into public.no_cappn_campaign_assets
-    (agency_id, campaign_id, highlight_id, asset_id, approval_status, created_by)
-  values
-    (v_agency_id, p_campaign_id, p_highlight_id, v_asset_id, 'pending_review', v_user_id)
-  on conflict (campaign_id, asset_id)
-  do update set highlight_id = excluded.highlight_id
-  returning id into v_result_id;
-
-  return v_result_id;
-end;
-$$;
-
-revoke all on function private.attach_no_cappn_highlight(uuid, uuid) from public, anon;
-grant execute on function private.attach_no_cappn_highlight(uuid, uuid) to authenticated;
 grant execute on function public.create_no_cappn_agency(text, text) to authenticated;
