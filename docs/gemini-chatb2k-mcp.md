@@ -2,27 +2,64 @@
 
 ## Runtime layout
 
-- `chatb2k-mcp`: stateless Streamable HTTP MCP endpoint. It authenticates a Supabase user JWT and permits CEO/fallback/admin/super_admin identities only.
-- `chatb2k-gemini-orchestrator`: validates the same user session, reads the Gemini API key through the existing allowlisted Vault RPC, and starts an Antigravity Managed Agent interaction with the ChatB2K MCP server attached.
-- Agent-to-gateway calls use the existing service-role-only gateway internally. The gateway remains read-only and applies each agent's registry allowlist.
+- `chatb2k-mcp` is a stateless Streamable HTTP MCP endpoint. It validates a short-lived, scoped Supabase JWT and restricts callers to the CEO/fallback/admin/super-admin identities.
+- `chatb2k-gemini-orchestrator` validates the caller's Supabase session, creates a five-minute MCP-scoped token, and starts the Gemini Interactions API remote-agent flow with ChatB2K MCP attached.
+- The Vercel route `/api/internal/chatb2k/gemini-orchestrator` also contains an OpenAI Responses API provider path. The Supabase Edge proxy currently returns an explicit 503 for `provider: "openai"` until the Vercel production route is deployed and verified. Do not remove that guard based only on source presence.
+- Agent-to-gateway calls use the service-role-only `chatb2k-ecosystem-tool-gateway`. The gateway is not read-only: it exposes a governed root tool surface, while payment mutations and email sending remain disabled.
 
 ## MCP tool surface
 
-Read tools: ecosystem status, inventory, integration health, media routes, secret-reference presence, persisted sync snapshot, agent tool listing and allowlisted read-tool invocation.
+Read tools include ecosystem status, inventory, integration health, media routes, secret-reference presence, persisted sync snapshots, agent tool listing and allowlisted read-tool invocation.
 
-Governed proposal: `ecosystem_propose_function` records a function proposal only. It does not generate code, deploy or execute.
+`ecosystem_propose_function` records a function-scaffold proposal only. It does not generate code, deploy or execute a function.
 
-## Explicit non-capabilities
+`agent_tool_list` and `agent_tool_invoke` delegate to the internal gateway. The gateway enforces:
+- Service-role-only internal authentication.
+- Enabled-agent, health and kill-switch checks.
+- Per-agent registry allowlists for non-root tools.
+- `ROOT` / `GLOBAL_ADMIN` permission checks for elevated tools.
+- Explicit endpoint and HTTP-method allowlists for GitHub and Vercel operations.
+- Runtime-verified binding status before execution.
+- Idempotency keys for binding execution and a maximum execution batch of 25 bindings (planning supports up to 72).
+- Audit records for gateway actions.
 
-The existing gateway has payments, deployment mutations, repository writes and email sending disabled. No generic command, service-role, arbitrary SQL, payment, publishing, deployment or repository-write tool is exposed by this MCP endpoint. A separate approval-backed dispatcher is required before autonomous mutations can be enabled.
+The elevated root tool surface includes GitHub App status, repository reads/writes, GitHub Actions workflow dispatch, verified binding orchestration, Vercel project writes, deployment creation and deployment promotion. These are governed capabilities, not unrestricted shell, SQL or service-role access.
 
-## Gemini model/agent compatibility
+## Explicitly gated capabilities
 
-The remote MCP connection uses `antigravity-preview-09-2026` through the Gemini Interactions API. Do not replace it with a Gemini 3 model for remote MCP: Google's current Interactions documentation says Gemini 3 models do not support remote MCP.
+- Payment mutations: disabled.
+- Email sending: disabled.
+- Arbitrary SQL, generic shell/command execution and unrestricted service-role access: not exposed.
+- Function-scaffold proposal: proposal persistence only; code generation, CI, security review and deployment remain separate steps.
+- A binding whose registry status is not `runtime_verified` is not executed.
 
-## Endpoints after deployment
+Do not describe the entire MCP/gateway path as read-only. Distinguish the read-only tools, proposal-only tool, root-governed write/dispatch tools and separately disabled payment/email mutations.
+
+## Gemini / OpenAI provider behavior
+
+The Gemini path uses `antigravity-preview-09-2026` through the Gemini Interactions API. Keep the existing remote MCP-compatible agent until provider compatibility is verified; do not replace it with an incompatible model.
+
+The OpenAI Responses API path is implemented in the Vercel route and uses `OPENAI_API_KEY` plus the same scoped MCP authorization. The Supabase Edge proxy's current OpenAI 503 guard is intentional until the production Vercel route is verified. Once that deployment is confirmed, remove the proxy guard in a feature branch, forward the provider unchanged, and test both provider paths end to end before release.
+
+Credential separation:
+- Gemini orchestration: `GEMINI_AUTOMATION_API_KEY`.
+- Internal media generation/enrichment: `GEMINI_API_KEY`.
+- OpenAI orchestration: `OPENAI_API_KEY`.
+
+## CORS and browser origins
+
+- `chatb2k-mcp`: `https://chatb2k.resofit.fit`.
+- `chatb2k-agent-command-center` and `chatb2k-omnidimensional-control-plane`: `https://dashboard.resofit.fit`.
+- `chatb2k-ecosystem-tool-gateway` is a service-role-only server-to-server endpoint; its browser CORS policy is not a substitute for gateway authorization.
+
+Add a new browser origin only when the calling UI actually invokes that endpoint, and use an explicit origin allowlist. Never replace the origin policy with wildcard CORS for privileged endpoints.
+
+## Endpoints
 
 - MCP: `https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/chatb2k-mcp`
 - Gemini orchestrator: `https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/chatb2k-gemini-orchestrator`
+- Internal gateway: `https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/chatb2k-ecosystem-tool-gateway`
 
-Both functions use `verify_jwt=false` only because they validate the caller's Supabase JWT and administrator identity inside the function. Never remove that in-function authorization.
+These are source-configured endpoint references. They do not, by themselves, prove that the deployed function version is current or that runtime execution succeeds.
+
+The MCP and orchestrator functions use `verify_jwt=false` only because they validate the caller's JWT and administrator identity inside the function. Never remove that in-function authorization.
