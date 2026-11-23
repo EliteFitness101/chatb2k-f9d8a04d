@@ -21,7 +21,7 @@ const NAV = [
 export function Header() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -30,6 +30,11 @@ export function Header() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  async function handleSignOut() {
+    await signOut();
+    setOpen(false);
+  }
 
   return (
     <header
@@ -55,7 +60,10 @@ export function Header() {
           <CurrencyBadge />
           <LanguageSwitcher />
           {user ? (
-            <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
+            <>
+              <Link to="/dashboard" className="text-sm text-foreground/80 hover:text-gold">{t("cta.dashboard")}</Link>
+              <button type="button" onClick={handleSignOut} className="text-sm text-foreground/80 hover:text-gold">Sign out</button>
+            </>
           ) : (
             <Link to="/login" className="text-sm text-foreground/80 hover:text-gold">{t("cta.signin")}</Link>
           )}
@@ -92,6 +100,14 @@ export function Header() {
               <CurrencyBadge />
               <LanguageSwitcher />
             </div>
+            {user ? (
+              <div className="flex items-center justify-between gap-3">
+                <Link to="/dashboard" onClick={() => setOpen(false)} className="py-2 text-foreground/80">{t("cta.dashboard")}</Link>
+                <button type="button" onClick={handleSignOut} className="py-2 text-gold">Sign out</button>
+              </div>
+            ) : (
+              <Link to="/login" search={{ redirect: "/dashboard" }} onClick={() => setOpen(false)} className="py-2 text-gold">Sign in</Link>
+            )}
             <Link
               to="/checkout"
               onClick={() => setOpen(false)}
