@@ -89,3 +89,28 @@ export const reviewNoCappnCampaign = createServerFn({method:"POST"}).middleware(
   if(error||!updated) return {ok:false as const,error:error?.message??"Campaign review could not be saved."};
   return {ok:true as const,campaign:updated};
 });
+
+
+export const getNoCappnCampaignReviewQueue = createServerFn({ method: "GET" })
+  .middleware([requireNoCappnAuth])
+  .handler(async ({ context }) => {
+    const { hasPermission } = await import("@/lib/admin-guard.server");
+    if (!(await hasPermission(context.supabase, context.userId, "content.manage"))) return denied;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    const { data: campaigns, error } = await admin.from("no_cappn_campaigns")
+      .select("id,agency_id,host_mapping_id,name,primary_platform,application_url,created_at")
+      .eq("status", "pending_review").order("created_at", { ascending: true }).limit(100);
+    if (error) return { ok: false as const, error: error.message, rows: [] };
+    const agencyIds = [...new Set((campaigns ?? []).map((c: any) => c.agency_id))];
+    const campaignIds = (campaigns ?? []).map((c: any) => c.id);
+    const [agencies, links] = await Promise.all([
+      agencyIds.length ? admin.from("no_cappn_agencies").select("id,name").in("id", agencyIds) : { data: [] },
+      campaignIds.length ? admin.from("no_cappn_campaign_assets").select("campaign_id,approval_status").in("campaign_id", campaignIds) : { data: [] },
+    ]);
+    const agencyById = new Map((agencies.data ?? []).map((a: any) => [a.id, a.name]));
+    return { ok: true as const, rows: (campaigns ?? []).map((c: any) => ({
+      ...c, agency_name: agencyById.get(c.agency_id) ?? "Agency",
+      approved_assets: (links.data ?? []).filter((a: any) => a.campaign_id === c.id && a.approval_status === "approved").length,
+    })) };
+  });
