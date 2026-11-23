@@ -43,18 +43,19 @@ env:
 
 jobs:
   regional-token-preflight:
-    name: Verify BIGO token from Singapore region
+    name: Verify BIGO token from Mumbai Edge region
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify regional routing and BIGO token issuance
+      - name: Verify Supabase regional routing and BIGO token issuance
         shell: bash
         run: |
           set -euo pipefail
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl --fail --silent --show-error \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H "x-region: ap-south-1" \
             "${PIPELINE_URL}" \
             -o /tmp/bigo-sources.json
           HOST_ID="$(jq -r '.hosts[0].bigo_id // empty' /tmp/bigo-sources.json)"
@@ -64,25 +65,27 @@ jobs:
           fi
           BODY="$(python3 - "${HOST_ID}" "${BIGO_COOKIE_HEADER:-}" <<'PYBODY'
           import json,sys
-          print(json.dumps({"action":"bigo-room-info","hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
+          print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
           PYBODY
           )"
-          STATUS=404
-          for attempt in $(seq 1 12); do
-            STATUS="$(curl --silent --show-error -w '%{http_code}' -X POST "${DRIVE_UPLOAD_URL:?Missing established BIGO upload endpoint}" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY:?Missing established ChatB2K ingest credential}" \
-              --data-binary "${BODY}" \
-              -o /tmp/bigo-preflight.json)"
-            if [ "${STATUS}" != "400" ] && [ "${STATUS}" != "404" ]; then break; fi
-            sleep 15
-          done
+          STATUS="$(curl --silent --show-error -w '%{http_code}' -D /tmp/bigo-preflight.headers \
+            -X POST "${PIPELINE_URL}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H "x-region: ap-south-1" \
+            --data-binary "${BODY}" \
+            -o /tmp/bigo-preflight.json)"
           if [ "${STATUS}" != "200" ]; then
             jq -c '{ok,error,detail,upstream_code,upstream_info,region}' /tmp/bigo-preflight.json 2>/dev/null || true
             echo "::error::BIGO token resolver returned HTTP ${STATUS}."
             exit 1
           fi
-          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and .region == "sin1"' /tmp/bigo-preflight.json >/dev/null
+          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and .region == "ap-south-1"' /tmp/bigo-preflight.json >/dev/null
+          EDGE_REGION="$(grep -i '^x-sb-edge-region:' /tmp/bigo-preflight.headers | tail -n1 | cut -d: -f2- | tr -d '\r' | xargs)"
+          if [ "${EDGE_REGION}" != "ap-south-1" ]; then
+            echo "::error::Supabase did not honor Mumbai region (reported: ${EDGE_REGION:-missing})."
+            exit 1
+          fi
           jq -c '{ok,token_issued,room_info_ok,alive,region}' /tmp/bigo-preflight.json
 
   capture-transform-publish:
