@@ -8,7 +8,7 @@ BIGO HLS reader/decryptor. BIGO_COOKIE_HEADER remains optional.
 import sys
 
 from streamlink import Streamlink
-from streamlink.plugins.bigo import Bigo, BigoHLSStream
+from streamlink.plugins.bigo import BigoHLSStream
 
 
 def main():
@@ -21,11 +21,6 @@ def main():
     # Always resolve the stable broadcaster profile, never a rotating /sid/ URL.
     url = f"https://www.bigo.tv/{host_id}"
     session = Streamlink()
-    # BIGO playback-token issuance is region-restricted. Use the optional authorized
-    # proxy for BIGO token, HLS and CDN traffic; leave other pipeline services direct.
-    proxy = __import__('os').environ.get('BIGO_EGRESS_PROXY', '').strip()
-    if proxy:
-        session.http.proxies.update({'http': proxy, 'https': proxy})
     session.http.headers.update({"User-Agent": "Mozilla/5.0"})
     cookie = __import__("os").environ.get("BIGO_COOKIE_HEADER", "").strip()
     if cookie:
@@ -36,14 +31,10 @@ def main():
         # This preserves segment resolution and BIGO packet handling.
         stream = BigoHLSStream(session, source_url)
     else:
-        # Use Streamlink's installed native BIGO resolver. Do not monkeypatch
-        # _get_streams: newer Streamlink releases obtain the required web token
-        # here, and the old token-free metadata endpoint no longer returns HLS.
-        plugin = Bigo(session, url)
-        streams = plugin.streams()
-        stream = streams.get("live") or streams.get("best")
-        if stream is None:
-            raise SystemExit("Streamlink native BIGO resolver returned no live HLS stream")
+        raise SystemExit(
+            "Regional BIGO room resolver did not provide an HLS manifest; "
+            "direct token lookup from this runner is disabled."
+        )
 
     with stream.open() as reader:
         while True:
