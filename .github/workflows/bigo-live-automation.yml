@@ -135,6 +135,7 @@ jobs:
           echo "::notice::Dropbox primary-store credentials are present; values are not logged."
           mkdir -p /tmp/bigo-results
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          export OIDC_TOKEN
           if curl -fsS -H "Authorization: Bearer ${OIDC_TOKEN}" "${PIPELINE_URL}" > /tmp/bigo-sources.json; then
             REGISTRY_HOSTS="$(jq -r '.hosts[] | [.bigo_id, .source_url] | join("|")' /tmp/bigo-sources.json)"
             echo "::notice::Supabase BIGO source-of-truth registry loaded."
