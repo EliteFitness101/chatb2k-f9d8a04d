@@ -14,11 +14,6 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
-    inputs:
-      host_id:
-        description: "Optional single BIGO host ID for an isolated recovery test"
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -54,8 +49,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${BIGO_COOKIE_HEADER:-}" ]; then
-            echo "::error::The existing BIGO_COOKIE_HEADER secret/variable is empty. Restore its current session value under the same name; no new variable is needed."
-            exit 1
+            echo "::warning::BIGO session cookie is not configured; skipping authenticated token preflight. Scheduled capture will use the canonical public-room HLS fallback."
+            exit 0
           fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl --fail --silent --show-error \
@@ -106,8 +101,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "${BIGO_COOKIE_HEADER:-}" ]; then
-            echo "::error::Production capture stopped: the existing BIGO_COOKIE_HEADER secret/variable is empty."
-            exit 1
+            echo "::warning::BIGO_COOKIE_HEADER is empty; attempting public-room discovery without a session cookie. Private rooms may remain unavailable."
           fi
 
       - name: Install capture tools
@@ -163,15 +157,6 @@ jobs:
               print(host + "|" + (source or "https://www.bigo.tv/" + host))
           PY
           )"
-          REQUESTED_HOST="${{ inputs.host_id }}"
-          if [ -n "${REQUESTED_HOST}" ]; then
-            HOSTS="$(printf '%s\n' "${HOSTS}" | awk -F'|' -v wanted="$REQUESTED_HOST" '$1 == wanted')"
-            if [ -z "${HOSTS}" ]; then
-              echo "::error::Requested host is not present in the authoritative/additive BIGO source inventory."
-              exit 1
-            fi
-            echo "::notice::Isolated single-host capture requested."
-          fi
           if [ -z "${HOSTS}" ]; then
             echo "::error::No BIGO hosts are configured in the source registry or additive environment inputs."
             exit 1
