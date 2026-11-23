@@ -25,14 +25,14 @@ jobs:
         run: bash -n scripts/bigo-capture-host.sh
       - name: Validate BIGO Streamlink shim Python
         run: python3 -m py_compile scripts/bigo-streamlink-capture.py
-      - name: Validate embedded BIGO API resolver Python
+      - name: Validate embedded BIGO regional request Python
         run: |
           python3 - <<'PY'
           from pathlib import Path
           source = Path("scripts/bigo-capture-host.sh").read_text()
-          marker = 'INFO="$(python3 - "$HOST" <<\'PY\'\n'
+          marker = "<<'PYINFO'\\n"
           start = source.index(marker) + len(marker)
-          end = source.index("\nPY\n)", start)
-          compile(source[start:end], "bigo-api-resolver", "exec")
-          print("Embedded BIGO API resolver syntax: OK")
+          end = source.index("\\nPYINFO", start)
+          compile(source[start:end], "bigo-regional-request", "exec")
+          print("Embedded BIGO regional request syntax: OK")
           PY
