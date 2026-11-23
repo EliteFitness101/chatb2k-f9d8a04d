@@ -113,7 +113,7 @@ function NoCappnAgencyWorkspace() {
       `Apply now: ${activeCampaign.application_url}`,
       "",
       "#BIGO #LiveHost #CreatorCommunity #HostRecruitment",
-    ].join("\\n");
+    ].join("\n");
     setCreativeCopy(copy);
     toast.success("Recruitment creative generated from the selected highlight.");
   }
