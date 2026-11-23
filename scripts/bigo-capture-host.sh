@@ -91,7 +91,7 @@ PYINFO
 INFO="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 \
   -X POST "${PIPELINE_URL:?PIPELINE_URL is required for BIGO room discovery}" \
   -H "Content-Type: application/json" \
-  -H "x-chatb2k-live-key: ${CHATB2K_LIVE_INGEST_KEY:?CHATB2K_LIVE_INGEST_KEY is required for BIGO room discovery}" \
+  -H "Authorization: Bearer ${OIDC_TOKEN:?Trusted GitHub OIDC token is required for BIGO room discovery}" \
   -H "x-region: ap-south-1" \
   --data-binary "${INFO_REQUEST}")"
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
