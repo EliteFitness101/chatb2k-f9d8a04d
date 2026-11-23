@@ -13,9 +13,9 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
-    const [sources, highlights, assets, queue] = await Promise.all([
+    const [sources, highlights, assets, queue, agencies] = await Promise.all([
       db.from("bigo_sources")
-        .select("bigo_id,display_name,active,capture_enabled,metadata")
+        .select("id,bigo_id,display_name,active,capture_enabled,metadata")
         .order("display_name", { ascending: true })
         .limit(500),
       db.from("resofit_live_highlights")
@@ -32,13 +32,17 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
         .eq("campaign_key", "live_stream_highlights")
         .order("created_at", { ascending: false })
         .limit(30),
+      db.from("no_cappn_agencies")
+        .select("id,name,slug,status,created_at")
+        .order("created_at", { ascending: false })
+        .limit(100),
     ]);
 
     const errors = [
       sources.error ? { source: "BIGO source registry", message: sources.error.message } : null,
       highlights.error ? { source: "Live highlights", message: highlights.error.message } : null,
       assets.error ? { source: "Content asset registry", message: assets.error.message } : null,
-      queue.error ? { source: "Recruitment content queue", message: queue.error.message } : null,
+      queue.error ? { source: "Recruitment content queue", message: queue.error.message } : null,\n      agencies.error ? { source: "Agency registry", message: agencies.error.message } : null,
     ].filter(Boolean) as { source: string; message: string }[];
 
     const sourceRows = (sources.data ?? []) as Row[];
@@ -68,7 +72,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
       sources: {
         total: sourceRows.length,
         active: sourceRows.filter((s) => s.active === true).length,
-        capture_enabled: sourceRows.filter((s) => s.active === true && s.capture_enabled === true).length,
+        capture_enabled: sourceRows.filter((s) => s.active === true && s.capture_enabled === true).length,\n        source_rows: sourceRows,
       },
       highlights: {
         recent: highlightRows,
