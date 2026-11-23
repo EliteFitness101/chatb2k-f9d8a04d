@@ -31,16 +31,17 @@ export const getNoCappnAgencyWorkspace = createServerFn({ method: "GET" })
 
     const verifiedHosts = (hosts.data ?? []).filter((h: any) => h.status === "verified");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
     const sourceIds = [...new Set(verifiedHosts.map((h: any) => h.source_id))];
     const { data: sources } = sourceIds.length
-      ? await supabaseAdmin.from("bigo_sources").select("id,bigo_id,display_name").in("id", sourceIds)
+      ? await admin.from("bigo_sources").select("id,bigo_id,display_name").in("id", sourceIds)
       : { data: [] as any[] };
     const sourceById = new Map((sources ?? []).map((s: any) => [s.id, s]));
     const bigoIds = [...new Set(verifiedHosts.map((h: any) => sourceById.get(h.source_id)?.bigo_id).filter(Boolean))] as string[];
 
     let eligibleHighlights: any[] = [];
     if (bigoIds.length) {
-      const { data: highlights } = await supabaseAdmin
+      const { data: highlights } = await admin
         .from("resofit_live_highlights")
         .select("id,host_id,host_name,title,status,content_asset_id,created_at,processed_at")
         .in("host_id", bigoIds)
@@ -49,7 +50,7 @@ export const getNoCappnAgencyWorkspace = createServerFn({ method: "GET" })
         .limit(100);
       const assetIds = [...new Set((highlights ?? []).map((h: any) => h.content_asset_id).filter(Boolean))];
       const { data: assets } = assetIds.length
-        ? await supabaseAdmin.from("content_asset_registry")
+        ? await admin.from("content_asset_registry")
             .select("id,canonical_url,rights_status,commercial_status,qa_status,asset_type")
             .in("id", assetIds)
         : { data: [] as any[] };
@@ -121,31 +122,32 @@ export const attachNoCappnHighlight = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: campaign } = await supabaseAdmin.from("no_cappn_campaigns")
+    const admin = supabaseAdmin as any;
+    const { data: campaign } = await admin.from("no_cappn_campaigns")
       .select("id,agency_id,host_mapping_id")
       .eq("id", data.campaignId).maybeSingle();
     if (!campaign) return denied;
 
-    const { data: membership } = await supabaseAdmin.from("no_cappn_agency_memberships")
+    const { data: membership } = await admin.from("no_cappn_agency_memberships")
       .select("agency_id").eq("agency_id", campaign.agency_id)
       .eq("user_id", context.userId).eq("status", "active").maybeSingle();
     if (!membership) return denied;
 
-    const { data: host } = await supabaseAdmin.from("no_cappn_agency_hosts")
+    const { data: host } = await admin.from("no_cappn_agency_hosts")
       .select("id,source_id,status").eq("id", campaign.host_mapping_id)
       .eq("agency_id", campaign.agency_id).eq("status", "verified").maybeSingle();
     if (!host) return denied;
 
-    const { data: source } = await supabaseAdmin.from("bigo_sources")
+    const { data: source } = await admin.from("bigo_sources")
       .select("bigo_id").eq("id", host.source_id).maybeSingle();
     if (!source) return denied;
 
-    const { data: highlight } = await supabaseAdmin.from("resofit_live_highlights")
+    const { data: highlight } = await admin.from("resofit_live_highlights")
       .select("id,host_id,content_asset_id").eq("id", data.highlightId)
       .eq("host_id", source.bigo_id).maybeSingle();
     if (!highlight?.content_asset_id) return { ok: false as const, error: "Highlight is not owned by the verified agency host." };
 
-    const { data: asset } = await supabaseAdmin.from("content_asset_registry")
+    const { data: asset } = await admin.from("content_asset_registry")
       .select("id,canonical_url,rights_status,commercial_status,qa_status")
       .eq("id", highlight.content_asset_id).maybeSingle();
     if (!asset || asset.rights_status !== "verified" || asset.commercial_status !== "authorized" ||
@@ -153,7 +155,7 @@ export const attachNoCappnHighlight = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Highlight asset has not passed rights, commercial authorization and technical QA." };
     }
 
-    const { data: inserted, error } = await supabaseAdmin.from("no_cappn_campaign_assets").upsert({
+    const { data: inserted, error } = await admin.from("no_cappn_campaign_assets").upsert({
       agency_id: campaign.agency_id,
       campaign_id: campaign.id,
       highlight_id: highlight.id,
