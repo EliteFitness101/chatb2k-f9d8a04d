@@ -1,4 +1,4 @@
-const crypto = require("node:crypto");
+import crypto from "node:crypto";
 
 const TOKEN_TIME_URL = "https://sec.bigo.sg/v1/webjs/t";
 const TOKEN_STATUS_URL = "https://sec.bigo.sg/v1/webjs/status";
@@ -7,7 +7,7 @@ const TOKEN_KEY = "undefinedval0x01";
 const USER_AGENT = "Mozilla/5.0";
 
 function jsonp(text) {
-  const match = String(text).match(/^jsonp\\w+\\(([\\s\\S]+?)\\);?\\s*$/);
+  const match = String(text).match(/^jsonp\w+\(([\s\S]+?)\);?\s*$/);
   if (!match) throw new Error("BIGO token service returned an invalid JSONP envelope");
   return JSON.parse(match[1]);
 }
@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "invalid_host_id" });
   }
   const cookie = typeof req.body?.cookieHeader === "string" ? req.body.cookieHeader.trim() : "";
-  if (cookie.length > 8192 || /[\\r\\n]/.test(cookie)) {
+  if (cookie.length > 8192 || /[\r\n]/.test(cookie)) {
     return res.status(400).json({ ok: false, error: "invalid_cookie_header" });
   }
 
