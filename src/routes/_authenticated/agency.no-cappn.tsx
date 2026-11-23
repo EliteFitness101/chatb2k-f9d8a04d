@@ -58,8 +58,9 @@ function NoCappnAgencyWorkspace() {
   const activeAgencyId = agencyId || agencies[0]?.id || "";
   const hosts = workspace?.ok ? workspace.hosts.filter((h) => h.agency_id === activeAgencyId && h.status === "verified") : [];
   const campaigns = workspace?.ok ? workspace.campaigns.filter((c) => c.agency_id === activeAgencyId) : [];
-  const highlights = workspace?.ok ? workspace.eligibleHighlights.filter((h) => h.agency_id === activeAgencyId) : [];
+  const allHighlights = workspace?.ok ? workspace.eligibleHighlights.filter((h) => h.agency_id === activeAgencyId) : [];
   const activeCampaign = useMemo(() => campaigns.find((c) => c.id === campaignId) ?? campaigns[0], [campaigns, campaignId]);
+  const highlights = activeCampaign ? allHighlights.filter((h) => h.host_mapping_id === activeCampaign.host_mapping_id) : allHighlights;
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["no-cappn-agency-workspace"] });
