@@ -7,7 +7,8 @@ import {
   attachNoCappnHighlight,
   createNoCappnAgency,
   createNoCappnCampaign,
-  getNoCappnAgencyWorkspace,\n  saveNoCappnCampaignCreative,
+  getNoCappnAgencyWorkspace,
+  saveNoCappnCampaignCreative,
 } from "@/lib/no-cappn-agency.functions";
 
 export const Route = createFileRoute("/_authenticated/agency/no-cappn")({
@@ -35,7 +36,8 @@ function NoCappnAgencyWorkspace() {
   const getWorkspace = useServerFn(getNoCappnAgencyWorkspace);
   const createAgency = useServerFn(createNoCappnAgency);
   const createCampaign = useServerFn(createNoCappnCampaign);
-  const attachHighlight = useServerFn(attachNoCappnHighlight);\n  const saveCreative = useServerFn(saveNoCappnCampaignCreative);
+  const attachHighlight = useServerFn(attachNoCappnHighlight);
+  const saveCreative = useServerFn(saveNoCappnCampaignCreative);
   const { data, isLoading, error } = useQuery({
     queryKey: ["no-cappn-agency-workspace"],
     queryFn: () => getWorkspace(),
@@ -50,7 +52,8 @@ function NoCappnAgencyWorkspace() {
   const [platform, setPlatform] = useState("tiktok");
   const [applicationUrl, setApplicationUrl] = useState("https://elite.resofit.fit");
   const [campaignId, setCampaignId] = useState("");
-  const [highlightId, setHighlightId] = useState("");\n  const [creativeCopy, setCreativeCopy] = useState("");
+  const [highlightId, setHighlightId] = useState("");
+  const [creativeCopy, setCreativeCopy] = useState("");
   const [busy, setBusy] = useState(false);
 
   const workspace = data as Workspace | undefined;
