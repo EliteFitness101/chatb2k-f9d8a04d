@@ -1,0 +1,38 @@
+name: ChatB2K mobile validation
+
+on:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - "supabase/functions/chatb2k-live-assistant/**"
+      - ".github/workflows/chatb2k-mobile-validation.yml"
+  push:
+    branches:
+      - "feat/chatb2k-native-mobile-app"
+    paths:
+      - "mobile/**"
+      - "supabase/functions/chatb2k-live-assistant/**"
+
+jobs:
+  mobile-validation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Expo Doctor
+        run: npx expo-doctor
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Export Android bundle
+        run: npx expo export --platform android
+      - name: Export iOS bundle
+        run: npx expo export --platform ios
