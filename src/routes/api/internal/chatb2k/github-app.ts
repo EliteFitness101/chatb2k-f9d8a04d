@@ -9,7 +9,7 @@ function decodePart(value: string) {
 }
 
 function verifyBridgeToken(request: Request) {
-  const token = request.headers.get("authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1] ?? "";
+  const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
   const parts = token.split(".");
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (parts.length !== 3 || !secret) return null;
@@ -49,7 +49,7 @@ function appJwt() {
 }
 
 function installationConfig() {
-  const ids = (process.env.GITHUB_ALLOWED_INSTALLATION_IDS ?? "").split(",").map(v => v.trim()).filter(v => /^\\d+$/.test(v));
+  const ids = (process.env.GITHUB_ALLOWED_INSTALLATION_IDS ?? "").split(",").map(v => v.trim()).filter(v => /^\d+$/.test(v));
   const repos = (process.env.GITHUB_ALLOWED_REPOSITORIES ?? "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
   if (!ids.length || !repos.length) throw new Error("GITHUB_APP_INSTALLATION_OR_REPOSITORY_ALLOWLIST_MISSING");
   return { installationId: ids[0], repositories: repos };
