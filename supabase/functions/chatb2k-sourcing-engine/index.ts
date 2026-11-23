@@ -6,17 +6,56 @@ const json=(b:unknown,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{
 const providers=["jumia","konga","jiji","aliexpress","alibaba","amazon","etsy","local_storefront"];
 
 async function geminiSearch(query:string,location:string){
-  const key=Deno.env.get("GEMINI_API_KEY");
+  const key=Deno.env.get("GEMINI_AUTOMATION_API_KEY")||"";
   if(!key) return {status:"unconfigured",candidates:[]};
   const prompt="Search the web for currently available products matching: "+query+". Buyer location: "+location+". Return only JSON with candidates array. Each candidate must contain title, description, price, currency, stock_status, source_url, image_url, source_type. Prioritize Jumia, Konga, Jiji, AliExpress, Alibaba, Amazon, Etsy and legitimate local storefronts. Never invent URLs, prices, stock or images.";
-  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",{
-    method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},
-    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],tools:[{googleSearch:{}}],generationConfig:{responseMimeType:"application/json"}})
-  });
-  const p=await r.json();
-  if(!r.ok) return {status:"provider_error",candidates:[],error:p};
-  const t=p?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"";
-  try{return {status:"ok",candidates:(JSON.parse(t).candidates||[]).slice(0,10)};}catch{return {status:"parse_error",candidates:[]};}
+  const models=["gemini-flash-lite-latest","gemini-3.5-flash"];
+  let lastError="provider_unavailable";
+  for(const model of models){
+    const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",{
+      method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],tools:[{googleSearch:{}}],generationConfig:{responseMimeType:"application/json"}})
+    });
+    const p=await r.json().catch(()=>({}));
+    if(!r.ok){
+      lastError="http_"+r.status+":" + String(p?.error?.status||"provider_error");
+      if([404,429,500,502,503,504].includes(r.status)) continue;
+      return {status:"provider_error",candidates:[],error:lastError,model};
+    }
+    const t=p?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"";
+    try{return {status:"ok",candidates:(JSON.parse(t).candidates||[]).slice(0,10),model};}
+    catch{return {status:"parse_error",candidates:[],model};}
+  }
+  return {status:"provider_error",candidates:[],error:lastError};
+}
+
+async function firecrawlSearch(query:string,location:string){
+  const serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
+  const supabaseUrl=Deno.env.get("SUPABASE_URL")||"";
+  if(!serviceKey||!supabaseUrl) return {status:"firecrawl_search_unconfigured",candidates:[]};
+  const gateway=Deno.env.get("FIRECRAWL_GATEWAY_URL")||supabaseUrl+"/functions/v1/firecrawl-intelligence-gateway";
+  try{
+    const response=await fetch(gateway,{
+      method:"POST",
+      headers:{"Authorization":`Bearer ${serviceKey}`,"apikey":serviceKey,"Content-Type":"application/json"},
+      body:JSON.stringify({action:"search",query:query+" "+location,limit:5,country:"NG",location,sources:["web"],observation_type:"commerce_sourcing_fallback",verification_state:"CANDIDATE",idempotency_key:"commerce-search-fallback:"+query+":"+location,confidence:0.55})
+    });
+    const envelope=await response.json().catch(()=>({}));
+    if(!response.ok||envelope?.ok!==true) return {status:"firecrawl_search_failed",candidates:[]};
+    const result=envelope?.result?.data??envelope?.result??{};
+    const list=Array.isArray(result)?result:(Array.isArray(result?.web)?result.web:Array.isArray(result?.results)?result.results:Array.isArray(result?.data)?result.data:[]);
+    const candidates=list.filter((x:any)=>typeof x?.url==="string"&&(String(x.url).startsWith("https://")||String(x.url).startsWith("http://"))).slice(0,5).map((x:any)=>({
+      title:String(x.title||x.url).slice(0,250),
+      description:String(x.description||x.snippet||"").slice(0,4000),
+      price:0,
+      currency:"NGN",
+      stock_status:"unknown",
+      source_url:x.url,
+      image_url:typeof x.image==="string"?x.image:(typeof x.imageUrl==="string"?x.imageUrl:null),
+      source_type:"firecrawl_search"
+    }));
+    return {status:candidates.length?"ok":"no_results",candidates};
+  }catch{return {status:"firecrawl_search_failed",candidates:[]};}
 }
 
 async function processOne(req:any){
@@ -25,13 +64,21 @@ async function processOne(req:any){
   let candidates=(local.data||[]).map((p:any)=>({title:p.title,description:p.description,price:p.supplier_price,currency:p.currency,stock_status:"in_stock",source_url:p.product_url,image_url:p.image_url,source_type:"registered_supplier",supplier_product_id:p.id}));
   let provider="registered_supplier";
   if(!candidates.length){
-    const g=await geminiSearch(req.query,[req.destination_city,req.destination_state,req.destination_country].filter(Boolean).join(", ")||"Nigeria");
+    const location=[req.destination_city,req.destination_state,req.destination_country].filter(Boolean).join(", ")||"Nigeria";
+    const g=await geminiSearch(req.query,location);
     provider="gemini_web_search";
     candidates=g.candidates||[];
     if(!candidates.length){
-      await db.from("resofit_sourcing_requests").update({status:g.status==="unconfigured"?"blocked_configuration":"search_failed",last_error:g.status,provider_attempts:{provider,status:g.status},next_attempt_at:new Date(Date.now()+15*60*1000).toISOString(),updated_at:new Date().toISOString()}).eq("id",req.id);
-      await db.from("admin_audit_logs").insert({action:"external_product_sourcing_failed",resource:"resofit_sourcing_requests",metadata:{request_id:req.id,query:req.query,provider,status:g.status}});
-      return {status:g.status,request_id:req.id};
+      const fallback=await firecrawlSearch(req.query,location);
+      if(fallback.candidates.length){
+        provider="firecrawl_search_fallback";
+        candidates=fallback.candidates;
+      }else{
+        const finalStatus=g.status==="unconfigured"&&fallback.status==="firecrawl_search_unconfigured"?"unconfigured":"search_failed";
+        await db.from("resofit_sourcing_requests").update({status:finalStatus==="unconfigured"?"blocked_configuration":"search_failed",last_error:g.status+";"+fallback.status,provider_attempts:{gemini:{status:g.status},firecrawl:{status:fallback.status}},next_attempt_at:new Date(Date.now()+15*60*1000).toISOString(),updated_at:new Date().toISOString()}).eq("id",req.id);
+        await db.from("admin_audit_logs").insert({action:"external_product_sourcing_failed",resource:"resofit_sourcing_requests",metadata:{request_id:req.id,query:req.query,provider,status:finalStatus,gemini_status:g.status,firecrawl_status:fallback.status}});
+        return {status:finalStatus,request_id:req.id};
+      }
     }
   }
   const candidate=candidates.find((c:any)=>c.source_url)||null;
@@ -41,30 +88,49 @@ async function processOne(req:any){
     await db.from("resofit_sourcing_requests").update({status:"search_failed",last_error:"invalid_source_url",updated_at:new Date().toISOString()}).eq("id",req.id);
     return {status:"invalid_source_url",request_id:req.id};
   }
-    const firecrawlGateway=Deno.env.get("FIRECRAWL_GATEWAY_URL")||(Deno.env.get("SUPABASE_URL")+"/functions/v1/firecrawl-intelligence-gateway");
-  const firecrawlResp=await fetch(firecrawlGateway,{method:"POST",headers:{"Authorization":`Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,"Content-Type":"application/json"},body:JSON.stringify({source_url:sourceUrl,observation_type:"commerce_candidate_verification",verification_state:"VERIFIED",idempotency_key:"commerce-source:"+req.id+":"+sourceUrl,correlation_id:req.id,session_id:req.session_id||null,user_id:req.customer_id||null,anonymous_id:req.anonymous_id||null,rsid:req.rsid||null,funnel_origin:req.funnel_origin||"commerce_sourcing",utm:req.utm||{},confidence:0.9})});
-  const firecrawlBody=await firecrawlResp.json().catch(()=>({}));
-  if(!firecrawlResp.ok||firecrawlBody?.error){await db.from("resofit_sourcing_requests").update({status:"search_failed",last_error:"firecrawl_verification_failed",provider_attempts:{provider:"firecrawl",status:firecrawlResp.status},next_attempt_at:new Date(Date.now()+15*60*1000).toISOString(),updated_at:new Date().toISOString()}).eq("id",req.id);return {status:"firecrawl_verification_failed",request_id:req.id};}
+  const commerceEndpoint=Deno.env.get("RESOFLEX_COMMERCE_API_URL")||"https://xtgteviwtoupbfvorrmk.supabase.co/functions/v1/resoflex-commerce-intelligence";
+  const commerceSecret=Deno.env.get("RESOFLEX_COMMERCE_INGESTION_SECRET")||"";
+  if(!commerceSecret){
+    await db.from("resofit_sourcing_requests").update({status:"blocked_configuration",last_error:"RESOFLEX_COMMERCE_INGESTION_SECRET_missing",provider_attempts:{provider:"resoflex_edge_node",status:"missing_secret"},next_attempt_at:null,updated_at:new Date().toISOString()}).eq("id",req.id);
+    return {status:"blocked_configuration",request_id:req.id,reason:"RESOFLEX_COMMERCE_INGESTION_SECRET_missing"};
+  }
+  const host=new URL(sourceUrl).hostname.toLowerCase();
+  const discoveryCode=host==="www.jumia.com.ng"||host==="jumia.com.ng"?"JUMIA_NG":undefined;
+  const bridgeResp=await fetch(commerceEndpoint,{method:"POST",headers:{"Content-Type":"application/json","x-resoflex-commerce-secret":commerceSecret},body:JSON.stringify({action:"ingest_discovery",items:[{source_code:discoveryCode,source_name:host,product_url:sourceUrl,title:String(candidate.title||req.query).slice(0,500),description:candidate.description||null,price:null,currency:candidate.currency||"NGN",image_url:null,external_product_id:candidate.external_product_id||null,provider,evidence:{search_provider:provider,price_observed:false,stock_observed:false,discovery_price_snapshot:candidate.price??null,discovery_currency:candidate.currency??null,discovery_stock_claim:candidate.stock_status??null,discovery_image_url:candidate.image_url??null,source_url:sourceUrl,query:req.query,verification_state:"search_discovery_only"}}]})});
+  const bridgeBody=await bridgeResp.json().catch(()=>({}));
+  const bridgeProduct=bridgeBody?.results?.find((item:any)=>item.status==="discovered")||null;
+  if(!bridgeResp.ok||!bridgeProduct){
+    await db.from("resofit_sourcing_requests").update({status:"blocked_configuration",last_error:"resoflex_edge_ingestion_failed",provider_attempts:{provider:"resoflex_edge_node",http_status:bridgeResp.status},next_attempt_at:null,updated_at:new Date().toISOString()}).eq("id",req.id);
+    return {status:"resoflex_edge_ingestion_failed",request_id:req.id,http_status:bridgeResp.status};
+  }
+  candidate.resoflex_commerce_product_id=bridgeProduct.product_id;
+  candidate.resoflex_ingestion_status="DISCOVERED";
 const domain=new URL(sourceUrl).hostname.replace(/^www\./,"");
   const sourceType=provider==="registered_supplier"?"registered_supplier":(providers.find(x=>domain.includes(x))||"local_storefront");
-  const code=sourceType.toUpperCase().slice(0,40);
-  const sup=await db.from("suppliers").upsert({name:domain,code,integration_type:"web_discovery",status:"active",base_url:new URL(sourceUrl).origin,resale_authorized:false,media_authorized:false,updated_at:new Date().toISOString()},{onConflict:"code"}).select().single();
-  if(sup.error) throw sup.error;
-  const supplier=sup.data;
+  const code=("WEB_"+domain.toUpperCase().replace(/[^A-Z0-9]+/g,"_")).slice(0,40);
+  const baseUrl=new URL(sourceUrl).origin;
+  const existingSupplier=await db.from("suppliers").select("*").eq("base_url",baseUrl).limit(1).maybeSingle();
+  if(existingSupplier.error) throw existingSupplier.error;
+  let supplier=existingSupplier.data;
+  if(!supplier){
+    const inserted=await db.from("suppliers").insert({name:domain,code,integration_type:"web_discovery",status:"active",base_url:baseUrl,resale_authorized:false,media_authorized:false}).select().single();
+    if(inserted.error) throw inserted.error;
+    supplier=inserted.data;
+  }
   let sp=(await db.from("supplier_products").select("id").eq("supplier_id",supplier.id).eq("external_product_id",sourceUrl).maybeSingle()).data;
   if(!sp){
-    const ins=await db.from("supplier_products").insert({supplier_id:supplier.id,external_product_id:sourceUrl,title:String(candidate.title||req.query).slice(0,250),description:candidate.description||null,product_url:sourceUrl,currency:candidate.currency||"NGN",supplier_price:Math.max(0,Math.round(Number(candidate.price)||0)),stock_qty:candidate.stock_status==="in_stock"?1:0,image_url:candidate.image_url||null,image_rights_status:"unknown",resale_status:"pending",last_source_update:new Date().toISOString(),last_verified_at:new Date().toISOString(),raw_payload:candidate}).select("id").single();
+    const ins=await db.from("supplier_products").insert({supplier_id:supplier.id,external_product_id:sourceUrl,title:String(candidate.title||req.query).slice(0,250),description:candidate.description||null,product_url:sourceUrl,currency:candidate.currency||"NGN",supplier_price:0,stock_qty:0,image_url:null,image_rights_status:"unknown",resale_status:"pending",last_source_update:new Date().toISOString(),last_verified_at:null,raw_payload:{...candidate,discovery_snapshot:{price:candidate.price??null,currency:candidate.currency??null,stock_status:candidate.stock_status??null,image_url:candidate.image_url??null,verification_state:"search_discovery_only",observed_at:new Date().toISOString()}}}).select("id").single();
     if(ins.error) throw ins.error; sp=ins.data;
   }
   const handle=("sourced-"+req.id.slice(0,8)+"-"+String(candidate.title||req.query).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50)).slice(0,100);
-  const published=Boolean(supplier.resale_authorized&&supplier.media_authorized&&candidate.image_url);
+  const published=false; // Search discovery is never publication or media-rights evidence.
   let product=(await db.from("products").select("id").eq("handle",handle).maybeSingle()).data;
   if(!product){
-    const ins=await db.from("products").insert({handle,title:String(candidate.title||req.query).slice(0,180),body_html:String(candidate.description||"Externally sourced candidate pending verification.").slice(0,10000),vendor:"ResoFlex",product_type:"Externally Sourced",tags:["ChatB2K","externally-sourced",sourceType],published,variant_price:Math.max(0,Math.round(Number(candidate.price)||0)),variant_inventory_qty:candidate.stock_status==="in_stock"?1:0,image_src:candidate.image_url||null,sku:"SRC-"+req.id.slice(0,8).toUpperCase(),fulfillment_mode:"external_source"}).select("id").single();
+    const ins=await db.from("products").insert({handle,title:String(candidate.title||req.query).slice(0,180),body_html:String(candidate.description||"Externally sourced candidate pending verification.").slice(0,10000),vendor:"ResoFlex",product_type:"Externally Sourced",tags:["ChatB2K","externally-sourced",sourceType],published:false,variant_price:0,variant_inventory_qty:0,image_src:null,sku:"SRC-"+req.id.slice(0,8).toUpperCase(),fulfillment_mode:"external_source"}).select("id").single();
     if(ins.error) throw ins.error; product=ins.data;
   }
   await db.from("product_sources").insert({product_id:product.id,supplier_product_id:sp.id,source_type:sourceType,source_url:sourceUrl,source_product_id:sourceUrl,resale_authorized:supplier.resale_authorized,media_authorized:supplier.media_authorized,status:"pending"});
-  await db.from("resofit_sourcing_requests").update({status:"candidate_found",selected_source:{...candidate,source_type:sourceType},selected_supplier_product_id:sp.id,generated_product_id:product.id,next_attempt_at:null,updated_at:new Date().toISOString()}).eq("id",req.id);
+  await db.from("resofit_sourcing_requests").update({status:"candidate_found",selected_source:{...candidate,price:undefined,stock_status:"unknown",image_url:null,source_type:sourceType,discovery_snapshot:{price:candidate.price??null,currency:candidate.currency??null,stock_status:candidate.stock_status??null,image_url:candidate.image_url??null,verification_state:"search_discovery_only",observed_at:new Date().toISOString()}},selected_supplier_product_id:sp.id,generated_product_id:product.id,next_attempt_at:null,updated_at:new Date().toISOString()}).eq("id",req.id);
   await db.from("admin_audit_logs").insert({action:"external_product_candidate_found",resource:"resofit_sourcing_requests",metadata:{request_id:req.id,fulfillment_order_id:req.fulfillment_order_id,product_id:product.id,source_url:sourceUrl,source_type:sourceType,published}});
   if(req.customer_id) await db.from("chatb2k_automation_tasks").upsert({user_id:req.customer_id,task_type:"external_product_sourcing_update",channel:"dashboard",due_at:new Date().toISOString(),priority:80,status:"queued",dedupe_key:"sourcing-update:"+req.id,payload:{request_id:req.id,product_id:product.id,status:"candidate_found",source_type:sourceType}},{onConflict:"dedupe_key"});
   return {status:"candidate_found",request_id:req.id,product_id:product.id,source_type:sourceType,published};
@@ -90,6 +156,6 @@ Deno.serve(async req=>{
     if(error) throw error;
     const results=[];
     for(const item of data||[]){try{results.push(await processOne(item));}catch(e){await db.from("resofit_sourcing_requests").update({status:"error",last_error:String(e),next_attempt_at:new Date(Date.now()+15*60*1000).toISOString(),updated_at:new Date().toISOString()}).eq("id",item.id);results.push({status:"error",request_id:item.id});}}
-    return json({engine:"ChatB2K sourcing engine",model:"gemini-3.7-flash",providers,processed:results.length,results});
+    return json({engine:"ChatB2K sourcing engine",model:"gemini-flash-lite-latest (fallback gemini-3.5-flash; Firecrawl search fallback)",providers,processed:results.length,results});
   }catch(e){console.error(e);return json({error:"internal_error"},500);}
 });
