@@ -229,4 +229,5 @@ begin
 end;
 $$;
 
+revoke all on function public.create_no_cappn_agency(text, text) from public, anon;
 grant execute on function public.create_no_cappn_agency(text, text) to authenticated;
