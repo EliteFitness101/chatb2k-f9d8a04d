@@ -7,7 +7,7 @@ import {
   attachNoCappnHighlight,
   createNoCappnAgency,
   createNoCappnCampaign,
-  getNoCappnAgencyWorkspace,
+  getNoCappnAgencyWorkspace,\n  saveNoCappnCampaignCreative,
 } from "@/lib/no-cappn-agency.functions";
 
 export const Route = createFileRoute("/_authenticated/agency/no-cappn")({
@@ -35,7 +35,7 @@ function NoCappnAgencyWorkspace() {
   const getWorkspace = useServerFn(getNoCappnAgencyWorkspace);
   const createAgency = useServerFn(createNoCappnAgency);
   const createCampaign = useServerFn(createNoCappnCampaign);
-  const attachHighlight = useServerFn(attachNoCappnHighlight);
+  const attachHighlight = useServerFn(attachNoCappnHighlight);\n  const saveCreative = useServerFn(saveNoCappnCampaignCreative);
   const { data, isLoading, error } = useQuery({
     queryKey: ["no-cappn-agency-workspace"],
     queryFn: () => getWorkspace(),
@@ -50,7 +50,7 @@ function NoCappnAgencyWorkspace() {
   const [platform, setPlatform] = useState("tiktok");
   const [applicationUrl, setApplicationUrl] = useState("https://elite.resofit.fit");
   const [campaignId, setCampaignId] = useState("");
-  const [highlightId, setHighlightId] = useState("");
+  const [highlightId, setHighlightId] = useState("");\n  const [creativeCopy, setCreativeCopy] = useState("");
   const [busy, setBusy] = useState(false);
 
   const workspace = data as Workspace | undefined;
@@ -95,6 +95,44 @@ function NoCappnAgencyWorkspace() {
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Campaign draft could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function generateCreative() {
+    if (!activeCampaign || !highlightId) return toast.error("Choose a campaign and a cleared highlight first.");
+    const selected = highlights.find((h) => h.id === highlightId);
+    if (!selected) return toast.error("Selected highlight is not eligible for this agency.");
+    const host = selected.host_name || "a verified BIGO host";
+    const moment = selected.title || "a live-stream highlight";
+    const copy = [
+      `See ${host} in action: ${moment}.`,
+      "Ready to build your own audience through live streaming? Join the creator community, develop your on-camera presence and explore BIGO host opportunities with agency support.",
+      "",
+      `Apply now: ${activeCampaign.application_url}`,
+      "",
+      "#BIGO #LiveHost #CreatorCommunity #HostRecruitment",
+    ].join("\\n");
+    setCreativeCopy(copy);
+    toast.success("Recruitment creative generated from the selected highlight.");
+  }
+
+  async function persistCreative() {
+    if (!activeCampaign || !creativeCopy.trim()) return toast.error("Generate or enter campaign copy first.");
+    setBusy(true);
+    try {
+      const result = await saveCreative({ data: {
+        campaignId: activeCampaign.id,
+        creativeCopy,
+        campaignCta: `Apply now: ${activeCampaign.application_url}`,
+        hashtags: ["#BIGO", "#LiveHost", "#CreatorCommunity", "#HostRecruitment"],
+      } });
+      if (!result.ok) throw new Error(result.error);
+      toast.success("Campaign creative saved to the draft.");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Campaign creative could not be saved.");
     } finally {
       setBusy(false);
     }
@@ -182,7 +220,13 @@ function NoCappnAgencyWorkspace() {
                   <option value="">Select eligible highlight</option>
                   {highlights.map((h) => <option key={h.id} value={h.id}>{h.host_name || "BIGO host"} · {h.title || h.id.slice(0, 8)}</option>)}
                 </select>
-                <button disabled={busy || !campaigns.length || !highlights.length} onClick={onAttachHighlight} className="rounded-full border border-[var(--glass-border)] px-5 py-2 text-sm disabled:opacity-50">{busy ? "Attaching…" : "Attach for operator review"}</button>
+                <button type="button" disabled={busy || !campaigns.length || !highlights.length} onClick={generateCreative} className="rounded-full border border-[var(--glass-border)] px-5 py-2 text-sm disabled:opacity-50">Generate recruitment creative</button>
+                <textarea rows={5} value={creativeCopy} onChange={(e) => setCreativeCopy(e.target.value)} placeholder="Highlight-led recruitment copy will appear here…" className="w-full rounded-md border border-[var(--glass-border)] bg-background px-3 py-2 text-sm" />
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={busy || !creativeCopy.trim()} onClick={persistCreative} className="rounded-full bg-gold px-4 py-2 text-xs font-semibold text-black disabled:opacity-50">Save creative to draft</button>
+                  <button type="button" disabled={!creativeCopy.trim()} onClick={() => navigator.clipboard.writeText(creativeCopy).then(() => toast.success("Creative copied."), () => toast.error("Clipboard unavailable."))} className="rounded-full border border-[var(--glass-border)] px-4 py-2 text-xs disabled:opacity-50">Copy</button>
+                  <button type="button" disabled={busy || !campaigns.length || !highlights.length} onClick={onAttachHighlight} className="rounded-full border border-[var(--glass-border)] px-4 py-2 text-xs disabled:opacity-50">{busy ? "Attaching…" : "Attach highlight for operator review"}</button>
+                </div>
                 {!highlights.length && <p className="text-xs text-muted-foreground">No eligible highlights found for this agency’s verified hosts.</p>}
               </div>
             </div>
