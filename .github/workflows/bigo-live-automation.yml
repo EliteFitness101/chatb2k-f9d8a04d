@@ -43,7 +43,7 @@ env:
 
 jobs:
   regional-token-preflight:
-    name: Verify BIGO token from Mumbai region
+    name: Verify BIGO token from Singapore region
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -56,7 +56,7 @@ jobs:
           export OIDC_TOKEN
           curl --fail --silent --show-error -D /tmp/bigo-registry.headers \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
-            -H "x-region: ap-south-1" \
+            -H "x-region: ap-southeast-1" \
             "${PIPELINE_URL:?Missing established BIGO pipeline endpoint}" \
             -o /tmp/bigo-sources.json
           HOST_ID="$(jq -r '.hosts[0].bigo_id // empty' /tmp/bigo-sources.json)"
@@ -69,16 +69,21 @@ jobs:
           print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
           PYBODY
           )"
-          curl --fail --silent --show-error -D /tmp/bigo-preflight.headers \
-            -X POST "${PIPELINE_URL:?Missing established BIGO pipeline endpoint}" \
+          STATUS="$(curl --silent --show-error -w '%{http_code}' -D /tmp/bigo-preflight.headers \
+            -X POST "${PIPELINE_URL}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
-            -H "x-region: ap-south-1" \
+            -H "x-region: ap-southeast-1" \
             --data-binary "${BODY}" \
-            -o /tmp/bigo-preflight.json
-          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and .region == "ap-south-1"' /tmp/bigo-preflight.json >/dev/null
+            -o /tmp/bigo-preflight.json)"
+          if [ -z "${STATUS}" ]; then
+            jq -c '{ok,error,upstream_code,upstream_info,region}' /tmp/bigo-preflight.json 2>/dev/null || true
+            echo "::error::BIGO token resolver returned HTTP ${STATUS}."
+            exit 1
+          fi
+          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and .region == "ap-southeast-1"' /tmp/bigo-preflight.json >/dev/null
           EDGE_REGION="$(grep -i '^x-sb-edge-region:' /tmp/bigo-preflight.headers | tail -n1 | cut -d: -f2- | tr -d '\r' | xargs)"
-          if [ "${EDGE_REGION}" != "ap-south-1" ]; then
+          if [ "${EDGE_REGION}" != "ap-southeast-1" ]; then
             echo "::error::Supabase did not honor the requested Mumbai edge region (reported: ${EDGE_REGION:-missing})."
             exit 1
           fi
