@@ -293,3 +293,25 @@ export const reviewNoCappnCampaignAsset = createServerFn({ method: "POST" })
     if (error) return { ok: false as const, error: error.message };
     return { ok: true as const };
   });
+
+
+export const saveNoCappnCampaignCreative = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    campaignId: z.string().uuid(),
+    creativeCopy: z.string().trim().min(20).max(3000),
+    campaignCta: z.string().trim().min(5).max(300),
+    hashtags: z.array(z.string().regex(/^#[A-Za-z0-9_]{2,40}$/)).max(12),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const { data: campaign, error } = await db.from("no_cappn_campaigns").update({
+      creative_copy: data.creativeCopy,
+      campaign_cta: data.campaignCta,
+      hashtags: data.hashtags,
+    }).eq("id", data.campaignId).eq("status", "draft")
+      .select("id,creative_copy,campaign_cta,hashtags").maybeSingle();
+    if (error) return { ok: false as const, error: error.message };
+    if (!campaign) return { ok: false as const, error: "Draft campaign not found or access denied." };
+    return { ok: true as const, campaign };
+  });
