@@ -85,14 +85,13 @@ SOURCE_URL="${BIGO_ROOM_URL}"
 # token exchange and room-info call together in the existing authenticated BIGO pipeline function.
 INFO_REQUEST="$(python3 - "${HOST}" "${BIGO_COOKIE_HEADER:-}" <<'PYINFO'
 import json,sys
-print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
+print(json.dumps({"action":"bigo-room-info","hostId":sys.argv[1],"cookieHeader":sys.argv[2]}))
 PYINFO
 )"
 INFO="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 \
-  -X POST "${PIPELINE_URL:?PIPELINE_URL is required for BIGO room discovery}" \
+  -X POST "${DRIVE_UPLOAD_URL:?DRIVE_UPLOAD_URL is required for BIGO room discovery}" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${OIDC_TOKEN:?Trusted GitHub OIDC token is required for BIGO room discovery}" \
-  -H "x-region: ap-southeast-1" \
+  -H "Authorization: Bearer ${CHATB2K_LIVE_INGEST_KEY:?CHATB2K_LIVE_INGEST_KEY is required for BIGO room discovery}" \
   --data-binary "${INFO_REQUEST}")"
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
