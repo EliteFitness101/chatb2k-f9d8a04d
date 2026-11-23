@@ -31,10 +31,16 @@ def main():
         # This preserves segment resolution and BIGO packet handling.
         stream = BigoHLSStream(session, source_url)
     else:
-        raise SystemExit(
-            "Regional BIGO room resolver did not provide an HLS manifest; "
-            "direct token lookup from this runner is disabled."
-        )
+        # The regional resolver is an optimization, not a capture dependency.
+        # Use Streamlink's maintained BIGO plugin to obtain a fresh playback
+        # token and resolve the stable broadcaster page directly.
+        try:
+            available = session.streams(url)
+        except Exception as exc:
+            raise SystemExit(f"Streamlink BIGO plugin discovery failed: {type(exc).__name__}: {exc}")
+        stream = available.get("best") or available.get("720p") or available.get("480p")
+        if stream is None:
+            raise SystemExit("Streamlink BIGO plugin found no playable stream for this host")
 
     with stream.open() as reader:
         while True:
