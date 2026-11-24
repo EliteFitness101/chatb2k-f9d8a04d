@@ -19,7 +19,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
         .order("display_name", { ascending: true })
         .limit(500),
       db.from("bigo_capture_jobs")
-        .select("id,source_id,job_type,status,discovered_at,started_at,finished_at,error_message,created_at")
+        .select("id,source_id,job_type,status,discovered_at,started_at,finished_at,created_at")
         .order("created_at", { ascending: false })
         .limit(20),
       db.from("resofit_live_highlights")
