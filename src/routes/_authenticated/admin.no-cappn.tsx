@@ -207,7 +207,7 @@ function NoCappnCommandCenter() {
         </div>
         <div className="flex items-center gap-3 text-right">
           <div>
-            <StatusPill value="Internal operator preview" />
+            <StatusPill value="Production operator workspace" />
             <p className="text-[10px] text-muted-foreground mt-2">Refreshes every 60 seconds</p>
           </div>
           <button type="button" onClick={() => void signOut()} className="rounded-full border border-[var(--glass-border)] px-4 py-2 text-xs text-gold hover:bg-white/5">Sign out</button>
@@ -218,10 +218,9 @@ function NoCappnCommandCenter() {
         <div className="flex items-start gap-3">
           <CircleAlert className="h-5 w-5 text-gold mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-medium">Agency isolation is not yet provisioned.</p>
+            <p className="text-sm font-medium">Agency tenancy exists; host and campaign activation is pending.</p>
             <p className="text-xs text-muted-foreground mt-1">
-              This route is restricted to ResoFit content operators. The current BIGO registry and content queue are global;
-              agency-specific memberships, host ownership and campaign partitions must be deployed before external agencies can access or save campaigns.
+              This route is restricted to ResoFit content operators. The agency schema and membership records exist, but no agency-to-host mappings, campaigns or campaign assets are currently provisioned. Host ownership must be verified with HTTPS evidence before agency campaign use; the shared BIGO source registry and content queue remain operator-managed.
             </p>
           </div>
         </div>
@@ -352,7 +351,7 @@ function NoCappnCommandCenter() {
         </Panel>
       ) : null}
 
-      <p className="text-[10px] text-muted-foreground">Source refresh: {new Date(data.generated_at).toLocaleString()} · UI refreshed {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : "—"}. Dashboard reads production records but performs no writes.</p>
+      <p className="text-[10px] text-muted-foreground">Source refresh: {new Date(data.generated_at).toLocaleString()} · UI refreshed {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : "—"}. Live Supabase records refresh every 60 seconds. Host authorization and asset-review actions persist operator decisions; creative generation remains a local preview.</p>
     </div>
   );
 }
