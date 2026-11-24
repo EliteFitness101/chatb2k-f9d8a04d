@@ -13,11 +13,15 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
-    const [sources, highlights, assets, queue, agencies] = await Promise.all([
+    const [sources, captureJobs, highlights, assets, queue, agencies] = await Promise.all([
       db.from("bigo_sources")
         .select("id,bigo_id,display_name,active,capture_enabled,metadata")
         .order("display_name", { ascending: true })
         .limit(500),
+      db.from("bigo_capture_jobs")
+        .select("id,source_id,job_type,status,discovered_at,started_at,finished_at,error_message,created_at")
+        .order("created_at", { ascending: false })
+        .limit(20),
       db.from("resofit_live_highlights")
         .select("id,host_id,host_name,title,status,content_asset_id,content_queue_id,created_at,processed_at,error_message")
         .order("created_at", { ascending: false })
@@ -40,6 +44,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
 
     const errors = [
       sources.error ? { source: "BIGO source registry", message: sources.error.message } : null,
+      captureJobs.error ? { source: "BIGO capture job ledger", message: captureJobs.error.message } : null,
       highlights.error ? { source: "Live highlights", message: highlights.error.message } : null,
       assets.error ? { source: "Content asset registry", message: assets.error.message } : null,
       queue.error ? { source: "Recruitment content queue", message: queue.error.message } : null,
@@ -47,6 +52,12 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
     ].filter(Boolean) as { source: string; message: string }[];
 
     const sourceRows = (sources.data ?? []) as Row[];
+    const captureJobRows = (captureJobs.data ?? []) as Row[];
+    const captureJobCounts = captureJobRows.reduce((acc: Record<string, number>, row) => {
+      const status = String(row.status ?? "unknown");
+      acc[status] = (acc[status] ?? 0) + 1;
+      return acc;
+    }, {});
     const highlightRows = (highlights.data ?? []) as Row[];
     const assetRows = (assets.data ?? []) as Row[];
     const queueRows = (queue.data ?? []) as Row[];
@@ -76,6 +87,12 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
         capture_enabled: sourceRows.filter((s) => s.active === true && s.capture_enabled === true).length,
         source_rows: sourceRows,
       },
+      capture_jobs: {
+        recent: captureJobRows,
+        total: captureJobRows.length,
+        status_counts: captureJobCounts,
+        latest_created_at: captureJobRows[0]?.created_at ?? null,
+      },
       highlights: {
         recent: highlightRows,
         recent_count: highlightRows.length,
@@ -96,7 +113,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
       errors,
       evidence: {
         capture_workflow: "configured",
-        capture_execution: "not_connected_to_dashboard",
+        capture_execution: "database_job_ledger_connected_workflow_run_receipt_not_connected",
         media_storage: "configured_readback_unverified",
         publisher: "existing_queue_and_router",
       },
