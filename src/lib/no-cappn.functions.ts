@@ -15,7 +15,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
     const db = supabaseAdmin as any;
     const [sources, captureJobs, highlights, assets, queue, agencies] = await Promise.all([
       db.from("bigo_sources")
-        .select("id,bigo_id,display_name,active,capture_enabled,metadata")
+        .select("id,bigo_id,display_name,active,capture_enabled")
         .order("display_name", { ascending: true })
         .limit(500),
       db.from("bigo_capture_jobs")
@@ -23,7 +23,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false })
         .limit(20),
       db.from("resofit_live_highlights")
-        .select("id,host_id,host_name,title,status,content_asset_id,content_queue_id,created_at,processed_at,error_message")
+        .select("id,host_id,host_name,title,status,content_asset_id,content_queue_id,created_at,processed_at")
         .order("created_at", { ascending: false })
         .limit(20),
       db.from("content_asset_registry")
@@ -32,7 +32,7 @@ export const getNoCappnOverview = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false })
         .limit(30),
       db.from("content_queue")
-        .select("id,title,status,platform,campaign_key,scheduled_at,created_at,metadata")
+        .select("id,title,status,platform,campaign_key,scheduled_at,created_at")
         .eq("campaign_key", "live_stream_highlights")
         .order("created_at", { ascending: false })
         .limit(30),
