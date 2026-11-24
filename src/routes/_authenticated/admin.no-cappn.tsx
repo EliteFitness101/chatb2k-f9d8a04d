@@ -188,7 +188,7 @@ function NoCappnCommandCenter() {
 
   const stages = [
     { title: "BIGO source registry", detail: `${data.sources.active} active · ${data.sources.capture_enabled} capture-enabled`, state: data.sources.capture_enabled > 0 ? "Configured" : "No active capture sources", icon: RadioTower },
-    { title: "Scheduled capture", detail: "bigo-live-automation.yml · 5-minute schedule", state: "Workflow configured · run receipt not connected", icon: Workflow },
+    { title: "BIGO capture job ledger", detail: `${data.capture_jobs.total} recent DB jobs · ${Object.entries(data.capture_jobs.status_counts).map(([status, count]) => `${status}: ${count}`).join(" · ") || "no recorded statuses"}`, state: data.capture_jobs.latest_created_at ? `Latest DB job: ${new Date(data.capture_jobs.latest_created_at).toLocaleString()} · GitHub run receipt not linked` : "No capture job records · GitHub run receipt not linked", icon: Workflow },
     { title: "Media archive", detail: "Cloudflare R2 primary · media.resofit.fit", state: "Public read-back not verified by this dashboard", icon: Film },
     { title: "Highlight ingestion", detail: `${data.highlights.processed} recent rows linked to content assets`, state: data.highlights.failed ? `${data.highlights.failed} recent failures` : "Registry connected", icon: Sparkles },
     { title: "Rights and technical QA", detail: `${eligible} recent assets pass all three publication checks`, state: "Per-asset clearance required", icon: ShieldCheck },
