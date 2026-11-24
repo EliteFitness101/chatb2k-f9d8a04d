@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  Activity, ArrowUpRight, BadgeCheck, Camera, Check, ChevronRight,
-  CircleAlert, Clapperboard, Clock3, Film, Gauge, Instagram, Layers3,
-  Play, Plus, Radio, RefreshCw, ShieldCheck, Sparkles, Target, Users,
-  Video, Youtube
+  Activity, ArrowUpRight, BadgeCheck, Camera, CircleAlert, Clapperboard,
+  Clock3, Film, Play, Plus, Radio, RefreshCw, ShieldCheck, Sparkles, Users,
+  Video
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/no-cappn-demo")({
