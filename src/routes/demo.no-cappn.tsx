@@ -17,14 +17,13 @@ export const Route = createFileRoute("/demo/no-cappn")({
 });
 
 const assets = [
-  { id: "asset-01", title: "Creator highlight · Sample 01", creator: "Creator profile A", format: "MP4 video", duration: "00:18", size: "8.4 MB", source: "Demo source / BIGO", campaign: "Summer training stories", rights: "Pending review", quality: "Ready to scan" },
-  { id: "asset-02", title: "Workout tutorial · Sample 02", creator: "Creator profile B", format: "MP4 video", duration: "00:32", size: "14.2 MB", source: "Demo source / Upload", campaign: "Fitness education", rights: "Pending review", quality: "Ready to scan" },
-  { id: "asset-03", title: "Campaign teaser · Sample 03", creator: "Creator profile C", format: "MP4 video", duration: "00:12", size: "5.1 MB", source: "Demo source / BIGO", campaign: "Partner launch", rights: "Pending review", quality: "Ready to scan" },
+  { id: "noble-terra-20261020", title: "Noble_terra · 30-second highlight", creator: "Noble_terra", format: "MP4 · H.264 · 1080×1920 · 30 FPS", duration: "00:30", size: "18.53 MB", source: "BIGO LIVE · room 6968419311726404006", campaign: "Creator highlight review", rights: "HOLD · origin / commercial rights unverified", quality: "Archive verified" },
 ];
 
 type EventItem = { label: string; detail: string; time: string };
 const initialEvents: EventItem[] = [
-  { label: "Demo workspace opened", detail: "Three fictional assets loaded from the local demo fixture.", time: "Just now" },
+  { label: "Verified archive record loaded", detail: "Noble_terra BIGO capture · 2026-10-20 17:22:05 UTC · raw and 30-second derivative archived in Dropbox.", time: "Verified record" },
+  { label: "Rights hold retained", detail: "Registry eligibility is on hold: host allowlist and commercial republication attestation are not verified.", time: "Registry evidence" },
 ];
 
 function NoCappnClientDemo() {
@@ -34,6 +33,7 @@ function NoCappnClientDemo() {
   const [approved, setApproved] = useState(false);
   const [handoff, setHandoff] = useState(false);
   const [events, setEvents] = useState<EventItem[]>(initialEvents);
+  const rightsCleared = false; // Verified registry evidence: this asset remains on rights hold.
   const selected = useMemo(() => assets.find((asset) => asset.id === selectedId) ?? assets[0], [selectedId]);
   const addEvent = (label: string, detail: string) => setEvents((current) => [{ label, detail, time: "Just now" }, ...current].slice(0, 8));
   const reset = () => {
@@ -41,10 +41,10 @@ function NoCappnClientDemo() {
     setEvents([{ label: "Demo reset", detail: "Workflow state cleared. Fixture records remain unchanged.", time: "Just now" }]);
   };
   const chooseAsset = (id: string) => { setSelectedId(id); setQaDone(false); setRightsDone(false); setApproved(false); setHandoff(false); addEvent("Asset selected", "A new sample asset was opened for review."); };
-  const runQa = () => { setQaDone(true); setApproved(false); setHandoff(false); addEvent("Media QA completed", "Sample checks passed: file metadata present, duration valid, preview manifest available."); };
-  const checkRights = () => { setRightsDone(true); setApproved(false); setHandoff(false); addEvent("Rights checklist reviewed", "Demo consent and usage fields are present. Real-world rights still require documentary verification."); };
-  const approve = () => { if (!qaDone || !rightsDone) return; setApproved(true); setHandoff(false); addEvent("Demo approval recorded", "Approval applies only to this browser session and fictional asset."); };
-  const prepareHandoff = () => { if (!approved) return; setHandoff(true); addEvent("Publishing handoff preview prepared", "A non-executable handoff summary was generated. No channel was contacted."); };
+  const runQa = () => { setQaDone(true); setApproved(false); setHandoff(false); addEvent("Technical archive QA completed", "Verified: 30-second MP4 derivative, 18.53 MB; raw 49.97-second capture archived at 38.77 MB; Dropbox metadata and archive-status readback exist. This does not clear rights."); };
+  const checkRights = () => { setRightsDone(true); setApproved(false); setHandoff(false); addEvent("Rights review completed · HOLD", "Registry confirms verified_host=false, allowlist_member=false, commercial_republication_attested=false and configured_republication_authorized=false. Approval remains blocked."); };
+  const approve = () => { if (!qaDone || !rightsDone || !rightsCleared) return; setApproved(true); setHandoff(false); addEvent("Approval recorded", "Approval applies only to this browser session."); };
+  const prepareHandoff = () => { if (!approved || !rightsCleared) return; setHandoff(true); addEvent("Publishing handoff preview prepared", "A non-executable handoff summary was generated. No channel was contacted."); };
 
   return (
     <main className="min-h-screen bg-[#08090b] text-[#f4f0e7]">
@@ -73,7 +73,8 @@ function NoCappnClientDemo() {
           </div>
           <div className="rounded-2xl border border-white/10 bg-[#111214] p-5">
             <div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">02 / Asset details</div><h3 className="mt-2 font-serif text-2xl">{selected.title}</h3>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-xs">{[["Creator",selected.creator],["Format",selected.format],["Source",selected.source],["Campaign",selected.campaign],["Duration",selected.duration],["File size",selected.size]].map(([k,v])=><div key={k} className="rounded-lg bg-white/[.035] p-3"><div className="text-white/35">{k}</div><div className="mt-1 text-white/80">{v}</div></div>)}</div>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-xs">{[["Creator",selected.creator],["Format",selected.format],["Source",selected.source],["Campaign",selected.campaign],["Duration",selected.duration],["Derivative size",selected.size],["Raw capture", "49.97 sec · 38.77 MB"],["Captured at", "20 Oct 2026 · 17:22:05 UTC"]].map(([k,v])=><div key={k} className="rounded-lg bg-white/[.035] p-3"><div className="text-white/35">{k}</div><div className="mt-1 text-white/80">{v}</div></div>)}</div>
+            <div className="mt-4 flex flex-wrap gap-2"><a className="rounded-full border border-[#c9a76a]/40 px-4 py-2 text-[11px] text-[#e2c990]" href="https://www.dropbox.com/scl/fi/35f0pkz58w2qf89uti4s9/Noble_terra-20261020T172205Z-30s.mp4?rlkey=bm00t7dsikkt219dnrg0gufvw&st=8iqx0g4p&dl=0" target="_blank" rel="noreferrer">Open archived 30s video</a><a className="rounded-full border border-white/15 px-4 py-2 text-[11px] text-white/65" href="https://www.dropbox.com/scl/fi/zhaexd597iiht5atfcheu/Noble_terra-20261020T172205Z.json" target="_blank" rel="noreferrer">Capture metadata</a><a className="rounded-full border border-white/15 px-4 py-2 text-[11px] text-white/65" href="https://www.dropbox.com/scl/fi/a17lzr1rge4p9htjow6qb/Noble_terra-20261020T172205Z-archive-status.json" target="_blank" rel="noreferrer">Archive receipt</a></div>
             <div className="mt-4 flex aspect-video items-center justify-center rounded-xl border border-dashed border-[#c9a76a]/25 bg-[radial-gradient(ellipse_at_center,rgba(201,167,106,.12),transparent_65%)]"><div className="text-center"><CirclePlay size={36} className="mx-auto text-[#d9bd83]" /><div className="mt-2 text-xs text-white/55">Sample media preview</div><div className="mt-1 text-[10px] text-white/30">Illustrative preview · no source video loaded</div></div></div>
           </div>
         </div>
@@ -82,10 +83,10 @@ function NoCappnClientDemo() {
             <div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">03 / Review and approval</div><h2 className="mt-2 font-serif text-3xl">Move the asset through the workflow.</h2><p className="mt-3 text-sm leading-6 text-white/50">Each control changes the demo state and records a visible event. Approval is blocked until both review checks are complete.</p>
             <div className="mt-6 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><Activity className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Media quality checks</div><div className="text-xs text-white/40">Metadata, duration and preview manifest</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (qaDone ? "text-emerald-300" : "text-white/35")}>{qaDone ? "Passed" : "Not run"}</span><button onClick={runQa} className="rounded-full border border-[#c9a76a]/40 px-4 py-2 text-xs text-[#e2c990]">Run media QA</button></div></div>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><FileCheck className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Usage rights review</div><div className="text-xs text-white/40">Consent and permitted-use checklist</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (rightsDone ? "text-emerald-300" : "text-white/35")}>{rightsDone ? "Reviewed" : "Not reviewed"}</span><button onClick={checkRights} className="rounded-full border border-[#c9a76a]/40 px-4 py-2 text-xs text-[#e2c990]">Review rights</button></div></div>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><ShieldCheck className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Campaign approval</div><div className="text-xs text-white/40">Human approval checkpoint</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (approved ? "text-emerald-300" : "text-white/35")}>{approved ? "Approved in demo" : "Awaiting checks"}</span><button disabled={!qaDone || !rightsDone} onClick={approve} className="rounded-full bg-[#d2b477] px-4 py-2 text-xs font-semibold text-[#17130d] disabled:cursor-not-allowed disabled:opacity-35">Approve sample</button></div></div>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><FileCheck className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Usage rights review</div><div className="text-xs text-white/40">Registry evidence · host / allowlist / commercial-use status</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (rightsDone ? "text-emerald-300" : "text-white/35")}>{rightsDone ? "Reviewed" : "Not reviewed"}</span><button onClick={checkRights} className="rounded-full border border-[#c9a76a]/40 px-4 py-2 text-xs text-[#e2c990]">Review rights</button></div></div>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><ShieldCheck className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Campaign approval</div><div className="text-xs text-white/40">Blocked until documentary rights clearance</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (approved ? "text-emerald-300" : "text-white/35")}>{approved ? "Approved in demo" : rightsDone ? "Blocked · rights hold" : "Awaiting checks"}</span><button disabled={!qaDone || !rightsDone || !rightsCleared} onClick={approve} className="rounded-full bg-[#d2b477] px-4 py-2 text-xs font-semibold text-[#17130d] disabled:cursor-not-allowed disabled:opacity-35">Approve sample</button></div></div>
             </div>
-            <div className="mt-6 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-2 text-[10px] uppercase tracking-[.2em] text-[#d9bd83]"><LockKeyhole size={13}/> 04 / Publishing handoff</div><p className="mt-2 text-xs leading-5 text-white/45">See the channel-ready summary that would be handed to an authorised publisher. This demo does not publish, upload, capture or contact any channel.</p><button disabled={!approved} onClick={prepareHandoff} className="mt-4 w-full rounded-full border border-[#c9a76a]/50 px-5 py-3 text-sm text-[#e2c990] disabled:cursor-not-allowed disabled:opacity-35">Prepare publishing handoff preview</button>
+            <div className="mt-6 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-2 text-[10px] uppercase tracking-[.2em] text-[#d9bd83]"><LockKeyhole size={13}/> 04 / Publishing handoff</div><p className="mt-2 text-xs leading-5 text-white/45">Publishing handoff stays disabled while this asset has an unresolved rights hold. No channel was contacted and no post was created.</p><button disabled={!approved || !rightsCleared} onClick={prepareHandoff} className="mt-4 w-full rounded-full border border-[#c9a76a]/50 px-5 py-3 text-sm text-[#e2c990] disabled:cursor-not-allowed disabled:opacity-35">Prepare publishing handoff preview</button>
               {handoff && <div className="mt-4 rounded-lg border border-emerald-400/25 bg-emerald-400/[.06] p-4"><div className="flex items-center gap-2 text-sm font-medium text-emerald-200"><CheckCircle2 size={16}/> Handoff preview ready</div><div className="mt-2 text-xs leading-5 text-white/55">Asset: {selected.title}<br/>Campaign: {selected.campaign}<br/>Approval: Demo session only<br/>Destination: Not selected · no post created</div></div>}
             </div>
           </div>
@@ -95,7 +96,7 @@ function NoCappnClientDemo() {
           </div>
         </div>
       </section>
-      <footer className="relative border-t border-white/10 px-5 py-8 text-center"><div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">ResoFit · No Cappn</div><p className="mt-2 text-[10px] text-white/35">Client sandbox · fictional records · no production writes or external actions</p><p className="mt-2 text-[10px] text-white/25">Real source capture, storage, rights evidence and publishing remain separate authorised workflows.</p></footer>
+      <footer className="relative border-t border-white/10 px-5 py-8 text-center"><div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">ResoFit · No Cappn</div><p className="mt-2 text-[10px] text-white/35">Client sandbox · verified historical asset fixture · no production writes or external publishing</p><p className="mt-2 text-[10px] text-white/25">Archive provenance is demonstrated; rights clearance and successful publication are not established by this record.</p></footer>
     </main>
   );
 }
