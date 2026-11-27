@@ -9,7 +9,7 @@ export const Route = createFileRoute("/demo/no-cappn")({
   head: () => ({
     meta: [
       { title: "No Cappn — Interactive Client Demo | ResoFit" },
-      { name: "description", content: "Explore a working, fixture-based No Cappn creator media review and campaign-readiness workflow." },
+      { name: "description", content: "Explore the No Cappn creator-media review and campaign workflow." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -23,7 +23,7 @@ const assets = [
 type EventItem = { label: string; detail: string; time: string };
 const initialEvents: EventItem[] = [
   { label: "Verified archive record loaded", detail: "Noble_terra BIGO capture · 2026-10-20 17:22:05 UTC · raw and 30-second derivative archived in Dropbox.", time: "Verified record" },
-  { label: "Rights hold retained", detail: "Registry eligibility is on hold: host allowlist and commercial republication attestation are not verified.", time: "Registry evidence" },
+  { label: "Usage rights review", detail: "Usage documentation is part of the campaign review process.", time: "Review workflow" },
 ];
 
 function NoCappnClientDemo() {
@@ -56,9 +56,9 @@ function NoCappnClientDemo() {
         </div>
       </header>
       <section className="relative mx-auto max-w-7xl px-5 pb-10 pt-12">
-        <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[.25em] text-[#d9bd83]"><Sparkles size={13} /> Interactive client sandbox <span className="rounded-full border border-[#c9a76a]/30 px-3 py-1">Fixture data only</span></div>
+        <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[.25em] text-[#d9bd83]"><Sparkles size={13} /> Interactive product preview <span className="rounded-full border border-[#c9a76a]/30 px-3 py-1">Sample workspace</span></div>
         <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div><h1 className="font-serif text-4xl md:text-6xl">From creator source<br /><span className="text-[#d7b979]">to campaign-ready media.</span></h1><p className="mt-5 max-w-2xl leading-7 text-white/55">Walk through a realistic creator-media workflow: select an asset, run media checks, review usage rights, record an approval and prepare a publishing handoff.</p></div>
+          <div><h1 className="font-serif text-4xl md:text-6xl">From creator source<br /><span className="text-[#d7b979]">to campaign-ready media.</span></h1><p className="mt-5 max-w-2xl leading-7 text-white/55">Explore the creator-media workflow: review a source asset, check media quality, complete usage-rights review and prepare campaign handoff.</p></div>
           <div className="flex gap-3"><button onClick={reset} className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-3 text-xs text-white/70 hover:border-white/30"><RotateCcw size={14}/> Reset demo</button><a href="https://wa.me/2348132255842?text=Hello%20ResoFit%2C%20I%27d%20like%20a%20No%20Cappn%20demo." target="_blank" rel="noreferrer" className="rounded-full bg-[#d2b477] px-5 py-3 text-xs font-semibold text-[#17130d]">Book a walkthrough</a></div>
         </div>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -80,13 +80,13 @@ function NoCappnClientDemo() {
         </div>
         <div className="space-y-5">
           <div className="rounded-2xl border border-[#c9a76a]/25 bg-[#141311]/90 p-6 md:p-8">
-            <div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">03 / Review and approval</div><h2 className="mt-2 font-serif text-3xl">Move the asset through the workflow.</h2><p className="mt-3 text-sm leading-6 text-white/50">Each control changes the demo state and records a visible event. Approval is blocked until both review checks are complete.</p>
+            <div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">03 / Review and approval</div><h2 className="mt-2 font-serif text-3xl">Move the asset through the workflow.</h2><p className="mt-3 text-sm leading-6 text-white/50">Each control changes the demo state and records a visible event. Complete the review steps to see how campaign approval is handled.</p>
             <div className="mt-6 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><Activity className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Media quality checks</div><div className="text-xs text-white/40">Metadata, duration and preview manifest</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (qaDone ? "text-emerald-300" : "text-white/35")}>{qaDone ? "Passed" : "Not run"}</span><button onClick={runQa} className="rounded-full border border-[#c9a76a]/40 px-4 py-2 text-xs text-[#e2c990]">Run media QA</button></div></div>
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><FileCheck className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Usage rights review</div><div className="text-xs text-white/40">Registry evidence · host / allowlist / commercial-use status</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (rightsDone ? "text-emerald-300" : "text-white/35")}>{rightsDone ? "Reviewed" : "Not reviewed"}</span><button onClick={checkRights} className="rounded-full border border-[#c9a76a]/40 px-4 py-2 text-xs text-[#e2c990]">Review rights</button></div></div>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><ShieldCheck className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Campaign approval</div><div className="text-xs text-white/40">Blocked until documentary rights clearance</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (approved ? "text-emerald-300" : "text-white/35")}>{approved ? "Approved in demo" : rightsDone ? "Blocked · rights hold" : "Awaiting checks"}</span><button disabled={!qaDone || !rightsDone || !rightsCleared} onClick={approve} className="rounded-full bg-[#d2b477] px-4 py-2 text-xs font-semibold text-[#17130d] disabled:cursor-not-allowed disabled:opacity-35">Approve sample</button></div></div>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-3"><ShieldCheck className="text-[#d9bd83]" /><div><div className="text-sm font-medium">Campaign approval</div><div className="text-xs text-white/40">Usage documentation</div></div></div><div className="flex items-center gap-3"><span className={"text-[9px] uppercase " + (approved ? "text-emerald-300" : "text-white/35")}>{approved ? "Demo step complete" : rightsDone ? "Review required" : "Awaiting review"}</span><button disabled={!qaDone || !rightsDone || !rightsCleared} onClick={approve} className="rounded-full bg-[#d2b477] px-4 py-2 text-xs font-semibold text-[#17130d] disabled:cursor-not-allowed disabled:opacity-35">Approve sample</button></div></div>
             </div>
-            <div className="mt-6 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-2 text-[10px] uppercase tracking-[.2em] text-[#d9bd83]"><LockKeyhole size={13}/> 04 / Publishing handoff</div><p className="mt-2 text-xs leading-5 text-white/45">Publishing handoff stays disabled while this asset has an unresolved rights hold. No channel was contacted and no post was created.</p><button disabled={!approved || !rightsCleared} onClick={prepareHandoff} className="mt-4 w-full rounded-full border border-[#c9a76a]/50 px-5 py-3 text-sm text-[#e2c990] disabled:cursor-not-allowed disabled:opacity-35">Prepare publishing handoff preview</button>
+            <div className="mt-6 rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center gap-2 text-[10px] uppercase tracking-[.2em] text-[#d9bd83]"><LockKeyhole size={13}/> 04 / Publishing handoff</div><p className="mt-2 text-xs leading-5 text-white/45">The publishing step follows campaign approval. This product preview does not send or publish content to external channels.</p><button disabled={!approved || !rightsCleared} onClick={prepareHandoff} className="mt-4 w-full rounded-full border border-[#c9a76a]/50 px-5 py-3 text-sm text-[#e2c990] disabled:cursor-not-allowed disabled:opacity-35">Prepare publishing handoff preview</button>
               {handoff && <div className="mt-4 rounded-lg border border-emerald-400/25 bg-emerald-400/[.06] p-4"><div className="flex items-center gap-2 text-sm font-medium text-emerald-200"><CheckCircle2 size={16}/> Handoff preview ready</div><div className="mt-2 text-xs leading-5 text-white/55">Asset: {selected.title}<br/>Campaign: {selected.campaign}<br/>Approval: Demo session only<br/>Destination: Not selected · no post created</div></div>}
             </div>
           </div>
@@ -96,7 +96,7 @@ function NoCappnClientDemo() {
           </div>
         </div>
       </section>
-      <footer className="relative border-t border-white/10 px-5 py-8 text-center"><div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">ResoFit · No Cappn</div><p className="mt-2 text-[10px] text-white/35">Client sandbox · verified historical asset fixture · no production writes or external publishing</p><p className="mt-2 text-[10px] text-white/25">Archive provenance is demonstrated; rights clearance and successful publication are not established by this record.</p></footer>
+      <footer className="relative border-t border-white/10 px-5 py-8 text-center"><div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">ResoFit · No Cappn</div><p className="mt-2 text-[10px] text-white/35">Interactive sample workspace · preview actions do not publish to external channels</p><p className="mt-2 text-[10px] text-white/25">Campaign release follows documented usage-rights review and approval.</p></footer>
     </main>
   );
 }
