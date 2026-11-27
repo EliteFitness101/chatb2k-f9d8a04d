@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
 import {
   Activity, ArrowRight, Bot, CheckCircle2, ChevronRight, CirclePlay, Clapperboard,
   Dumbbell, Globe2, Layers3, MessageCircle, RadioTower, ShieldCheck, ShoppingBag,
@@ -40,6 +40,8 @@ const steps = [
 ];
 
 function EcosystemDemo() {
+  const { pathname } = useLocation();
+  if (pathname === "/demo/no-cappn") return <Outlet />;
   const [active, setActive] = useState("chat");
   const [scenario, setScenario] = useState("wellness");
   const [ran, setRan] = useState(false);
