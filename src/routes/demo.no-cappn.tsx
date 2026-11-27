@@ -55,10 +55,24 @@ function NoCappnClientDemo() {
           <div className="text-right"><div className="text-sm font-semibold tracking-[.2em]">NO CAPPN</div><div className="text-[9px] tracking-[.3em] text-[#c9a76a]">CREATOR MEDIA OPERATIONS</div></div>
         </div>
       </header>
+      <section className="relative mx-auto max-w-7xl px-5 pt-8">
+        <div className="relative overflow-hidden rounded-3xl border border-[#c9a76a]/25 bg-black shadow-2xl">
+          <video className="absolute inset-0 h-full w-full object-cover opacity-45" autoPlay muted loop playsInline preload="metadata" poster="https://www.dropbox.com/scl/fi/hdcqe33veoome2p51mkb5/Noble_terra-20261020T172205Z-cover.jpg?rlkey=y8ircpg84gm0u46fklxkkjkbu&raw=1" src="https://www.dropbox.com/scl/fi/35f0pkz58w2qf89uti4s9/Noble_terra-20261020T172205Z-30s.mp4?rlkey=bm00t7dsikkt219dnrg0gufvw&raw=1" aria-label="No Cappn creator highlight video preview" />
+          <div className="relative z-10 grid min-h-[300px] items-end gap-6 p-6 md:min-h-[420px] md:grid-cols-[1fr_auto] md:p-10">
+            <div className="max-w-2xl"><span className="inline-flex rounded-full border border-[#d9bd83]/45 bg-black/40 px-3 py-1 text-[10px] uppercase tracking-[.25em] text-[#e2c990]">No Cappn · Creator media studio</span><h2 className="mt-5 font-serif text-4xl leading-tight md:text-6xl">Your live moments.<br/><span className="text-[#e2c990]">Ready for their next audience.</span></h2><p className="mt-4 max-w-xl text-sm leading-6 text-white/75">See a real archived creator highlight, explore the review experience and preview how content moves toward campaign publishing.</p><a href="#source-library" className="mt-6 inline-flex rounded-full bg-[#d2b477] px-6 py-3 text-xs font-semibold text-[#17130d]">Explore the video demo</a></div>
+            <div className="rounded-2xl border border-white/20 bg-black/55 p-4 backdrop-blur-md"><div className="text-[9px] uppercase tracking-[.22em] text-[#e2c990]">Featured highlight</div><div className="mt-2 text-sm font-medium">Noble_terra · 00:30</div><div className="mt-1 text-xs text-white/55">Vertical creator video · 1080 × 1920</div><a className="mt-4 inline-block text-xs text-[#e2c990] underline" href="https://www.dropbox.com/scl/fi/35f0pkz58w2qf89uti4s9/Noble_terra-20261020T172205Z-30s.mp4?rlkey=bm00t7dsikkt219dnrg0gufvw&raw=1" target="_blank" rel="noreferrer">Watch full highlight</a></div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[.035]"><img className="aspect-[16/9] w-full object-cover" src="https://www.dropbox.com/scl/fi/hdcqe33veoome2p51mkb5/Noble_terra-20261020T172205Z-cover.jpg?rlkey=y8ircpg84gm0u46fklxkkjkbu&raw=1" alt="Creator highlight cover preview"/><div className="p-4"><div className="text-sm font-medium">Creator source</div><p className="mt-1 text-xs leading-5 text-white/45">Start with an archived livestream recording and its source details.</p></div></div>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[.035]"><img className="aspect-[16/9] w-full object-cover" src="https://www.dropbox.com/scl/fi/hdcqe33veoome2p51mkb5/Noble_terra-20261020T172205Z-cover.jpg?rlkey=y8ircpg84gm0u46fklxkkjkbu&raw=1" alt="Edited vertical highlight preview"/><div className="p-4"><div className="text-sm font-medium">Short-form highlight</div><p className="mt-1 text-xs leading-5 text-white/45">Preview a concise vertical clip designed for social channels.</p></div></div>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[.035]"><img className="aspect-[16/9] w-full object-cover" src="https://www.dropbox.com/scl/fi/hdcqe33veoome2p51mkb5/Noble_terra-20261020T172205Z-cover.jpg?rlkey=y8ircpg84gm0u46fklxkkjkbu&raw=1" alt="Campaign review cover preview"/><div className="p-4"><div className="text-sm font-medium">Review &amp; campaign flow</div><p className="mt-1 text-xs leading-5 text-white/45">Keep media review, usage rights and campaign handoff in one place.</p></div></div>
+        </div>
+      </section>
       <section className="relative mx-auto max-w-7xl px-5 pb-10 pt-12">
-        <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[.25em] text-[#d9bd83]"><Sparkles size={13} /> Interactive product preview <span className="rounded-full border border-[#c9a76a]/30 px-3 py-1">Sample workspace</span></div>
+        <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[.25em] text-[#d9bd83]"><Sparkles size={13} /> Creator media preview <span className="rounded-full border border-[#c9a76a]/30 px-3 py-1">Explore instantly</span></div>
         <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div><h1 className="font-serif text-4xl md:text-6xl">From creator source<br /><span className="text-[#d7b979]">to campaign-ready media.</span></h1><p className="mt-5 max-w-2xl leading-7 text-white/55">Explore the creator-media workflow: review a source asset, check media quality, complete usage-rights review and prepare campaign handoff.</p></div>
+          <div><h1 className="font-serif text-4xl md:text-6xl">From creator source<br /><span className="text-[#d7b979]">to campaign-ready media.</span></h1><p className="mt-5 max-w-2xl leading-7 text-white/55">Explore the creator-media experience with a sample highlight. No login is needed to watch this demo.</p></div>
           <div className="flex gap-3"><button onClick={reset} className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-3 text-xs text-white/70 hover:border-white/30"><RotateCcw size={14}/> Reset demo</button><a href="https://wa.me/2348132255842?text=Hello%20ResoFit%2C%20I%27d%20like%20a%20No%20Cappn%20demo." target="_blank" rel="noreferrer" className="rounded-full bg-[#d2b477] px-5 py-3 text-xs font-semibold text-[#17130d]">Book a walkthrough</a></div>
         </div>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -96,7 +110,7 @@ function NoCappnClientDemo() {
           </div>
         </div>
       </section>
-      <footer className="relative border-t border-white/10 px-5 py-8 text-center"><div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">ResoFit · No Cappn</div><p className="mt-2 text-[10px] text-white/35">Interactive sample workspace · preview actions do not publish to external channels</p><p className="mt-2 text-[10px] text-white/25">Campaign release follows documented usage-rights review and approval.</p></footer>
+      <footer className="relative border-t border-white/10 px-5 py-8 text-center"><div className="text-[10px] uppercase tracking-[.25em] text-[#c9a76a]">ResoFit · No Cappn</div><p className="mt-2 text-[10px] text-white/35">Sample media preview · external channel publishing is not triggered from this page</p><p className="mt-2 text-[10px] text-white/25">Campaign release follows documented usage-rights review and approval.</p></footer>
     </main>
   );
 }
