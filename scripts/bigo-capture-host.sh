@@ -112,7 +112,7 @@ CAPTURE_OK=0
 # three minutes per host; the enclosing 60-minute workflow can process the full
 # 85-host inventory in bounded batches at the established eight-worker setting.
 CAPTURE_DURATION_SECONDS="${BIGO_CAPTURE_DURATION_SECONDS:-180}"
-if ! [[ "${CAPTURE_DURATION_SECONDS}" =~ ^[1-9][0-9]*$ ]] || [ "${CAPTURE_DURATION_SECONDS}" -gt 180 ]; then
+if ! [[ "${CAPTURE_DURATION_SECONDS}" =~ ^[1-9][0-9]*$ ]] || [ "${CAPTURE_DURATION_SECONDS}" -lt 10 ] || [ "${CAPTURE_DURATION_SECONDS}" -gt 180 ]; then
   echo "::error::BIGO capture duration must be an integer from 10 to 180 seconds."
   exit 1
 fi
