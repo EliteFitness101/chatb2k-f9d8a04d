@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Activity, ArrowLeft, CheckCircle2, CirclePlay, Clapperboard, FileCheck,
-  LockKeyhole, RotateCcw, ShieldCheck, Sparkles, Video, XCircle,
+  LockKeyhole, RotateCcw, ShieldCheck, Sparkles, Video,
 } from "lucide-react";
 
 export const Route = createFileRoute("/demo/no-cappn")({
