@@ -113,7 +113,7 @@ CAPTURE_OK=0
 # 85-host inventory in bounded batches at the established eight-worker setting.
 CAPTURE_DURATION_SECONDS="${BIGO_CAPTURE_DURATION_SECONDS:-180}"
 if ! [[ "${CAPTURE_DURATION_SECONDS}" =~ ^[1-9][0-9]*$ ]] || [ "${CAPTURE_DURATION_SECONDS}" -gt 180 ]; then
-  echo "::error::BIGO capture duration must be an integer from 1 to 180 seconds."
+  echo "::error::BIGO capture duration must be an integer from 10 to 180 seconds."
   exit 1
 fi
 FFMPEG_DURATION_ARGS=(-t "${CAPTURE_DURATION_SECONDS}")
@@ -293,7 +293,7 @@ if not video or not audio:
 a=audio[0]
 if int(a.get("sample_rate") or 0) < 32000 or int(a.get("channels") or 0) < 1:
     raise SystemExit(f"{label}: invalid audio sample rate/channel layout")
-if not (1 <= duration <= 180):
+if not (10 <= duration <= 180):
     raise SystemExit(f"{label}: invalid duration {duration:.3f}s")
 packets=json.loads(run(["ffprobe","-v","error","-select_streams","a:0","-show_packets","-show_entries","packet=pts_time,duration_time","-of","json",path])).get("packets",[])
 points=[]
@@ -359,7 +359,7 @@ fps=float(fps); avg=float(avg); w=int(w); h=int(h); d=float(d)
 if not (23 <= fps <= 60 and 23 <= avg <= 60): raise SystemExit('QA FPS')
 if abs(fps-avg) > 0.5: raise SystemExit('QA CFR')
 if w < 720 or h < 1280 or not (0.55 <= w/h <= 0.75): raise SystemExit('QA aspect')
-if not (1 <= d <= 180): raise SystemExit('QA duration')
+if not (10 <= d <= 180): raise SystemExit('QA duration')
 if p != 'yuv420p': raise SystemExit('QA pixel format')
 if int(a) < 1: raise SystemExit('QA AUDIO_MISSING')
 PY
