@@ -77,25 +77,21 @@ drive_put() {
 
 BIGO_ROOM_URL="https://www.bigo.tv/${HOST}"
 SOURCE_URL="${BIGO_ROOM_URL}"
-# Resolve room metadata using the same tokenized BIGO API flow used by current Streamlink.
-# This is the critical fallback for hosts that are visibly live but now return an empty
-# hls_src to the older unauthenticated getInternalStudioInfo request.
-# Resolve BIGO room metadata through the authenticated Mumbai-region Supabase Edge Function.
-# The token service rejects requests from non-Asian runner IP ranges; keep the
-# token exchange and room-info call together in the existing authenticated BIGO pipeline function.
-INFO_REQUEST="$(python3 - "${HOST}" "${BIGO_COOKIE_HEADER:-}" <<'PYINFO'
+# Resolve public room metadata through the authenticated Vercel Mumbai token proxy.
+# GitHub OIDC authorizes this request. No BIGO login cookie is required or forwarded.
+TOKEN_PROXY_URL="${BIGO_TOKEN_PROXY_URL:-https://chatb2k.resofit.fit/api/bigo-token-proxy}"
+INFO_REQUEST="$(python3 - "${HOST}" <<'PYINFO'
 import json,sys
-print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
+print(json.dumps({"host_id":sys.argv[1]}))
 PYINFO
 )"
-if ! INFO="$(curl --fail --silent --show-error --retry 2 --retry-delay 1 \
-  -X POST "${PIPELINE_URL:?PIPELINE_URL is required for BIGO room discovery}" \
+if ! INFO="$(curl --fail --silent --show-error --retry 1 --retry-delay 1 \
+  -X POST "${TOKEN_PROXY_URL}" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${OIDC_TOKEN:?Trusted GitHub OIDC token is required for BIGO room discovery}" \
-  -H "x-region: ap-south-1" \
   --data-binary "${INFO_REQUEST}")"; then
-  echo "::warning::Authenticated BIGO room resolution failed; continuing to canonical public-room HLS discovery."
-  INFO='{"ok":false,"error":"BIGO_ROOM_RESOLVER_UNAVAILABLE","name":"BIGO Host","title":"BIGO Live Highlight","hls_src":""}'
+  echo "::warning::Vercel Mumbai BIGO token proxy unavailable; continuing to canonical public-room HLS discovery."
+  INFO='{"ok":false,"error":"BIGO_TOKEN_PROXY_UNAVAILABLE","name":"BIGO Host","title":"BIGO Live Highlight","hls_src":""}'
 fi
 NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name","BIGO Host"))' "$INFO")"
 TITLE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("title","BIGO Live Highlight"))' "$INFO")"
