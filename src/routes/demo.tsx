@@ -93,7 +93,7 @@ function EcosystemDemo() {
               <div className="flex items-start justify-between gap-4"><div className="grid h-12 w-12 place-items-center rounded-xl border border-[#c9a76a]/30 bg-[#c9a76a]/10 text-[#d9bd83]"><Icon size={23} /></div><span className="rounded-full border border-[#c9a76a]/30 px-3 py-1 text-[9px] uppercase tracking-[.2em] text-[#d9bd83]">Capability preview</span></div>
               <p className="mt-8 text-[10px] uppercase tracking-[.3em] text-[#c9a76a]">{selected.tag}</p><h3 className="mt-3 font-serif text-3xl md:text-4xl">{selected.name}</h3><p className="mt-4 max-w-xl leading-7 text-white/60">{selected.desc}</p>
               <div className="mt-8 grid gap-3 sm:grid-cols-2">{selected.points.map((point) => <div key={point} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[.03] p-3 text-sm text-white/75"><CheckCircle2 size={16} className="shrink-0 text-[#c9a76a]" />{point}</div>)}</div>
-              <div className="mt-8 border-t border-white/10 pt-5 text-xs leading-6 text-white/40">Illustrative capability overview. Actual integrations, availability and workflow permissions are confirmed during solution scoping.</div>
+              <div className="mt-8 border-t border-white/10 pt-5"><div className="text-xs leading-6 text-white/40">Illustrative capability overview. Actual integrations, availability and workflow permissions are confirmed during solution scoping.</div>{selected.id === "nocappn" && <a href="/demo/no-cappn" className="mt-5 inline-flex items-center rounded-full bg-[#d2b477] px-5 py-3 text-xs font-semibold text-[#17130d]">Open the No Cappn interactive demo <ArrowRight className="ml-2 inline" size={14} /></a>}</div>
             </div>
           </div>
         </div>
