@@ -35,28 +35,24 @@ env:
   DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
   DRIVE_UPLOAD_URL: https://chatb2k.resofit.fit/api/google/drive-mcp/bigo-upload-session
   PIPELINE_URL: https://vbqjvmnhdtdhmeeudqnn.supabase.co/functions/v1/bigo-live-pipeline
+  BIGO_TOKEN_PROXY_URL: https://chatb2k.resofit.fit/api/bigo-token-proxy
   CAPTURE_STORAGE_ONLY: ${{ github.event_name == 'push' && github.event.head_commit.message != 'BIGO recovery full-inventory smoke test' }}
   BIGO_CAPTURE_PARALLELISM: ${{ vars.BIGO_CAPTURE_PARALLELISM }}
 
 jobs:
   regional-token-preflight:
-    name: Verify BIGO token from Mumbai Edge region
-    if: github.event_name == 'push'
+    name: Verify BIGO token from Vercel Mumbai egress
+    if: github.event_name != 'push' || github.event.head_commit.message == 'BIGO recovery full-inventory smoke test'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify Supabase regional routing and BIGO token issuance
+      - name: Verify password-independent BIGO token issuance
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${BIGO_COOKIE_HEADER:-}" ]; then
-            echo "::warning::BIGO session cookie is not configured; skipping authenticated token preflight. Scheduled capture will use the canonical public-room HLS fallback."
-            exit 0
-          fi
           OIDC_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=chatb2k-live-pipeline" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           curl --fail --silent --show-error \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
-            -H "x-region: ap-south-1" \
             "${PIPELINE_URL}" \
             -o /tmp/bigo-sources.json
           HOST_ID="$(jq -r '.hosts[0].bigo_id // empty' /tmp/bigo-sources.json)"
@@ -64,32 +60,30 @@ jobs:
             echo "::error::The authoritative BIGO source registry has no active capture-enabled hosts."
             exit 1
           fi
-          BODY="$(python3 - "${HOST_ID}" "${BIGO_COOKIE_HEADER:-}" <<'PYBODY'
+          BODY="$(python3 - "${HOST_ID}" <<'PYBODY'
           import json,sys
-          print(json.dumps({"action":"resolve_bigo_room","host_id":sys.argv[1],"cookie_header":sys.argv[2]}))
+          print(json.dumps({"host_id":sys.argv[1]}))
           PYBODY
           )"
-          STATUS="$(curl --silent --show-error -w '%{http_code}' -D /tmp/bigo-preflight.headers \
-            -X POST "${PIPELINE_URL}" \
+          if ! STATUS="$(curl --silent --show-error -w '%{http_code}' \
+            -X POST "${BIGO_TOKEN_PROXY_URL}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
-            -H "x-region: ap-south-1" \
             --data-binary "${BODY}" \
-            -o /tmp/bigo-preflight.json)"
+            -o /tmp/bigo-preflight.json)"; then
+            echo "::error::Vercel Mumbai BIGO token proxy could not be reached."
+            exit 1
+          fi
           if [ "${STATUS}" != "200" ]; then
             jq -c '{ok,error,detail,upstream_code,upstream_info,region}' /tmp/bigo-preflight.json 2>/dev/null || true
-            echo "::error::BIGO token resolver returned HTTP ${STATUS}."
+            echo "::error::BIGO token proxy returned HTTP ${STATUS}; capture batch blocked."
             exit 1
           fi
-          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and .region == "ap-south-1"' /tmp/bigo-preflight.json >/dev/null
-          EDGE_REGION="$(grep -i '^x-sb-edge-region:' /tmp/bigo-preflight.headers | tail -n1 | cut -d: -f2- | tr -d '\r' | xargs)"
-          if [ "${EDGE_REGION}" != "ap-south-1" ]; then
-            echo "::error::Supabase did not honor Mumbai region (reported: ${EDGE_REGION:-missing})."
-            exit 1
-          fi
-          jq -c '{ok,token_issued,room_info_ok,alive,region}' /tmp/bigo-preflight.json
+          jq -e '.ok == true and .token_issued == true and .room_info_ok == true and .region == "bom1" and .cookie_required == false' /tmp/bigo-preflight.json >/dev/null
+          jq -c '{ok,token_issued,room_info_ok,alive,region,cookie_required}' /tmp/bigo-preflight.json
 
   capture-transform-publish:
+    needs: regional-token-preflight
     # Workflow-file/code pushes must not trigger another full-inventory production capture.
     # Scheduled production cycles and explicitly dispatched tests remain enabled.
     if: github.event_name != 'push' || github.event.head_commit.message == 'BIGO recovery full-inventory smoke test'
